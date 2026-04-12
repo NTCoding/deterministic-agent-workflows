@@ -1,0 +1,6 @@
+{
+  "name": "@nick-tune/deterministic-agent-workflows-claude-code",
+  "version": "0.0.0",
+  "private": false,
+  "type": "module"
+}

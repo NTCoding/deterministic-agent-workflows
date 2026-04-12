@@ -116,7 +116,7 @@ Status legend: `TODO`, `IN_PROGRESS`, `BLOCKED`, `DONE`
 - [x] **DONE** Scaffold `packages/deterministic-agent-workflows-engine`.
 - [x] **DONE** Scaffold `packages/deterministic-agent-workflows-dsl`.
 - [x] **DONE** Scaffold `packages/deterministic-agent-workflows-event-store`.
-- [ ] **TODO** Scaffold `packages/deterministic-agent-workflows-claude-code`.
+- [x] **DONE** Scaffold `packages/deterministic-agent-workflows-claude-code`.
 - [ ] **TODO** Scaffold `packages/deterministic-agent-workflows-opencode`.
 - [ ] **TODO** Scaffold `apps/deterministic-agent-workflows-control-center` (non-published).
 - [ ] **TODO** Configure package metadata (`name`, `exports`, `types`, `files`, publish config).

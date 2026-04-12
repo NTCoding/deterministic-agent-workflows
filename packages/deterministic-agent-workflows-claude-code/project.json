@@ -1,0 +1,32 @@
+{
+  "name": "deterministic-agent-workflows-claude-code",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "library",
+  "sourceRoot": "packages/deterministic-agent-workflows-claude-code/src",
+  "targets": {
+    "build": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc -p packages/deterministic-agent-workflows-claude-code/tsconfig.json"
+      }
+    },
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc -p packages/deterministic-agent-workflows-claude-code/tsconfig.json --noEmit"
+      }
+    },
+    "lint": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "eslint packages/deterministic-agent-workflows-claude-code/src --ext .ts"
+      }
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "node -e \"process.exit(0)\""
+      }
+    }
+  }
+}
