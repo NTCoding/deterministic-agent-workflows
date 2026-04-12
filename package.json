@@ -8,8 +8,9 @@
     "typecheck": "nx run-many -t typecheck --all",
     "test": "nx run-many -t test --all",
     "build": "nx run-many -t build --all",
+    "dep-check": "depcruise --config .dependency-cruiser.cjs packages apps",
     "role-check": "riviere-role-enforcement .riviere/role-enforcement.config.ts",
-    "quality": "pnpm role-check && pnpm lint && pnpm typecheck && pnpm test && pnpm build"
+    "quality": "pnpm role-check && pnpm dep-check && pnpm lint && pnpm typecheck && pnpm test && pnpm build"
   },
   "devDependencies": {
     "@eslint-community/eslint-plugin-eslint-comments": "^4.5.0",
@@ -17,6 +18,7 @@
     "@nx/eslint-plugin": "^20.3.1",
     "@stylistic/eslint-plugin": "^2.11.0",
     "@vitest/eslint-plugin": "^1.1.10",
+    "dependency-cruiser": "^17.3.1",
     "eslint": "^9.15.0",
     "eslint-plugin-import": "^2.31.0",
     "eslint-plugin-sonarjs": "^3.0.0",
