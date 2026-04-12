@@ -5,6 +5,7 @@ node_modules/
 dist/
 out-tsc/
 tmp/
+.tmp/
 
 # Test and coverage
 coverage/
