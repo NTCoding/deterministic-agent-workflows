@@ -131,7 +131,7 @@ Status legend: `TODO`, `IN_PROGRESS`, `BLOCKED`, `DONE`
 
 ### 5) Architecture guardrails (dep-cruiser + lint)
 - [x] **DONE** Add dependency-cruiser config for package-level rules listed above.
-- [ ] **TODO** Add lint rule parity with `living-architecture` (including custom rules where required).
+- [x] **DONE** Add lint rule parity with `living-architecture` (including custom rules where required).
 - [ ] **TODO** Enforce no forbidden package imports via CI checks.
 
 ### 6) Validation and hardening

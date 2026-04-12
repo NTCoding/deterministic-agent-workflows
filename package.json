@@ -12,6 +12,15 @@
     "quality": "pnpm role-check && pnpm lint && pnpm typecheck && pnpm test && pnpm build"
   },
   "devDependencies": {
-    "@living-architecture/riviere-role-enforcement": "^0.1.8"
+    "@eslint-community/eslint-plugin-eslint-comments": "^4.5.0",
+    "@living-architecture/riviere-role-enforcement": "^0.1.8",
+    "@nx/eslint-plugin": "^20.3.1",
+    "@stylistic/eslint-plugin": "^2.11.0",
+    "@vitest/eslint-plugin": "^1.1.10",
+    "eslint": "^9.15.0",
+    "eslint-plugin-import": "^2.31.0",
+    "eslint-plugin-sonarjs": "^3.0.0",
+    "eslint-plugin-unicorn": "^56.0.0",
+    "typescript-eslint": "^8.16.0"
   }
 }
