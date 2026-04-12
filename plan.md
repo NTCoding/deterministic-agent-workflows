@@ -146,7 +146,7 @@ Status legend: `TODO`, `IN_PROGRESS`, `BLOCKED`, `DONE`
 - [x] **DONE** Add CI workflow for PR quality gates + release prerequisites.
 
 ### 8) Examples placeholder
-- [ ] **TODO** Add `examples/README.md` placeholder.
+- [x] **DONE** Add `examples/README.md` placeholder.
 - [ ] **TODO** Include reference links to first consumer and original PoC.
 
 ### 9) Final readiness gate
