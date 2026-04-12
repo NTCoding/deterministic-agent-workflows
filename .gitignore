@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+out-tsc/
+tmp/
+
+# Test and coverage
+coverage/
+test-output/
+
+# Nx and cache
+.nx/
+.cache/
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Environment and local overrides
+.env
+.env.*
+
+# OS/editor noise
+.DS_Store
+.idea/
+.vscode/

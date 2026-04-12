@@ -127,7 +127,7 @@ Status legend: `TODO`, `IN_PROGRESS`, `BLOCKED`, `DONE`
 - [x] **DONE** Move event-store implementation into dedicated package.
 - [x] **DONE** Ensure engine has no provider or CLI coupling.
 - [x] **DONE** Migrate control center app from PoC `workflow-control-center`.
-- [ ] **TODO** Exclude all transient artifacts (`coverage`, `dist`, `node_modules`, temp/runtime outputs).
+- [x] **DONE** Exclude all transient artifacts (`coverage`, `dist`, `node_modules`, temp/runtime outputs).
 
 ### 5) Architecture guardrails (dep-cruiser + lint)
 - [ ] **TODO** Add dependency-cruiser config for package-level rules listed above.
