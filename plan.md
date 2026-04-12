@@ -143,7 +143,7 @@ Status legend: `TODO`, `IN_PROGRESS`, `BLOCKED`, `DONE`
 ### 7) Release pipeline
 - [x] **DONE** Configure lockstep release strategy for publishable packages.
 - [x] **DONE** Configure npm publish workflow (dry-run first).
-- [ ] **TODO** Add CI workflow for PR quality gates + release prerequisites.
+- [x] **DONE** Add CI workflow for PR quality gates + release prerequisites.
 
 ### 8) Examples placeholder
 - [ ] **TODO** Add `examples/README.md` placeholder.
