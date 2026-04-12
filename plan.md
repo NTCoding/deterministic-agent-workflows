@@ -110,7 +110,7 @@ Status legend: `TODO`, `IN_PROGRESS`, `BLOCKED`, `DONE`
 - [x] **DONE** Integrate `role-check` into quality pipeline and CI.
 
 ### 3) Project scaffolding (packages/apps)
-- [ ] **TODO** Scaffold `packages/deterministic-agent-workflows-engine`.
+- [x] **DONE** Scaffold `packages/deterministic-agent-workflows-engine`.
 - [ ] **TODO** Scaffold `packages/deterministic-agent-workflows-dsl`.
 - [ ] **TODO** Scaffold `packages/deterministic-agent-workflows-event-store`.
 - [ ] **TODO** Scaffold `packages/deterministic-agent-workflows-claude-code`.
