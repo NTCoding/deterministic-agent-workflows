@@ -86,7 +86,7 @@ These rules will be implemented using simple dependency-cruiser constraints.
 Status legend: `TODO`, `IN_PROGRESS`, `BLOCKED`, `DONE`
 
 ### 0) Program setup and governance
-- [ ] **TODO** Confirm and document baseline versions (Node LTS exact major, TS 6 exact minor) in root docs.
+- [x] **DONE** Confirm and document baseline versions (Node LTS exact major, TS 6 exact minor) in root docs.
 - [ ] **TODO** Add root `AGENTS.md`.
 - [ ] **TODO** Add root `CLAUDE.md` with “Read AGENTS.md first”.
 - [ ] **TODO** Update repository naming/documentation references to `deterministic-agent-workflows`.
