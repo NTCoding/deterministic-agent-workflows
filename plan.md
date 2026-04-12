@@ -147,7 +147,7 @@ Status legend: `TODO`, `IN_PROGRESS`, `BLOCKED`, `DONE`
 
 ### 8) Examples placeholder
 - [x] **DONE** Add `examples/README.md` placeholder.
-- [ ] **TODO** Include reference links to first consumer and original PoC.
+- [x] **DONE** Include reference links to first consumer and original PoC.
 
 ### 9) Final readiness gate
 - [ ] **TODO** Run end-to-end parity check versus PoC behavior.
