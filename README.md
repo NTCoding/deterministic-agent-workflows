@@ -1,5 +1,9 @@
 # deterministic-agent-workflows
 
+## Repository naming
+
+- Canonical repository name: `deterministic-agent-workflows`
+
 ## Runtime and toolchain baseline
 
 - Node.js: 24.x (latest active LTS major)
