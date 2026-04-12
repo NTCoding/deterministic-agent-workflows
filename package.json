@@ -8,5 +8,8 @@
     "test": "nx run-many -t test --all",
     "build": "nx run-many -t build --all",
     "role-check": "riviere-role-enforcement check --config .riviere/role-enforcement.config.ts"
+  },
+  "devDependencies": {
+    "@living-architecture/riviere-role-enforcement": "^0.1.8"
   }
 }
