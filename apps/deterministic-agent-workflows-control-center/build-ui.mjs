@@ -1,9 +1,11 @@
 import { build, context } from 'esbuild'
 import { readFile, writeFile, cp, mkdir } from 'node:fs/promises'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
-const outDir = 'dist/ui'
-const srcDir = 'src/ui'
+const appDir = dirname(fileURLToPath(import.meta.url))
+const outDir = join(appDir, 'dist/ui')
+const srcDir = join(appDir, 'src/ui')
 const watch = process.argv.includes('--watch')
 
 async function buildCss() {

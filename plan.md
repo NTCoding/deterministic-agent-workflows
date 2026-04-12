@@ -138,7 +138,7 @@ Status legend: `TODO`, `IN_PROGRESS`, `BLOCKED`, `DONE`
 - [x] **DONE** Restore and pass typecheck for all packages/apps.
 - [x] **DONE** Restore and pass tests for all packages/apps.
 - [x] **DONE** Set and enforce coverage thresholds.
-- [ ] **BLOCKED** Verify dep-cruiser, lint, typecheck, test, build from clean install (role-check temporarily deferred due upstream ESM packaging bug in `@living-architecture/riviere-role-enforcement@0.1.8`).
+- [ ] **BLOCKED** Verify dep-cruiser, lint, typecheck, test, build from clean install (role-check temporarily deferred due upstream ESM packaging bug in `@living-architecture/riviere-role-enforcement@0.1.8`; lint parity remediation still pending).
 
 ### 7) Release pipeline
 - [x] **DONE** Configure lockstep release strategy for publishable packages.
