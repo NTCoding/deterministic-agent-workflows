@@ -1,9 +1,4 @@
-/** @riviere-role event-store */
-export interface EventStoreModule {
-  readonly name: 'event-store';
-}
-
-/** @riviere-role event-store */
-export const eventStoreModule: EventStoreModule = {
-  name: 'event-store'
-};
+export type { SqliteEventStore } from './domain/sqlite-event-store'
+export { createStore, resolveSessionId } from './domain/sqlite-event-store'
+export { openSqliteDatabase, enableWalMode } from './domain/sqlite-runtime'
+export type { SqliteDatabase, SqliteStatement } from './domain/sqlite-runtime'

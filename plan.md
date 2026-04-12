@@ -122,7 +122,7 @@ Status legend: `TODO`, `IN_PROGRESS`, `BLOCKED`, `DONE`
 - [x] **DONE** Configure package metadata (`name`, `exports`, `types`, `files`, publish config).
 
 ### 4) Migration and decomposition from PoC
-- [ ] **TODO** Migrate domain logic from PoC `agentic-workflow-builder` into target package boundaries.
+- [x] **DONE** Migrate domain logic from PoC `agentic-workflow-builder` into target package boundaries.
 - [ ] **TODO** Move provider-specific code out of engine into `claude-code` and `opencode`.
 - [ ] **TODO** Move event-store implementation into dedicated package.
 - [ ] **TODO** Ensure engine has no provider or CLI coupling.

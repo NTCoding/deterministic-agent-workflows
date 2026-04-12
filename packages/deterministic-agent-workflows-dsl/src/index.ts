@@ -1,9 +1,15 @@
-/** @riviere-role dsl */
-export interface DslModule {
-  readonly name: 'dsl';
-}
+export { pass, fail } from './domain/result'
+export type { PreconditionResult } from './domain/result'
 
-/** @riviere-role dsl */
-export const dslModule: DslModule = {
-  name: 'dsl'
-};
+export type {
+  GitInfo,
+  TransitionContext,
+  BashForbiddenConfig,
+  WorkflowStateDefinition,
+  WorkflowRegistry,
+} from './domain/types'
+
+export { checkBashCommand } from './domain/bash-enforcement'
+
+export { defineRecordingOps, checkOperationGate } from './domain/recording-ops'
+export type { RecordingOpDefinition, RecordingOpResult, RecordingOpsFactory } from './domain/recording-ops'

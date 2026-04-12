@@ -10,6 +10,11 @@
   "files": [
     "dist"
   ],
+  "dependencies": {
+    "@nick-tune/deterministic-agent-workflows-engine": "workspace:*",
+    "@nick-tune/deterministic-agent-workflows-event-store": "workspace:*",
+    "zod": "^3.25.76"
+  },
   "publishConfig": {
     "access": "public"
   }

@@ -10,6 +10,9 @@
   "files": [
     "dist"
   ],
+  "dependencies": {
+    "zod": "^3.25.76"
+  },
   "publishConfig": {
     "access": "public"
   }

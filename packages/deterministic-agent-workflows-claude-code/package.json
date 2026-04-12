@@ -10,6 +10,10 @@
   "files": [
     "dist"
   ],
+  "dependencies": {
+    "@nick-tune/deterministic-agent-workflows-engine": "workspace:*",
+    "zod": "^3.25.76"
+  },
   "publishConfig": {
     "access": "public"
   }
