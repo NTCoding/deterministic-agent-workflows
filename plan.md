@@ -130,7 +130,7 @@ Status legend: `TODO`, `IN_PROGRESS`, `BLOCKED`, `DONE`
 - [x] **DONE** Exclude all transient artifacts (`coverage`, `dist`, `node_modules`, temp/runtime outputs).
 
 ### 5) Architecture guardrails (dep-cruiser + lint)
-- [ ] **TODO** Add dependency-cruiser config for package-level rules listed above.
+- [x] **DONE** Add dependency-cruiser config for package-level rules listed above.
 - [ ] **TODO** Add lint rule parity with `living-architecture` (including custom rules where required).
 - [ ] **TODO** Enforce no forbidden package imports via CI checks.
 
