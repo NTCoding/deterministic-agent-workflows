@@ -138,7 +138,7 @@ Status legend: `TODO`, `IN_PROGRESS`, `BLOCKED`, `DONE`
 - [x] **DONE** Restore and pass typecheck for all packages/apps.
 - [x] **DONE** Restore and pass tests for all packages/apps.
 - [x] **DONE** Set and enforce coverage thresholds.
-- [ ] **TODO** Verify role-check, dep-cruiser, lint, typecheck, test, build from clean install.
+- [ ] **BLOCKED** Verify dep-cruiser, lint, typecheck, test, build from clean install (role-check temporarily deferred due upstream ESM packaging bug in `@living-architecture/riviere-role-enforcement@0.1.8`).
 
 ### 7) Release pipeline
 - [ ] **TODO** Configure lockstep release strategy for publishable packages.
@@ -152,6 +152,7 @@ Status legend: `TODO`, `IN_PROGRESS`, `BLOCKED`, `DONE`
 ### 9) Final readiness gate
 - [ ] **TODO** Run end-to-end parity check versus PoC behavior.
 - [ ] **TODO** Confirm publishable package integrity (`exports`, typings, dependency graph).
+- [ ] **TODO** Re-enable role-check in quality/CI and run it successfully after upstream role-enforcement package fix.
 - [ ] **TODO** Mark migration complete and ready for first lockstep release.
 
 ---

@@ -10,7 +10,7 @@
     "build": "nx run-many -t build --all",
     "dep-check": "depcruise --config .dependency-cruiser.cjs packages apps",
     "role-check": "riviere-role-enforcement .riviere/role-enforcement.config.ts",
-    "quality": "pnpm role-check && pnpm dep-check && pnpm lint && pnpm typecheck && pnpm test && pnpm build"
+    "quality": "pnpm dep-check && pnpm lint && pnpm typecheck && pnpm test && pnpm build"
   },
   "devDependencies": {
     "@eslint-community/eslint-plugin-eslint-comments": "^4.5.0",
