@@ -111,7 +111,7 @@ Status legend: `TODO`, `IN_PROGRESS`, `BLOCKED`, `DONE`
 
 ### 3) Project scaffolding (packages/apps)
 - [x] **DONE** Scaffold `packages/deterministic-agent-workflows-engine`.
-- [ ] **TODO** Scaffold `packages/deterministic-agent-workflows-dsl`.
+- [x] **DONE** Scaffold `packages/deterministic-agent-workflows-dsl`.
 - [ ] **TODO** Scaffold `packages/deterministic-agent-workflows-event-store`.
 - [ ] **TODO** Scaffold `packages/deterministic-agent-workflows-claude-code`.
 - [ ] **TODO** Scaffold `packages/deterministic-agent-workflows-opencode`.
