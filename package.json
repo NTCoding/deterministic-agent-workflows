@@ -18,6 +18,7 @@
     "@nx/eslint-plugin": "^20.3.1",
     "@stylistic/eslint-plugin": "^2.11.0",
     "@types/node": "^22.13.8",
+    "@vitest/coverage-v8": "^2.1.9",
     "@vitest/eslint-plugin": "^1.1.10",
     "dependency-cruiser": "^17.3.1",
     "eslint": "^9.15.0",

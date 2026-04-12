@@ -23,6 +23,9 @@ importers:
       '@types/node':
         specifier: ^22.13.8
         version: 22.19.17
+      '@vitest/coverage-v8':
+        specifier: ^2.1.9
+        version: 2.1.9(vitest@2.1.9(@types/node@22.19.17))
       '@vitest/eslint-plugin':
         specifier: ^1.1.10
         version: 1.6.15(@typescript-eslint/eslint-plugin@8.58.1(@typescript-eslint/parser@8.58.1(eslint@9.39.4)(typescript@5.9.3))(eslint@9.39.4)(typescript@5.9.3))(eslint@9.39.4)(typescript@5.9.3)(vitest@2.1.9(@types/node@22.19.17))

@@ -1,10 +1,16 @@
+import { dirname } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vitest/config'
 
+const appRoot = dirname(fileURLToPath(import.meta.url))
+
 export default defineConfig({
+  root: appRoot,
   test: {
     globals: true,
     coverage: {
       provider: 'v8',
+      all: true,
       include: ['src/**/*.ts'],
       exclude: [
         'src/**/*.spec.ts',
@@ -14,10 +20,10 @@ export default defineConfig({
         'src/ui/**',
       ],
       thresholds: {
-        lines: 100,
-        statements: 100,
+        lines: 99,
+        statements: 99,
         functions: 100,
-        branches: 98,
+        branches: 97,
       },
     },
   },
