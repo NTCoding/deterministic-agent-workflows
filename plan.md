@@ -106,7 +106,7 @@ Status legend: `TODO`, `IN_PROGRESS`, `BLOCKED`, `DONE`
 - [x] **DONE** Add external npm dependency for role enforcement.
 - [x] **DONE** Add `.riviere/role-enforcement.config.ts` adapted to this repo package boundaries.
 - [x] **DONE** Add `.riviere/roles.ts` adapted role model.
-- [ ] **TODO** Add `.riviere/role-definitions/*` docs for adapted roles.
+- [x] **DONE** Add `.riviere/role-definitions/*` docs for adapted roles.
 - [ ] **TODO** Integrate `role-check` into quality pipeline and CI.
 
 ### 3) Project scaffolding (packages/apps)
