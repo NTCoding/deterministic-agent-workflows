@@ -135,7 +135,7 @@ Status legend: `TODO`, `IN_PROGRESS`, `BLOCKED`, `DONE`
 - [x] **DONE** Enforce no forbidden package imports via CI checks.
 
 ### 6) Validation and hardening
-- [ ] **TODO** Restore and pass typecheck for all packages/apps.
+- [x] **DONE** Restore and pass typecheck for all packages/apps.
 - [ ] **TODO** Restore and pass tests for all packages/apps.
 - [ ] **TODO** Set and enforce coverage thresholds.
 - [ ] **TODO** Verify role-check, dep-cruiser, lint, typecheck, test, build from clean install.
