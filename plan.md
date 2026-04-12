@@ -118,7 +118,7 @@ Status legend: `TODO`, `IN_PROGRESS`, `BLOCKED`, `DONE`
 - [x] **DONE** Scaffold `packages/deterministic-agent-workflows-event-store`.
 - [x] **DONE** Scaffold `packages/deterministic-agent-workflows-claude-code`.
 - [x] **DONE** Scaffold `packages/deterministic-agent-workflows-opencode`.
-- [ ] **TODO** Scaffold `apps/deterministic-agent-workflows-control-center` (non-published).
+- [x] **DONE** Scaffold `apps/deterministic-agent-workflows-control-center` (non-published).
 - [ ] **TODO** Configure package metadata (`name`, `exports`, `types`, `files`, publish config).
 
 ### 4) Migration and decomposition from PoC

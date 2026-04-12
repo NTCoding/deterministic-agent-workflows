@@ -1,0 +1,6 @@
+{
+  "name": "deterministic-agent-workflows-control-center",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module"
+}
