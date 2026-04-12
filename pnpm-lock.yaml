@@ -47,6 +47,9 @@ importers:
       eslint-plugin-unicorn:
         specifier: ^56.0.0
         version: 56.0.1(eslint@9.39.4)
+      nx:
+        specifier: ^20.3.1
+        version: 20.8.4
       typescript-eslint:
         specifier: ^8.16.0
         version: 8.58.1(eslint@9.39.4)(typescript@5.9.3)
