@@ -100,7 +100,7 @@ Status legend: `TODO`, `IN_PROGRESS`, `BLOCKED`, `DONE`
   - `tsconfig.json`
   - `eslint.config.mjs`
   - `commitlint.config.mjs`
-- [ ] **TODO** Wire root scripts/targets for `lint`, `typecheck`, `test`, `build`, `role-check`.
+- [x] **DONE** Wire root scripts/targets for `lint`, `typecheck`, `test`, `build`, `role-check`.
 
 ### 2) Role-enforcement integration
 - [ ] **TODO** Add external npm dependency for role enforcement.
