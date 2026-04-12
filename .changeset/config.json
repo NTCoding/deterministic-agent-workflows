@@ -1,0 +1,19 @@
+{
+  "$schema": "https://unpkg.com/@changesets/config@3.1.1/schema.json",
+  "changelog": false,
+  "commit": false,
+  "fixed": [
+    [
+      "@nick-tune/deterministic-agent-workflows-dsl",
+      "@nick-tune/deterministic-agent-workflows-engine",
+      "@nick-tune/deterministic-agent-workflows-event-store",
+      "@nick-tune/deterministic-agent-workflows-claude-code",
+      "@nick-tune/deterministic-agent-workflows-opencode"
+    ]
+  ],
+  "linked": [],
+  "access": "public",
+  "baseBranch": "main",
+  "updateInternalDependencies": "patch",
+  "ignore": []
+}

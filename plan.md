@@ -141,7 +141,7 @@ Status legend: `TODO`, `IN_PROGRESS`, `BLOCKED`, `DONE`
 - [ ] **BLOCKED** Verify dep-cruiser, lint, typecheck, test, build from clean install (role-check temporarily deferred due upstream ESM packaging bug in `@living-architecture/riviere-role-enforcement@0.1.8`).
 
 ### 7) Release pipeline
-- [ ] **TODO** Configure lockstep release strategy for publishable packages.
+- [x] **DONE** Configure lockstep release strategy for publishable packages.
 - [ ] **TODO** Configure npm publish workflow (dry-run first).
 - [ ] **TODO** Add CI workflow for PR quality gates + release prerequisites.
 
