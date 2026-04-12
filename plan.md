@@ -88,7 +88,7 @@ Status legend: `TODO`, `IN_PROGRESS`, `BLOCKED`, `DONE`
 ### 0) Program setup and governance
 - [x] **DONE** Confirm and document baseline versions (Node LTS exact major, TS 6 exact minor) in root docs.
 - [x] **DONE** Add root `AGENTS.md`.
-- [ ] **TODO** Add root `CLAUDE.md` with “Read AGENTS.md first”.
+- [x] **DONE** Add root `CLAUDE.md` with “Read AGENTS.md first”.
 - [ ] **TODO** Update repository naming/documentation references to `deterministic-agent-workflows`.
 
 ### 1) Workspace bootstrap (Nx + pnpm)
