@@ -150,7 +150,7 @@ Status legend: `TODO`, `IN_PROGRESS`, `BLOCKED`, `DONE`
 - [x] **DONE** Include reference links to first consumer and original PoC.
 
 ### 9) Final readiness gate
-- [ ] **TODO** Run end-to-end parity check versus PoC behavior.
+- [x] **DONE** Run end-to-end parity check versus PoC behavior.
 - [ ] **TODO** Confirm publishable package integrity (`exports`, typings, dependency graph).
 - [ ] **TODO** Re-enable role-check in quality/CI and run it successfully after upstream role-enforcement package fix.
 - [ ] **TODO** Mark migration complete and ready for first lockstep release.
