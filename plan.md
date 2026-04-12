@@ -92,7 +92,7 @@ Status legend: `TODO`, `IN_PROGRESS`, `BLOCKED`, `DONE`
 - [x] **DONE** Update repository naming/documentation references to `deterministic-agent-workflows`.
 
 ### 1) Workspace bootstrap (Nx + pnpm)
-- [ ] **TODO** Initialize/normalize Nx workspace structure (`packages/*`, `apps/*`).
+- [x] **DONE** Initialize/normalize Nx workspace structure (`packages/*`, `apps/*`).
 - [ ] **TODO** Align root configs with `living-architecture` patterns:
   - `nx.json`
   - `pnpm-workspace.yaml`
