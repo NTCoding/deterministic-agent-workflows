@@ -25,7 +25,7 @@
     "test": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "vitest run --coverage --config apps/deterministic-agent-workflows-control-center/vitest.config.mts"
+        "command": "pnpm --dir apps/deterministic-agent-workflows-control-center exec vitest run --coverage --config vitest.config.mts"
       }
     }
   }
