@@ -126,7 +126,7 @@ Status legend: `TODO`, `IN_PROGRESS`, `BLOCKED`, `DONE`
 - [x] **DONE** Move provider-specific code out of engine into `claude-code` and `opencode`.
 - [x] **DONE** Move event-store implementation into dedicated package.
 - [x] **DONE** Ensure engine has no provider or CLI coupling.
-- [ ] **TODO** Migrate control center app from PoC `workflow-control-center`.
+- [x] **DONE** Migrate control center app from PoC `workflow-control-center`.
 - [ ] **TODO** Exclude all transient artifacts (`coverage`, `dist`, `node_modules`, temp/runtime outputs).
 
 ### 5) Architecture guardrails (dep-cruiser + lint)
