@@ -1,6 +1,5 @@
 import type { RoleEnforcementResult } from '@living-architecture/riviere-role-enforcement';
-
-const allTargets = ['class', 'function', 'interface', 'type-alias'] as const;
+import { roles, workspacePackageSources } from './roles';
 
 export const config: RoleEnforcementResult = {
   include: [
@@ -19,14 +18,7 @@ export const config: RoleEnforcementResult = {
     '**/node_modules/**'
   ],
   roleDefinitionsDir: '.riviere/role-definitions',
-  roles: [
-    { name: 'engine', targets: allTargets },
-    { name: 'dsl', targets: allTargets },
-    { name: 'event-store', targets: allTargets },
-    { name: 'claude-code', targets: allTargets },
-    { name: 'opencode', targets: allTargets },
-    { name: 'control-center', targets: allTargets }
-  ],
+  roles,
   layers: {
     'packages/deterministic-agent-workflows-engine/src': {
       allowedRoles: ['engine'],
@@ -69,16 +61,5 @@ export const config: RoleEnforcementResult = {
       ]
     }
   },
-  workspacePackageSources: {
-    '@nick-tune/deterministic-agent-workflows-engine':
-      'packages/deterministic-agent-workflows-engine/src/index.ts',
-    '@nick-tune/deterministic-agent-workflows-dsl':
-      'packages/deterministic-agent-workflows-dsl/src/index.ts',
-    '@nick-tune/deterministic-agent-workflows-event-store':
-      'packages/deterministic-agent-workflows-event-store/src/index.ts',
-    '@nick-tune/deterministic-agent-workflows-claude-code':
-      'packages/deterministic-agent-workflows-claude-code/src/index.ts',
-    '@nick-tune/deterministic-agent-workflows-opencode':
-      'packages/deterministic-agent-workflows-opencode/src/index.ts'
-  }
+  workspacePackageSources
 };
