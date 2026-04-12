@@ -9,7 +9,8 @@ Build a robust Nx monorepo for npm publication, migrating validated PoC logic fr
 - Repository target name: `deterministic-agent-workflows` (correct spelling).
 - Follow `../living-architecture` Nx monorepo approach.
 - Keep lint model aligned with `living-architecture`.
-- Add and enforce `.riviere/role-enforcement.config.ts` with adapted rules for this repo domain.
+- Copy `living-architecture` role system exactly for role names and location model, adapting only repository package/app paths and workspace package names.
+- Do not invent package-name roles (for example, no `claude-code` role, no `engine` role, no `dsl` role).
 - Consume `riviere-role-enforcement` from npm (external dependency, not vendored workspace package).
 
 ### Runtime/toolchain baselines
@@ -47,6 +48,7 @@ Non-published app:
 ### Agent instruction files
 - Root `AGENTS.md` is required.
 - Root `CLAUDE.md` must instruct agents to read `AGENTS.md` first.
+- Agent execution rule: if code does not fit role-enforcement conventions, stop implementation and discuss with the user before proceeding.
 
 ### Examples
 - Add examples placeholder only (no full example implementation yet).
@@ -104,9 +106,10 @@ Status legend: `TODO`, `IN_PROGRESS`, `BLOCKED`, `DONE`
 
 ### 2) Role-enforcement integration
 - [x] **DONE** Add external npm dependency for role enforcement.
-- [x] **DONE** Add `.riviere/role-enforcement.config.ts` adapted to this repo package boundaries.
-- [x] **DONE** Add `.riviere/roles.ts` adapted role model.
-- [x] **DONE** Add `.riviere/role-definitions/*` docs for adapted roles.
+- [x] **DONE** Replace `.riviere/roles.ts` with `living-architecture` canonical role names/rules.
+- [x] **DONE** Replace `.riviere/role-enforcement.config.ts` with `living-architecture` location model adapted to this repo package/app paths.
+- [x] **DONE** Add `.riviere/canonical-role-configurations.md` from `living-architecture`.
+- [x] **DONE** Replace `.riviere/role-definitions/*` with the same role-definition files used by `living-architecture` (same filenames and role semantics).
 - [x] **DONE** Integrate `role-check` into quality pipeline and CI.
 
 ### 3) Project scaffolding (packages/apps)
