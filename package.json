@@ -2,12 +2,14 @@
   "name": "deterministic-agent-workflows",
   "version": "0.0.0",
   "private": true,
+  "packageManager": "pnpm@10.0.0",
   "scripts": {
     "lint": "nx run-many -t lint --all",
     "typecheck": "nx run-many -t typecheck --all",
     "test": "nx run-many -t test --all",
     "build": "nx run-many -t build --all",
-    "role-check": "riviere-role-enforcement check --config .riviere/role-enforcement.config.ts"
+    "role-check": "riviere-role-enforcement .riviere/role-enforcement.config.ts",
+    "quality": "pnpm role-check && pnpm lint && pnpm typecheck && pnpm test && pnpm build"
   },
   "devDependencies": {
     "@living-architecture/riviere-role-enforcement": "^0.1.8"

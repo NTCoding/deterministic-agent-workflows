@@ -107,7 +107,7 @@ Status legend: `TODO`, `IN_PROGRESS`, `BLOCKED`, `DONE`
 - [x] **DONE** Add `.riviere/role-enforcement.config.ts` adapted to this repo package boundaries.
 - [x] **DONE** Add `.riviere/roles.ts` adapted role model.
 - [x] **DONE** Add `.riviere/role-definitions/*` docs for adapted roles.
-- [ ] **TODO** Integrate `role-check` into quality pipeline and CI.
+- [x] **DONE** Integrate `role-check` into quality pipeline and CI.
 
 ### 3) Project scaffolding (packages/apps)
 - [ ] **TODO** Scaffold `packages/deterministic-agent-workflows-engine`.
