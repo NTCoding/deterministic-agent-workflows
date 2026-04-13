@@ -45,7 +45,7 @@
       "fallbackCurrentVersionResolver": "disk",
       "updateDependents": "auto",
       "generatorOptions": {
-        "installIgnoreScripts": true
+        "skipLockFileUpdate": true
       }
     },
     "changelog": {
