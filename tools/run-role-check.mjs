@@ -1,7 +1,7 @@
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { rmSync, writeFileSync } from 'node:fs'
-import { RunRoleEnforcement } from '../node_modules/.pnpm/@living-architecture+riviere-role-enforcement@0.1.8/node_modules/@living-architecture/riviere-role-enforcement/dist/features/enforcement/commands/run-role-enforcement.js'
+import { RunRoleEnforcement } from '@living-architecture/riviere-role-enforcement'
 
 const configModulePath = process.argv[2]
 
