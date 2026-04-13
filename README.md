@@ -90,6 +90,27 @@ import type {
 
 export const STATE_NAME_SCHEMA = z.enum(['PLANNING', 'DEVELOPING', 'REVIEWING'])
 
+export type StateName = z.infer<typeof STATE_NAME_SCHEMA>
+export type WorkflowOperation =
+  | 'record-issue'
+  | 'record-branch'
+  | 'record-architecture-review-passed'
+  | 'record-architecture-review-failed'
+  | 'record-code-review-passed'
+  | 'record-code-review-failed'
+  | 'record-bug-scanner-passed'
+  | 'record-bug-scanner-failed'
+  | 'record-task-check-passed'
+  | 'record-pr'
+  | 'record-ci-passed'
+  | 'record-ci-failed'
+  | 'record-feedback-clean'
+  | 'record-feedback-exists'
+  | 'record-feedback-addressed'
+  | 'record-reflection'
+
+export type WorkflowState = { currentStateMachineState: StateName }
+
 export const WORKFLOW_REGISTRY: WorkflowRegistry<WorkflowState, StateName, WorkflowOperation> = {
   PLANNING: {
     emoji: '🧠',
