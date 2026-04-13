@@ -78,6 +78,11 @@ export default createOpenCodeWorkflowPlugin<
 ## Workflow definition + policy example
 
 ```ts
+import { z } from 'zod'
+
+export const STATE_NAME_SCHEMA = z.enum(['PLANNING', 'DEVELOPING', 'REVIEWING'])
+
+export type StateName = z.infer<typeof STATE_NAME_SCHEMA>
 export type WorkflowOperation =
   | 'record-plan'
   | 'record-branch'
@@ -85,6 +90,15 @@ export type WorkflowOperation =
   | 'record-review-passed'
   | 'record-review-failed'
   | 'record-pr'
+
+export type WorkflowState = {
+  currentStateMachineState: StateName
+  transcriptPath?: string
+}
+
+export const INITIAL_STATE: WorkflowState = {
+  currentStateMachineState: 'PLANNING',
+}
 
 export const WORKFLOW_REGISTRY = {
   PLANNING: {
@@ -115,52 +129,172 @@ export const PRE_TOOL_USE_POLICY = {
 
 That policy means a write is denied outside `DEVELOPING`.
 
+`workflow-events.ts`
+
+```ts
+import { z } from 'zod'
+import { STATE_NAME_SCHEMA } from './workflow-types'
+
+const SESSION_STARTED_SCHEMA = z.object({
+  type: z.literal('session-started'),
+  at: z.string(),
+  transcriptPath: z.string().optional(),
+})
+
+const TRANSITIONED_SCHEMA = z.object({
+  type: z.literal('transitioned'),
+  at: z.string(),
+  from: STATE_NAME_SCHEMA,
+  to: STATE_NAME_SCHEMA,
+})
+
+export const WORKFLOW_EVENT_SCHEMA = z.discriminatedUnion('type', [
+  SESSION_STARTED_SCHEMA,
+  TRANSITIONED_SCHEMA,
+])
+
+export type WorkflowEvent = z.infer<typeof WORKFLOW_EVENT_SCHEMA>
+```
+
+`fold.ts`
+
+```ts
+import type { WorkflowEvent } from './workflow-events'
+import { INITIAL_STATE, type WorkflowState } from './workflow-types'
+
+export function applyEvent(state: WorkflowState, event: WorkflowEvent): WorkflowState {
+  switch (event.type) {
+    case 'session-started':
+      return {
+        ...state,
+        ...(event.transcriptPath === undefined ? {} : { transcriptPath: event.transcriptPath }),
+      }
+    case 'transitioned':
+      return {
+        ...state,
+        currentStateMachineState: event.to,
+      }
+  }
+}
+
+export function applyEvents(events: readonly WorkflowEvent[]): WorkflowState {
+  return events.reduce(applyEvent, INITIAL_STATE)
+}
+```
+
 `workflow.ts`
 
 ```ts
 import {
+  pass,
   type BaseEvent,
   type PreconditionResult,
   type RehydratableWorkflow,
 } from '@nt-ai-lab/deterministic-agent-workflow-engine'
+import { applyEvent } from './fold'
+import { WORKFLOW_EVENT_SCHEMA, type WorkflowEvent } from './workflow-events'
 import type { WorkflowState } from './workflow-types'
 
 export type WorkflowDeps = { now: () => string }
 
 export class Workflow implements RehydratableWorkflow<WorkflowState> {
-  constructor(state: WorkflowState, deps: WorkflowDeps) {}
+  private pendingEvents: WorkflowEvent[] = []
+
+  constructor(
+    private state: WorkflowState,
+    private readonly _deps: WorkflowDeps,
+  ) {}
 
   getState(): WorkflowState {
-    // TODO
+    return this.state
   }
 
   appendEvent(event: BaseEvent): void {
-    // TODO
+    const workflowEvent = WORKFLOW_EVENT_SCHEMA.parse(event)
+    this.pendingEvents = [...this.pendingEvents, workflowEvent]
+    this.state = applyEvent(this.state, workflowEvent)
   }
 
   getPendingEvents(): readonly BaseEvent[] {
-    // TODO
+    return this.pendingEvents
   }
 
   startSession(transcriptPath: string): void {
-    // TODO
+    this.appendEvent({
+      type: 'session-started',
+      at: this._deps.now(),
+      transcriptPath,
+    })
   }
 
   getTranscriptPath(): string {
-    // TODO
+    return this.state.transcriptPath ?? ''
   }
 
   registerAgent(): PreconditionResult {
-    // TODO
+    return pass()
   }
 
   handleTeammateIdle(): PreconditionResult {
-    // TODO
+    return pass()
   }
 }
 
 export function createWorkflow(state: WorkflowState, deps: WorkflowDeps): Workflow {
-  // TODO
+  return new Workflow(state, deps)
+}
+```
+
+`workflow-definition.ts`
+
+```ts
+import type {
+  BaseEvent,
+  WorkflowDefinition,
+} from '@nt-ai-lab/deterministic-agent-workflow-engine'
+import {
+  createWorkflow,
+  type Workflow,
+  type WorkflowDeps,
+} from './workflow'
+import { applyEvent } from './fold'
+import { WORKFLOW_EVENT_SCHEMA } from './workflow-events'
+import {
+  INITIAL_STATE,
+  STATE_NAME_SCHEMA,
+  type StateName,
+  type WorkflowOperation,
+  type WorkflowState,
+} from './workflow-types'
+
+export const WORKFLOW_DEFINITION: WorkflowDefinition<
+  Workflow,
+  WorkflowState,
+  WorkflowDeps,
+  StateName,
+  WorkflowOperation
+> = {
+  fold: (state: WorkflowState, event: BaseEvent): WorkflowState => {
+    const result = WORKFLOW_EVENT_SCHEMA.safeParse(event)
+    if (!result.success) return state
+    return applyEvent(state, result.data)
+  },
+  buildWorkflow: createWorkflow,
+  stateSchema: STATE_NAME_SCHEMA,
+  initialState: () => INITIAL_STATE,
+  getRegistry: () => WORKFLOW_REGISTRY,
+  buildTransitionContext: (state, from, to) => ({
+    state,
+    from,
+    to,
+    gitInfo: {
+      currentBranch: 'main',
+      workingTreeClean: true,
+      headCommit: 'HEAD',
+      changedFilesVsDefault: [],
+      hasCommitsVsDefault: false,
+    },
+  }),
 }
 ```
 
