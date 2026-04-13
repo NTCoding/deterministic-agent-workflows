@@ -16,7 +16,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      pull-requests: write
 
     steps:
       - name: Checkout
@@ -40,13 +39,20 @@ jobs:
       - name: Verify repository
         run: pnpm verify
 
-      - name: Create release PR or publish packages
-        uses: changesets/action@v1
-        with:
-          version: pnpm version-packages
-          publish: pnpm release
-          commit: "chore(release): version packages"
-          title: "chore(release): version packages"
+      - name: Version packages
+        run: pnpm version-packages
+
+      - name: Commit version changes
+        run: |
+          if git diff --quiet; then
+            echo "No version changes to commit"
+            exit 0
+          fi
+          git add .
+          git commit -m "chore(release): version packages [skip ci]"
+          git push
+
+      - name: Publish packages
+        run: pnpm release
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
