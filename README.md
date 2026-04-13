@@ -182,6 +182,15 @@ createClaudeCodeWorkflowCli({
 })
 ```
 
+## Event store
+
+The adapter creates the SQLite event store automatically.
+
+- default path: `~/.workflow-events.db`
+- override path: set `WORKFLOW_EVENTS_DB=/path/to/workflow-events.db`
+
+That is the same database the Control Center reads.
+
 ## Control Center
 
 The adapters write workflow events to `~/.workflow-events.db` by default.
