@@ -12,7 +12,7 @@
     "dep-check": "depcruise --config .dependency-cruiser.cjs packages apps",
     "role-check": "node tools/run-role-check.mjs .riviere/role-enforcement.config.ts",
     "quality": "pnpm dep-check && pnpm typecheck && pnpm test && pnpm build",
-    "verify": "pnpm lint && pnpm quality && pnpm role-check",
+    "verify": "pnpm build && pnpm lint && pnpm dep-check && pnpm typecheck && pnpm test && pnpm role-check",
     "prepare": "husky",
     "version-packages": "changeset version && pnpm install --no-frozen-lockfile",
     "release": "pnpm build && changeset publish",
