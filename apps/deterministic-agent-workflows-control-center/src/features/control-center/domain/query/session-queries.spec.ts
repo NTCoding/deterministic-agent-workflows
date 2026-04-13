@@ -26,8 +26,8 @@ function createBrokenDeps(getValue: unknown): { readonly db: SqliteDatabase } {
         get: () => getValue,
         run: () => undefined,
       }),
-      exec: () => {},
-      close: () => {},
+      exec: () => undefined,
+      close: () => undefined,
     },
   }
 }

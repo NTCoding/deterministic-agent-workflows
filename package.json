@@ -12,6 +12,8 @@
     "dep-check": "depcruise --config .dependency-cruiser.cjs packages apps",
     "role-check": "node tools/run-role-check.mjs .riviere/role-enforcement.config.ts",
     "quality": "pnpm dep-check && pnpm typecheck && pnpm test && pnpm build",
+    "verify": "pnpm lint && pnpm quality && pnpm role-check",
+    "prepare": "husky",
     "version-packages": "changeset version",
     "publish:dry-run": "pnpm -r --filter ./packages/* publish --dry-run --access public --no-git-checks"
   },
@@ -29,6 +31,7 @@
     "eslint-plugin-import": "^2.31.0",
     "eslint-plugin-sonarjs": "^3.0.0",
     "eslint-plugin-unicorn": "^56.0.0",
+    "husky": "^9.1.7",
     "nx": "^20.3.1",
     "oxlint": "^1.19.0",
     "typescript-eslint": "^8.16.0"
