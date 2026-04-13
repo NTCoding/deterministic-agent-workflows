@@ -3,7 +3,6 @@
     "target": "ES2023",
     "module": "ESNext",
     "moduleResolution": "bundler",
-    "baseUrl": ".",
     "types": ["node"],
     "strict": true,
     "noEmit": true,
