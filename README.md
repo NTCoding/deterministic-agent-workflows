@@ -404,6 +404,8 @@ export const WORKFLOW_DEFINITION: WorkflowDefinition<
 ```ts
 import { createClaudeCodeWorkflowCli } from '@nt-ai-lab/deterministic-agent-workflow-claude-code'
 import { createDefaultProcessDeps } from '@nt-ai-lab/deterministic-agent-workflow-cli'
+import { WORKFLOW_DEFINITION } from './features/workflow/infra/persistence/workflow-definition'
+import { ROUTES, PRE_TOOL_USE_POLICY } from './features/workflow/entrypoint/workflow-cli'
 
 createClaudeCodeWorkflowCli({
   workflowDefinition: WORKFLOW_DEFINITION,
