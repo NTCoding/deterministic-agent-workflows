@@ -80,13 +80,9 @@ export default createOpenCodeWorkflowPlugin<
 ```ts
 import { z } from 'zod'
 import type {
-  Workflow,
-  WorkflowDeps,
-} from './features/workflow/domain/workflow'
-import type { WorkflowState } from './features/workflow/domain/workflow-types'
-import type {
   WorkflowDefinition,
   BaseEvent,
+  RehydratableWorkflow,
 } from '@nt-ai-lab/deterministic-agent-workflow-engine'
 import type {
   WorkflowRegistry,
@@ -96,6 +92,8 @@ import type {
 export const STATE_NAME_SCHEMA = z.enum(['PLANNING', 'DEVELOPING', 'REVIEWING'])
 
 export type StateName = z.infer<typeof STATE_NAME_SCHEMA>
+export type WorkflowState = { currentStateMachineState: StateName }
+export type WorkflowDeps = { now: () => string }
 export type WorkflowOperation =
   | 'record-plan'
   | 'record-branch'
@@ -103,6 +101,10 @@ export type WorkflowOperation =
   | 'record-review-passed'
   | 'record-review-failed'
   | 'record-pr'
+
+export interface Workflow extends RehydratableWorkflow<WorkflowState> {}
+
+declare function createWorkflow(state: WorkflowState, deps: WorkflowDeps): Workflow
 
 export const WORKFLOW_REGISTRY: WorkflowRegistry<WorkflowState, StateName, WorkflowOperation> = {
   PLANNING: {
@@ -136,7 +138,7 @@ export const WORKFLOW_DEFINITION: WorkflowDefinition<
 > = {
   stateSchema: STATE_NAME_SCHEMA,
   initialState: () => ({ currentStateMachineState: 'PLANNING' }),
-  buildWorkflow: (state, deps) => new Workflow(state, deps),
+  buildWorkflow: createWorkflow,
   fold: (state, event: BaseEvent) => {
     if (event.type === 'transitioned' && typeof event.to === 'string') {
       return { currentStateMachineState: STATE_NAME_SCHEMA.parse(event.to) }
