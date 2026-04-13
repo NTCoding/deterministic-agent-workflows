@@ -77,12 +77,9 @@ export default createOpenCodeWorkflowPlugin<
 
 ## Workflow definition + policy example
 
+Step 1: define your state and operation types.
+
 ```ts
-import { z } from 'zod'
-
-export const STATE_NAME_SCHEMA = z.enum(['PLANNING', 'DEVELOPING', 'REVIEWING'])
-
-export type StateName = z.infer<typeof STATE_NAME_SCHEMA>
 export type WorkflowOperation =
   | 'record-plan'
   | 'record-branch'
@@ -90,22 +87,11 @@ export type WorkflowOperation =
   | 'record-review-passed'
   | 'record-review-failed'
   | 'record-pr'
+```
 
-export type WorkflowState = {
-  currentStateMachineState: StateName
-  transcriptPath?: string
-  planRecorded: boolean
-  branch?: string
-  implementationProgress?: string
-  reviewPassed?: boolean
-  prNumber?: number
-}
+Step 2: define the registry and tool policy.
 
-export const INITIAL_STATE: WorkflowState = {
-  currentStateMachineState: 'PLANNING',
-  planRecorded: false,
-}
-
+```ts
 export const WORKFLOW_REGISTRY = {
   PLANNING: {
     canTransitionTo: ['DEVELOPING'],
@@ -135,116 +121,32 @@ export const PRE_TOOL_USE_POLICY = {
 
 That policy means a write is denied outside `DEVELOPING`.
 
-`workflow-events.ts`
+## Workflow operations
+
+A workflow operation is a command the agent can invoke, for example `record-pr`.
+
+Flow:
+
+1. the agent runs `workflow record-pr 123`
+2. the CLI routes that command to a workflow method
+3. the workflow method emits an event
+4. the engine applies that event to state and persists it
+
+`workflow-cli.ts`
 
 ```ts
-import { z } from 'zod'
- 
-const PLAN_RECORDED_SCHEMA = z.object({
-  type: z.literal('plan-recorded'),
-  at: z.string(),
+import { arg, defineRoutes } from '@nt-ai-lab/deterministic-agent-workflow-cli'
+
+export const ROUTES = defineRoutes<Workflow, WorkflowState>({
+  'record-pr': {
+    type: 'transaction',
+    args: [arg.number('PR_NUMBER')],
+    handler: (workflow, prNumber) => workflow.recordPr(prNumber),
+  },
 })
-
-const BRANCH_RECORDED_SCHEMA = z.object({
-  type: z.literal('branch-recorded'),
-  at: z.string(),
-  branch: z.string(),
-})
-
-const IMPLEMENTATION_PROGRESS_RECORDED_SCHEMA = z.object({
-  type: z.literal('implementation-progress-recorded'),
-  at: z.string(),
-  note: z.string(),
-})
-
-const REVIEW_RECORDED_SCHEMA = z.object({
-  type: z.literal('review-recorded'),
-  at: z.string(),
-  passed: z.boolean(),
-})
-
-const PR_RECORDED_SCHEMA = z.object({
-  type: z.literal('pr-recorded'),
-  at: z.string(),
-  prNumber: z.number(),
-})
-
-export const WORKFLOW_EVENT_SCHEMA = z.discriminatedUnion('type', [
-  PLAN_RECORDED_SCHEMA,
-  BRANCH_RECORDED_SCHEMA,
-  IMPLEMENTATION_PROGRESS_RECORDED_SCHEMA,
-  REVIEW_RECORDED_SCHEMA,
-  PR_RECORDED_SCHEMA,
-])
-
-export type WorkflowEvent = z.infer<typeof WORKFLOW_EVENT_SCHEMA>
 ```
 
-`fold.ts`
-
-```ts
-import {
-  engineEventSchema,
-  type BaseEvent,
-} from '@nt-ai-lab/deterministic-agent-workflow-engine'
-import type { WorkflowEvent } from './workflow-events'
-import { INITIAL_STATE, type WorkflowState } from './workflow-types'
-
-export function applyEvent(state: WorkflowState, event: BaseEvent): WorkflowState {
-  const platformEvent = engineEventSchema.safeParse(event)
-  if (platformEvent.success) {
-    switch (platformEvent.data.type) {
-      case 'session-started':
-        return {
-          ...state,
-          ...(platformEvent.data.transcriptPath === undefined ? {} : { transcriptPath: platformEvent.data.transcriptPath }),
-        }
-      case 'transitioned':
-        return {
-          ...state,
-          currentStateMachineState: platformEvent.data.to,
-        }
-    }
-  }
-
-  const workflowEvent = WORKFLOW_EVENT_SCHEMA.safeParse(event)
-  if (!workflowEvent.success) {
-    return state
-  }
-
-  switch (workflowEvent.data.type) {
-    case 'plan-recorded':
-      return {
-        ...state,
-        planRecorded: true,
-      }
-    case 'branch-recorded':
-      return {
-        ...state,
-        branch: workflowEvent.data.branch,
-      }
-    case 'implementation-progress-recorded':
-      return {
-        ...state,
-        implementationProgress: workflowEvent.data.note,
-      }
-    case 'review-recorded':
-      return {
-        ...state,
-        reviewPassed: workflowEvent.data.passed,
-      }
-    case 'pr-recorded':
-      return {
-        ...state,
-        prNumber: workflowEvent.data.prNumber,
-      }
-  }
-}
-
-export function applyEvents(events: readonly BaseEvent[]): WorkflowState {
-  return events.reduce(applyEvent, INITIAL_STATE)
-}
-```
+Add your normal `init` and `transition` routes alongside custom operations like `record-pr`.
 
 `workflow.ts`
 
@@ -256,7 +158,6 @@ import {
   type RehydratableWorkflow,
 } from '@nt-ai-lab/deterministic-agent-workflow-engine'
 import { applyEvent } from './fold'
-import { WORKFLOW_EVENT_SCHEMA, type WorkflowEvent } from './workflow-events'
 import type { WorkflowState } from './workflow-types'
 
 export type WorkflowDeps = { now: () => string }
@@ -266,7 +167,7 @@ export class Workflow implements RehydratableWorkflow<WorkflowState> {
 
   constructor(
     private state: WorkflowState,
-    private readonly _deps: WorkflowDeps,
+    private readonly deps: WorkflowDeps,
   ) {}
 
   getState(): WorkflowState {
@@ -283,10 +184,7 @@ export class Workflow implements RehydratableWorkflow<WorkflowState> {
   }
 
   startSession(transcriptPath: string): void {
-    this.state = {
-      ...this.state,
-      transcriptPath,
-    }
+    this.state = { ...this.state, transcriptPath }
   }
 
   getTranscriptPath(): string {
@@ -304,98 +202,63 @@ export class Workflow implements RehydratableWorkflow<WorkflowState> {
     return pass()
   }
 
-  recordPlan(): PreconditionResult {
-    this.appendEvent({ type: 'plan-recorded', at: this._deps.now() })
-    return pass()
-  }
-
-  recordBranch(branch: string): PreconditionResult {
-    this.appendEvent({ type: 'branch-recorded', at: this._deps.now(), branch })
-    return pass()
-  }
-
-  recordImplementationProgress(note: string): PreconditionResult {
+  recordPr(prNumber: number): PreconditionResult {
     this.appendEvent({
-      type: 'implementation-progress-recorded',
-      at: this._deps.now(),
-      note,
+      type: 'pr-recorded',
+      at: this.deps.now(),
+      prNumber,
     })
     return pass()
   }
-
-  recordReviewPassed(): PreconditionResult {
-    this.appendEvent({ type: 'review-recorded', at: this._deps.now(), passed: true })
-    return pass()
-  }
-
-  recordReviewFailed(): PreconditionResult {
-    this.appendEvent({ type: 'review-recorded', at: this._deps.now(), passed: false })
-    return pass()
-  }
-
-  recordPr(prNumber: number): PreconditionResult {
-    this.appendEvent({ type: 'pr-recorded', at: this._deps.now(), prNumber })
-    return pass()
-  }
-}
-
-export function createWorkflow(state: WorkflowState, deps: WorkflowDeps): Workflow {
-  return new Workflow(state, deps)
 }
 ```
 
-`workflow-definition.ts`
+## Rehydration
+
+Use one function to update state from events, and use it in both places:
+
+- `appendEvent(...)` for in-memory changes
+- `WORKFLOW_DEFINITION.fold(...)` for rebuilding state from the event store
 
 ```ts
-import type {
-  BaseEvent,
-  WorkflowDefinition,
+import {
+  engineEventSchema,
+  type BaseEvent,
 } from '@nt-ai-lab/deterministic-agent-workflow-engine'
-import {
-  createWorkflow,
-  type Workflow,
-  type WorkflowDeps,
-} from './workflow'
-import { applyEvent } from './fold'
-import { WORKFLOW_EVENT_SCHEMA } from './workflow-events'
-import {
-  INITIAL_STATE,
-  STATE_NAME_SCHEMA,
-  type StateName,
-  type WorkflowOperation,
-  type WorkflowState,
-} from './workflow-types'
+import { WORKFLOW_EVENT_SCHEMA, type WorkflowEvent } from './workflow-events'
 
-export const WORKFLOW_DEFINITION: WorkflowDefinition<
-  Workflow,
-  WorkflowState,
-  WorkflowDeps,
-  StateName,
-  WorkflowOperation
-> = {
-  fold: (state: WorkflowState, event: BaseEvent): WorkflowState => {
-    const customEvent = WORKFLOW_EVENT_SCHEMA.safeParse(event)
-    if (customEvent.success) {
-      return applyEvent(state, customEvent.data)
+function applyWorkflowEvent(state: WorkflowState, event: WorkflowEvent): WorkflowState {
+  switch (event.type) {
+    case 'pr-recorded':
+      return {
+        ...state,
+        prNumber: event.prNumber,
+      }
+  }
+}
+
+export function applyEvent(state: WorkflowState, event: BaseEvent): WorkflowState {
+  const platformEvent = engineEventSchema.safeParse(event)
+  if (platformEvent.success && platformEvent.data.type === 'transitioned') {
+    return {
+      ...state,
+      currentStateMachineState: platformEvent.data.to,
     }
-    return applyEvent(state, event)
-  },
+  }
+
+  const workflowEvent = WORKFLOW_EVENT_SCHEMA.safeParse(event)
+  if (workflowEvent.success) {
+    return applyWorkflowEvent(state, workflowEvent.data)
+  }
+
+  return state
+}
+
+export const WORKFLOW_DEFINITION = {
+  fold: (state: WorkflowState, event: BaseEvent) => applyEvent(state, event),
   buildWorkflow: createWorkflow,
-  stateSchema: STATE_NAME_SCHEMA,
-  initialState: () => INITIAL_STATE,
   getRegistry: () => WORKFLOW_REGISTRY,
-  buildTransitionContext: (state, from, to) => ({
-    state,
-    from,
-    to,
-    gitInfo: {
-      currentBranch: 'main',
-      workingTreeClean: true,
-      headCommit: 'HEAD',
-      changedFilesVsDefault: [],
-      hasCommitsVsDefault: false,
-    },
-  }),
+  // ...other required fields
 }
 ```
 
