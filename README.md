@@ -75,22 +75,78 @@ export default createOpenCodeWorkflowPlugin<
 })
 ```
 
-## Route + policy example
+## Workflow definition + policy example
 
 ```ts
-import { arg, defineRoutes } from '@nt-ai-lab/deterministic-agent-workflow-cli'
+import { z } from 'zod'
+import type {
+  WorkflowDefinition,
+  BaseEvent,
+} from '@nt-ai-lab/deterministic-agent-workflow-engine'
+import type {
+  WorkflowRegistry,
+  TransitionContext,
+} from '@nt-ai-lab/deterministic-agent-workflow-dsl'
 
-export const ROUTES = defineRoutes<Workflow, WorkflowState>({
-  init: { type: 'session-start' },
-  transition: {
-    type: 'transition',
-    args: [arg.state('STATE', STATE_NAME_SCHEMA)],
+export const STATE_NAME_SCHEMA = z.enum(['PLANNING', 'DEVELOPING', 'REVIEWING'])
+
+export const WORKFLOW_REGISTRY: WorkflowRegistry<WorkflowState, StateName, WorkflowOperation> = {
+  PLANNING: {
+    emoji: '🧠',
+    agentInstructions: 'Plan only',
+    canTransitionTo: ['DEVELOPING'],
+    allowedWorkflowOperations: ['record-plan'],
+    forbidden: { write: true },
   },
-  'record-plan': {
-    type: 'transaction',
-    handler: (workflow) => workflow.executeRecording('record-plan'),
+  DEVELOPING: {
+    emoji: '🛠️',
+    agentInstructions: 'Implement changes',
+    canTransitionTo: ['REVIEWING'],
+    allowedWorkflowOperations: ['record-plan'],
   },
-})
+  REVIEWING: {
+    emoji: '🔍',
+    agentInstructions: 'Review before merge',
+    canTransitionTo: ['DEVELOPING'],
+    allowedWorkflowOperations: ['record-plan'],
+    forbidden: { write: true },
+  },
+}
+
+export const WORKFLOW_DEFINITION: WorkflowDefinition<
+  Workflow,
+  WorkflowState,
+  WorkflowDeps,
+  StateName,
+  WorkflowOperation
+> = {
+  stateSchema: STATE_NAME_SCHEMA,
+  initialState: () => ({ currentStateMachineState: 'PLANNING' }),
+  buildWorkflow: (state, deps) => new Workflow(state, deps),
+  fold: (state, event: BaseEvent) => {
+    if (event.type === 'transitioned' && typeof event.to === 'string') {
+      return { currentStateMachineState: event.to as StateName }
+    }
+    return state
+  },
+  getRegistry: () => WORKFLOW_REGISTRY,
+  buildTransitionContext: (
+    state,
+    from,
+    to,
+  ): TransitionContext<WorkflowState, StateName> => ({
+    state,
+    from,
+    to,
+    gitInfo: {
+      currentBranch: 'main',
+      workingTreeClean: true,
+      headCommit: 'HEAD',
+      changedFilesVsDefault: [],
+      hasCommitsVsDefault: false,
+    },
+  }),
+}
 
 export const PRE_TOOL_USE_POLICY = {
   bashForbidden: {
@@ -102,7 +158,7 @@ export const PRE_TOOL_USE_POLICY = {
 } as const
 ```
 
-That policy means a write can be denied before `DEVELOPING` and allowed after the workflow transitions into `DEVELOPING`.
+That policy means a write is denied outside `DEVELOPING`.
 
 ## Claude Code example
 
