@@ -102,13 +102,13 @@ export const WORKFLOW_REGISTRY: WorkflowRegistry<WorkflowState, StateName, Workf
     emoji: '🛠️',
     agentInstructions: 'Implement changes',
     canTransitionTo: ['REVIEWING'],
-    allowedWorkflowOperations: ['record-plan'],
+    allowedWorkflowOperations: ['record-branch', 'record-implementation-progress'],
   },
   REVIEWING: {
     emoji: '🔍',
     agentInstructions: 'Review before merge',
     canTransitionTo: ['DEVELOPING'],
-    allowedWorkflowOperations: ['record-plan'],
+    allowedWorkflowOperations: ['record-review-outcome', 'record-pr'],
     forbidden: { write: true },
   },
 }
