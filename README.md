@@ -80,6 +80,11 @@ export default createOpenCodeWorkflowPlugin<
 ```ts
 import { z } from 'zod'
 import type {
+  Workflow,
+  WorkflowDeps,
+} from './features/workflow/domain/workflow'
+import type { WorkflowState } from './features/workflow/domain/workflow-types'
+import type {
   WorkflowDefinition,
   BaseEvent,
 } from '@nt-ai-lab/deterministic-agent-workflow-engine'
@@ -92,24 +97,12 @@ export const STATE_NAME_SCHEMA = z.enum(['PLANNING', 'DEVELOPING', 'REVIEWING'])
 
 export type StateName = z.infer<typeof STATE_NAME_SCHEMA>
 export type WorkflowOperation =
-  | 'record-issue'
+  | 'record-plan'
   | 'record-branch'
-  | 'record-architecture-review-passed'
-  | 'record-architecture-review-failed'
-  | 'record-code-review-passed'
-  | 'record-code-review-failed'
-  | 'record-bug-scanner-passed'
-  | 'record-bug-scanner-failed'
-  | 'record-task-check-passed'
+  | 'record-implementation-progress'
+  | 'record-review-passed'
+  | 'record-review-failed'
   | 'record-pr'
-  | 'record-ci-passed'
-  | 'record-ci-failed'
-  | 'record-feedback-clean'
-  | 'record-feedback-exists'
-  | 'record-feedback-addressed'
-  | 'record-reflection'
-
-export type WorkflowState = { currentStateMachineState: StateName }
 
 export const WORKFLOW_REGISTRY: WorkflowRegistry<WorkflowState, StateName, WorkflowOperation> = {
   PLANNING: {
@@ -129,7 +122,7 @@ export const WORKFLOW_REGISTRY: WorkflowRegistry<WorkflowState, StateName, Workf
     emoji: '🔍',
     agentInstructions: 'Review before merge',
     canTransitionTo: ['DEVELOPING'],
-    allowedWorkflowOperations: ['record-review-outcome', 'record-pr'],
+    allowedWorkflowOperations: ['record-review-passed', 'record-review-failed', 'record-pr'],
     forbidden: { write: true },
   },
 }
