@@ -10,7 +10,7 @@
     "test": "nx run-many -t test --all",
     "build": "nx run-many -t build --all",
     "dep-check": "depcruise --config .dependency-cruiser.cjs packages apps",
-    "role-check": "riviere-role-enforcement .riviere/role-enforcement.config.ts",
+    "role-check": "node tools/run-role-check.mjs .riviere/role-enforcement.config.ts",
     "quality": "pnpm dep-check && pnpm typecheck && pnpm test && pnpm build",
     "version-packages": "changeset version",
     "publish:dry-run": "pnpm -r --filter ./packages/* publish --dry-run --access public --no-git-checks"
@@ -18,8 +18,7 @@
   "devDependencies": {
     "@changesets/cli": "^2.29.5",
     "@eslint-community/eslint-plugin-eslint-comments": "^4.5.0",
-    "@living-architecture/riviere-role-enforcement": "^0.1.8",
-    "nx": "^20.3.1",
+    "@living-architecture/riviere-role-enforcement": "^0.2.0",
     "@nx/eslint-plugin": "^20.3.1",
     "@stylistic/eslint-plugin": "^2.11.0",
     "@types/node": "^22.13.8",
@@ -30,6 +29,8 @@
     "eslint-plugin-import": "^2.31.0",
     "eslint-plugin-sonarjs": "^3.0.0",
     "eslint-plugin-unicorn": "^56.0.0",
+    "nx": "^20.3.1",
+    "oxlint": "^1.19.0",
     "typescript-eslint": "^8.16.0"
   }
 }

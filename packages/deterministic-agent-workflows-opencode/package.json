@@ -1,5 +1,5 @@
 {
-  "name": "@nick-tune/deterministic-agent-workflows-opencode",
+  "name": "@nt-ai-lab/deterministic-agent-workflow-opencode",
   "version": "0.0.0",
   "private": false,
   "type": "module",
@@ -11,8 +11,10 @@
     "dist"
   ],
   "dependencies": {
-    "@nick-tune/deterministic-agent-workflows-engine": "workspace:*",
-    "@nick-tune/deterministic-agent-workflows-event-store": "workspace:*",
+    "@nt-ai-lab/deterministic-agent-workflow-cli": "workspace:*",
+    "@nt-ai-lab/deterministic-agent-workflow-engine": "workspace:*",
+    "@nt-ai-lab/deterministic-agent-workflow-event-store": "workspace:*",
+    "@opencode-ai/plugin": "^1.4.3",
     "zod": "^3.25.76"
   },
   "publishConfig": {

@@ -1,5 +1,7 @@
-import { describe, it, expect } from 'vitest'
-import { parseArgs } from './main.js'
+import {
+  describe, it, expect 
+} from 'vitest'
+import { parseArgs } from './features/control-center-cli/commands/start-control-center-input'
 
 describe('parseArgs', () => {
   it('returns defaults when no args provided', () => {
@@ -29,5 +31,18 @@ describe('parseArgs', () => {
     expect(args.dbPath).toBe('/test.db')
     expect(args.port).toBe(9090)
     expect(args.open).toBe(true)
+  })
+
+  it('uses WORKFLOW_EVENTS_DB when set', () => {
+    process.env['WORKFLOW_EVENTS_DB'] = '/from-env.db'
+    const args = parseArgs([])
+    expect(args.dbPath).toBe('/from-env.db')
+    delete process.env['WORKFLOW_EVENTS_DB']
+  })
+
+  it('ignores unknown flags', () => {
+    const args = parseArgs(['--unknown', 'value'])
+    expect(args.port).toBe(3120)
+    expect(args.open).toBe(false)
   })
 })

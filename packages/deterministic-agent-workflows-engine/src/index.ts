@@ -1,10 +1,10 @@
-export type { BaseWorkflowState } from './domain/workflow-state'
-export { WorkflowStateError } from './domain/workflow-state'
+export type { BaseWorkflowState } from './platform/domain/workflow-state'
+export { WorkflowStateError } from './platform/domain/workflow-state'
 
-export type { BaseEvent } from './domain/base-event'
-export { BaseEventSchema } from './domain/base-event'
+export type { BaseEvent } from './platform/domain/base-event'
+export { baseEventSchema } from './platform/domain/base-event'
 
-export { EngineEventSchema } from './domain/engine-events'
+export { engineEventSchema } from './platform/domain/engine-events'
 export type {
   EngineEvent,
   SessionStartedEvent,
@@ -18,20 +18,22 @@ export type {
   IdleCheckedEvent,
   IdentityVerifiedEvent,
   ContextRequestedEvent,
-} from './domain/engine-events'
+} from './platform/domain/engine-events'
 
-export { DomainMetadataEventSchema } from './domain/domain-metadata-events'
+export { repositoryMetadataEventSchema } from './platform/domain/repository-tracking-events'
 export type {
   DomainMetadataEvent,
   IssueRecordedEvent,
   BranchRecordedEvent,
   PrRecordedEvent,
-} from './domain/domain-metadata-events'
+} from './platform/domain/repository-tracking-events'
 
-export { checkBashCommand } from './domain/bash-enforcement'
+export { checkBashCommand } from './platform/domain/bash-enforcement'
 
-export type { PreconditionResult } from './domain/precondition-result'
-export { pass, fail } from './domain/precondition-result'
+export type { PreconditionResult } from './platform/domain/precondition-result'
+export {
+  pass, fail 
+} from './platform/domain/precondition-result'
 
 export type {
   GitInfo,
@@ -39,17 +41,19 @@ export type {
   BashForbiddenConfig,
   WorkflowStateDefinition,
   WorkflowRegistry,
-} from './domain/workflow-registry'
+} from './platform/domain/workflow-registry'
 
-export { WorkflowEngine } from './domain/workflow-engine'
+export { WorkflowEngine } from './platform/domain/workflow-engine'
 export type {
   EngineResult,
   RehydratableWorkflow,
   WorkflowDefinition,
   WorkflowEventStore,
   WorkflowEngineDeps,
-} from './domain/workflow-engine'
+} from './platform/domain/workflow-engine-types'
 
-export type { TranscriptMessage, TranscriptReader } from './domain/transcript-reader'
-export type { IdentityCheckResult } from './domain/identity-verification'
-export { checkIdentity } from './domain/identity-verification'
+export type {
+  TranscriptMessage, TranscriptReader 
+} from './platform/infra/external-clients/transcript/transcript-reader'
+export type { IdentityCheckResult } from './platform/domain/identity-verification'
+export { checkIdentity } from './platform/domain/identity-verification'

@@ -1,5 +1,5 @@
 {
-  "name": "@nick-tune/deterministic-agent-workflows-engine",
+  "name": "@nt-ai-lab/deterministic-agent-workflow-engine",
   "version": "0.0.0",
   "private": false,
   "type": "module",

@@ -23,6 +23,7 @@ type RoleName =
   | 'query-model-loader'
   | 'query-model-use-case'
   | 'query-model-use-case-input'
+  | 'web-tbc'
   | 'value-object'
 
 const role = createRoleFactory<RoleName>()
@@ -97,6 +98,7 @@ export const allRoles = [
     allowedOutputs: ['query-model', 'domain-error'],
     forbiddenDependencies: ['query-model-loader'],
   }),
+  role('web-tbc', { targets: ['class', 'function', 'interface', 'type-alias'] }),
   role('external-client-model', { targets: ['interface', 'type-alias', 'class'] }),
   role('external-client-error', { targets: ['class'] }),
   role('cli-input-validator', { targets: ['function'] }),

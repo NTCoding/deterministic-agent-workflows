@@ -1,5 +1,5 @@
 {
-  "name": "@nick-tune/deterministic-agent-workflows-dsl",
+  "name": "@nt-ai-lab/deterministic-agent-workflow-dsl",
   "version": "0.0.0",
   "private": false,
   "type": "module",
@@ -11,7 +11,7 @@
     "dist"
   ],
   "dependencies": {
-    "@nick-tune/deterministic-agent-workflows-engine": "workspace:*"
+    "@nt-ai-lab/deterministic-agent-workflow-engine": "workspace:*"
   },
   "publishConfig": {
     "access": "public"

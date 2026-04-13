@@ -1,15 +1,24 @@
-export { pass, fail } from './domain/result'
-export type { PreconditionResult } from './domain/result'
+export {
+  fail,
+  pass,
+} from './shell/result'
+export type { PreconditionResult } from './shell/result'
 
 export type {
+  BashForbiddenConfig,
   GitInfo,
   TransitionContext,
-  BashForbiddenConfig,
-  WorkflowStateDefinition,
   WorkflowRegistry,
-} from './domain/types'
+  WorkflowStateDefinition,
+} from '@nt-ai-lab/deterministic-agent-workflow-engine'
 
-export { checkBashCommand } from './domain/bash-enforcement'
-
-export { defineRecordingOps, checkOperationGate } from './domain/recording-ops'
-export type { RecordingOpDefinition, RecordingOpResult, RecordingOpsFactory } from './domain/recording-ops'
+export { checkBashCommand } from './shell/bash-enforcement'
+export {
+  checkOperationGate,
+  defineRecordingOps,
+} from './platform/domain/recording-ops'
+export type {
+  RecordingOpDefinition,
+  RecordingOpResult,
+  RecordingOpsFactory,
+} from './platform/domain/recording-ops'

@@ -1,5 +1,5 @@
 {
-  "name": "@nick-tune/deterministic-agent-workflows-claude-code",
+  "name": "@nt-ai-lab/deterministic-agent-workflow-claude-code",
   "version": "0.0.0",
   "private": false,
   "type": "module",
@@ -11,7 +11,8 @@
     "dist"
   ],
   "dependencies": {
-    "@nick-tune/deterministic-agent-workflows-engine": "workspace:*",
+    "@nt-ai-lab/deterministic-agent-workflow-cli": "workspace:*",
+    "@nt-ai-lab/deterministic-agent-workflow-engine": "workspace:*",
     "zod": "^3.25.76"
   },
   "publishConfig": {

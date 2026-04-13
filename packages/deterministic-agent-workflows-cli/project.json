@@ -1,0 +1,32 @@
+{
+  "name": "deterministic-agent-workflows-cli",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "library",
+  "sourceRoot": "packages/deterministic-agent-workflows-cli/src",
+  "targets": {
+    "build": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc -p packages/deterministic-agent-workflows-cli/tsconfig.json && node tools/rewrite-relative-import-extensions.mjs packages/deterministic-agent-workflows-cli/dist"
+      }
+    },
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc -p packages/deterministic-agent-workflows-cli/tsconfig.json --noEmit"
+      }
+    },
+    "lint": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "eslint packages/deterministic-agent-workflows-cli/src --ext .ts"
+      }
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "node -e \"process.exit(0)\""
+      }
+    }
+  }
+}

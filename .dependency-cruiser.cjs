@@ -7,7 +7,7 @@ module.exports = {
       comment: 'engine must not depend on claude-code or opencode adapters',
       from: { path: '^packages/deterministic-agent-workflows-engine/src' },
       to: {
-        path: '(^packages/deterministic-agent-workflows-(claude-code|opencode)/src)|(^@nick-tune/deterministic-agent-workflows-(claude-code|opencode)$)',
+        path: '(^packages/deterministic-agent-workflows-(claude-code|opencode)/src)|(^@nt-ai-lab/deterministic-agent-workflow-(claude-code|opencode)$)',
       },
     },
     {
@@ -25,7 +25,7 @@ module.exports = {
       comment: 'event-store must not depend on adapter packages',
       from: { path: '^packages/deterministic-agent-workflows-event-store/src' },
       to: {
-        path: '(^packages/deterministic-agent-workflows-(claude-code|opencode)/src)|(^@nick-tune/deterministic-agent-workflows-(claude-code|opencode)$)',
+        path: '(^packages/deterministic-agent-workflows-(claude-code|opencode)/src)|(^@nt-ai-lab/deterministic-agent-workflow-(claude-code|opencode)$)',
       },
     },
     {
@@ -34,7 +34,7 @@ module.exports = {
       comment: 'claude-code adapter must not depend on dsl package',
       from: { path: '^packages/deterministic-agent-workflows-claude-code/src' },
       to: {
-        path: '(^packages/deterministic-agent-workflows-dsl/src)|(^@nick-tune/deterministic-agent-workflows-dsl$)',
+        path: '(^packages/deterministic-agent-workflows-dsl/src)|(^@nt-ai-lab/deterministic-agent-workflow-dsl$)',
       },
     },
     {
@@ -43,7 +43,7 @@ module.exports = {
       comment: 'opencode adapter must not depend on dsl package',
       from: { path: '^packages/deterministic-agent-workflows-opencode/src' },
       to: {
-        path: '(^packages/deterministic-agent-workflows-dsl/src)|(^@nick-tune/deterministic-agent-workflows-dsl$)',
+        path: '(^packages/deterministic-agent-workflows-dsl/src)|(^@nt-ai-lab/deterministic-agent-workflow-dsl$)',
       },
     },
   ],

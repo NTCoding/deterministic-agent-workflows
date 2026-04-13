@@ -1,177 +1,191 @@
-# Deterministic Agent Workflows — Migration and Execution Plan
+# Deterministic Agent Workflows — Actual Plan
 
-## Purpose
-Build a robust Nx monorepo for npm publication, migrating validated PoC logic from `../autonomous-claude-agent-team` into a clean, maintainable architecture.
+## What “done” means
 
-## Finalized Requirements
+This repo is **not done** until a consumer can copy a short example like this shape and get a working integration:
 
-### Repository and standards
-- Repository target name: `deterministic-agent-workflows` (correct spelling).
-- Follow `../living-architecture` Nx monorepo approach.
-- Keep lint model aligned with `living-architecture`.
-- Copy `living-architecture` role system exactly for role names and location model, adapting only repository package/app paths and workspace package names.
-- Do not invent package-name roles (for example, no `claude-code` role, no `engine` role, no `dsl` role).
-- Consume `riviere-role-enforcement` from npm (external dependency, not vendored workspace package).
+```ts
+const plugin = createOpenCodeWorkflowPlugin({
+  workflowDefinition,
+  routes,
+  bashForbidden,
+  isWriteAllowed,
+  pluginRoot,
+  commandDirectories,
+  commandPrefix,
+  buildWorkflowDeps,
+})
+```
 
-### Runtime/toolchain baselines
-- Node.js: latest active LTS.
-- TypeScript: 6.x baseline.
+Consumers must **not** need to implement low-level engine internals such as:
+- `appendEvent`
+- `getPendingEvents`
+- custom rehydration
+- manual event-store wiring for the normal adapter path
+- ad hoc transcript reader plumbing
 
-### Source migration scope
-- Migrate only from PoC:
-  - `packages/agentic-workflow-builder`
-  - `packages/workflow-control-center`
-- Do not migrate PoC root `src/`.
-
-### v1 package/app set
-Publishable packages:
-1. `@nick-tune/deterministic-agent-workflows-dsl`
-2. `@nick-tune/deterministic-agent-workflows-engine`
-3. `@nick-tune/deterministic-agent-workflows-event-store`
-4. `@nick-tune/deterministic-agent-workflows-claude-code`
-5. `@nick-tune/deterministic-agent-workflows-opencode`
-
-Non-published app:
-- `apps/deterministic-agent-workflows-control-center`
-
-### Architecture constraints
-- Engine must be platform-agnostic.
-- Claude/OpenCode-specific implementation must live in adapter packages only.
-- Engine must be decoupled from CLI concerns.
-- Event-store implementation lives in dedicated `event-store` package.
-- Adapters depend on `engine + event-store`, not on `dsl`.
-- DSL is abstraction layer that compiles/translates to engine language/contracts.
-
-### Release strategy
-- Lockstep versioning across all publishable packages for v1.
-
-### Agent instruction files
-- Root `AGENTS.md` is required.
-- Root `CLAUDE.md` must instruct agents to read `AGENTS.md` first.
-- Agent execution rule: if code does not fit role-enforcement conventions, stop implementation and discuss with the user before proceeding.
-
-### Examples
-- Add examples placeholder only (no full example implementation yet).
-- Initial references:
-  - `https://github.com/NTCoding/living-architecture/blob/main/tools/dev-workflow-v2/src/shell/opencode-plugin.ts`
-  - `https://github.com/NTCoding/autonomous-claude-agent-team`
+If docs or APIs force that, the repo is not ready.
 
 ---
 
-## Dependency Direction to Enforce
+## Target user experience
 
-Package-level architecture rules:
-- `dsl -> engine`
-- `event-store -> engine`
-- `claude-code -> engine`
-- `claude-code -> event-store`
-- `opencode -> engine`
-- `opencode -> event-store`
-- `apps/deterministic-agent-workflows-control-center -> engine`
-- `apps/deterministic-agent-workflows-control-center -> event-store`
-
-Forbidden directions:
-- `engine -> claude-code`
-- `engine -> opencode`
-- `engine -> app`
-- `event-store -> claude-code`
-- `event-store -> opencode`
-- `claude-code -> dsl`
-- `opencode -> dsl`
-
-These rules will be implemented using simple dependency-cruiser constraints.
+1. User installs:
+   - `@nt-ai-lab/deterministic-agent-workflow-dsl`
+   - one adapter: `@nt-ai-lab/deterministic-agent-workflow-opencode` or `@nt-ai-lab/deterministic-agent-workflow-claude-code`
+2. User defines workflow states, transitions, and policy.
+3. User creates plugin via one high-level factory.
+4. Runtime automatically:
+   - enforces transitions
+   - blocks forbidden writes/bash usage in the wrong state
+   - records events
+5. User opens Control Center and sees sessions, current states, transitions, denials, and event history.
 
 ---
 
-## Execution Todo List (Track Progress Here)
+## Non-negotiable product requirements
+
+### Consumer API
+- Provide `@nt-ai-lab/deterministic-agent-workflow-cli` for route definition and Claude Code process wiring.
+- Provide `createOpenCodeWorkflowPlugin(...)`.
+- Provide `createClaudeCodeWorkflowCli(...)`.
+- Preserve the existing consumer setup shape exactly.
+- Hide engine/event-sourcing internals behind adapter APIs.
+
+### Docs
+- README must explain:
+  - what the product does
+  - how to install it
+  - one real copy-paste consumer example
+  - how the Control Center is used
+- No vague instructions such as “wire this into the engine.”
+- No consumer docs that require implementing `RehydratableWorkflow` directly.
+
+### Architecture
+- Engine stays platform-agnostic.
+- Provider-specific runtime logic stays in adapter packages.
+- Event store package owns persistence implementation.
+- Role-enforcement model stays aligned with `living-architecture`.
+- If code does not fit role-enforcement conventions, stop and discuss with the user.
+
+### Release
+- Publish under `@nt-ai-lab`.
+- Target package names:
+  - `@nt-ai-lab/deterministic-agent-workflow-dsl`
+  - `@nt-ai-lab/deterministic-agent-workflow-engine`
+  - `@nt-ai-lab/deterministic-agent-workflow-cli`
+  - `@nt-ai-lab/deterministic-agent-workflow-event-store`
+  - `@nt-ai-lab/deterministic-agent-workflow-claude-code`
+  - `@nt-ai-lab/deterministic-agent-workflow-opencode`
+
+---
+
+## Current reality
+
+### Foundation that exists
+- [x] Nx/pnpm workspace exists.
+- [x] Core package/app directories exist.
+- [x] Control Center app exists and can render a UI.
+- [x] Role-enforcement files were copied from `living-architecture` and adapted.
+- [x] Engine, DSL, event-store, and adapter code exists at a low level.
+- [x] A dedicated CLI package now exists for route definitions and Claude Code wiring.
+
+### Critical gaps
+- [ ] Claude Code still needs the same level of consumer-proof validation now added for OpenCode.
+- [ ] Lint still does not pass against the full workspace.
+- [ ] `role-check` is still pending re-enable/fix.
+
+---
+
+## Execution plan
 
 Status legend: `TODO`, `IN_PROGRESS`, `BLOCKED`, `DONE`
 
-### 0) Program setup and governance
-- [x] **DONE** Confirm and document baseline versions (Node LTS exact major, TS 6 exact minor) in root docs.
-- [x] **DONE** Add root `AGENTS.md`.
-- [x] **DONE** Add root `CLAUDE.md` with “Read AGENTS.md first”.
-- [x] **DONE** Update repository naming/documentation references to `deterministic-agent-workflows`.
+### 0) Lock the public API
+- [x] **DONE** Define the exact public API for `createOpenCodeWorkflowPlugin(...)`.
+- [x] **DONE** Define the exact public API for `createClaudeCodeWorkflowCli(...)`.
+- [x] **DONE** Preserve the existing consumer interface exactly. This migration does not change the contract shape.
+- [x] **DONE** Decide which types are public consumer-facing types versus advanced/internal types.
+- [x] **DONE** Minimize required consumer inputs to workflow definition + policy + platform deps.
 
-### 1) Workspace bootstrap (Nx + pnpm)
-- [x] **DONE** Initialize/normalize Nx workspace structure (`packages/*`, `apps/*`).
-- [x] **DONE** Align root configs with `living-architecture` patterns:
-  - `nx.json`
-  - `pnpm-workspace.yaml`
-  - `tsconfig.base.json`
-  - `tsconfig.json`
-  - `eslint.config.mjs`
-  - `commitlint.config.mjs`
-- [x] **DONE** Wire root scripts/targets for `lint`, `typecheck`, `test`, `build`, `role-check`.
+### 1) Hide engine internals behind adapter factories
+- [x] **DONE** Implement OpenCode adapter factory that owns engine construction internally.
+- [x] **DONE** Implement Claude Code wrapper that owns transcript-reader wiring internally.
+- [x] **DONE** Move `RehydratableWorkflow`/event-application details out of normal consumer setup.
+- [x] **DONE** Ensure normal consumers do not implement `appendEvent`, `getPendingEvents`, or rehydration plumbing in the documented adapter path.
+- [x] **DONE** Ensure transcript reader setup is owned by adapters in the normal path.
+- [x] **DONE** Ensure event-store setup is owned by adapters in the normal OpenCode path.
 
-### 2) Role-enforcement integration
-- [x] **DONE** Add external npm dependency for role enforcement.
-- [x] **DONE** Replace `.riviere/roles.ts` with `living-architecture` canonical role names/rules.
-- [x] **DONE** Replace `.riviere/role-enforcement.config.ts` with `living-architecture` location model adapted to this repo package/app paths.
-- [x] **DONE** Add `.riviere/canonical-role-configurations.md` from `living-architecture`.
-- [x] **DONE** Replace `.riviere/role-definitions/*` with the same role-definition files used by `living-architecture` (same filenames and role semantics).
-- [x] **DONE** Integrate `role-check` into quality pipeline and CI.
+### 2) Define the right package responsibilities
+- [ ] **TODO** Keep refining the package story so normal users start from `cli` + adapter + workflow definition, not engine internals.
+- [x] **DONE** Make `engine` an advanced/core package, not the required first-touch package for normal users in README.
+- [x] **DONE** Keep `event-store` as persistence implementation package, not a required manual step for normal OpenCode adapter setup.
+- [x] **DONE** Keep provider-specific integration code inside `claude-code` and `opencode` only.
+- [ ] **TODO** Review exports in every package and remove accidental low-level leakage from adapter-facing docs.
 
-### 3) Project scaffolding (packages/apps)
-- [x] **DONE** Scaffold `packages/deterministic-agent-workflows-engine`.
-- [x] **DONE** Scaffold `packages/deterministic-agent-workflows-dsl`.
-- [x] **DONE** Scaffold `packages/deterministic-agent-workflows-event-store`.
-- [x] **DONE** Scaffold `packages/deterministic-agent-workflows-claude-code`.
-- [x] **DONE** Scaffold `packages/deterministic-agent-workflows-opencode`.
-- [x] **DONE** Scaffold `apps/deterministic-agent-workflows-control-center` (non-published).
-- [x] **DONE** Configure package metadata (`name`, `exports`, `types`, `files`, publish config).
+### 3) Align package names and publish surface
+- [x] **DONE** Update package names to final `@nt-ai-lab/deterministic-agent-workflow-*` names.
+- [x] **DONE** Update workspace cross-package dependencies to the final names.
+- [x] **DONE** Update exports/imports/docs/examples to the final names.
+- [x] **DONE** Verify install commands in README match actual package names.
 
-### 4) Migration and decomposition from PoC
-- [x] **DONE** Migrate domain logic from PoC `agentic-workflow-builder` into target package boundaries.
-- [x] **DONE** Move provider-specific code out of engine into `claude-code` and `opencode`.
-- [x] **DONE** Move event-store implementation into dedicated package.
-- [x] **DONE** Ensure engine has no provider or CLI coupling.
-- [x] **DONE** Migrate control center app from PoC `workflow-control-center`.
-- [x] **DONE** Exclude all transient artifacts (`coverage`, `dist`, `node_modules`, temp/runtime outputs).
+### 4) Produce one real end-to-end consumer example
+- [x] **DONE** Create one short OpenCode example using the final plugin factory API.
+- [x] **DONE** Example shows a blocked write in `PLANNING`.
+- [x] **DONE** Example shows a successful write after transition to `DEVELOPING`.
+- [x] **DONE** Example is copy-pasteable and does not require engine internals.
+- [x] **DONE** API was fixed before rewriting the docs example.
 
-### 5) Architecture guardrails (dep-cruiser + lint)
-- [x] **DONE** Add dependency-cruiser config for package-level rules listed above.
-- [x] **DONE** Add lint rule parity with `living-architecture` (including custom rules where required).
-- [x] **DONE** Enforce no forbidden package imports via CI checks.
+### 5) Rewrite README around user value
+- [x] **DONE** Rewrite README around: what it does, why it matters, how to use it.
+- [x] **DONE** Add install section with final package names.
+- [x] **DONE** Add real copy-paste examples using the high-level public APIs.
+- [x] **DONE** Remove vague wording and low-level internal implementation details.
+- [x] **DONE** Explain Control Center as a user feature: inspect sessions, states, transitions, denials.
 
-### 6) Validation and hardening
-- [x] **DONE** Restore and pass typecheck for all packages/apps.
-- [x] **DONE** Restore and pass tests for all packages/apps.
-- [x] **DONE** Set and enforce coverage thresholds.
-- [ ] **BLOCKED** Verify dep-cruiser, lint, typecheck, test, build from clean install (role-check temporarily deferred due upstream ESM packaging bug in `@living-architecture/riviere-role-enforcement@0.1.8`; lint parity remediation still pending).
+### 6) Finish Control Center documentation
+- [x] **DONE** Keep a working screenshot in `docs/control-center.png`.
+- [x] **DONE** Document how to start Control Center against a workflow events database.
+- [ ] **TODO** Verify the instructions from a clean checkout after final package cleanup.
+- [x] **DONE** Make sure Control Center terminology matches the product language used in README.
 
-### 7) Release pipeline
-- [x] **DONE** Configure lockstep release strategy for publishable packages.
-- [x] **DONE** Configure npm publish workflow (dry-run first).
-- [x] **DONE** Add CI workflow for PR quality gates + release prerequisites.
+### 7) Enforce architecture without damaging usability
+- [ ] **TODO** Keep `.riviere` aligned with `living-architecture` role names and folder model.
+- [ ] **TODO** Keep dependency-cruiser rules aligned with desired package boundaries.
+- [ ] **TODO** Ensure adapter-factory implementation still fits role-enforcement conventions.
+- [ ] **TODO** If a required consumer API does not fit the current role model cleanly, stop and discuss with the user before forcing a bad abstraction.
 
-### 8) Examples placeholder
-- [x] **DONE** Add `examples/README.md` placeholder.
-- [x] **DONE** Include reference links to first consumer and original PoC.
+### 8) Validation gates
+- [x] **DONE** Add a smoke test for the high-level OpenCode adapter factory.
+- [x] **DONE** Add smoke test for blocked operation before allowed state.
+- [x] **DONE** Add smoke test for allowed operation after transition.
+- [ ] **TODO** Verify install, lint, typecheck, test, build from clean checkout.
+- [ ] **TODO** Re-enable and pass `role-check` once upstream packaging issue is resolved or a stable workaround is chosen.
 
-### 9) Final readiness gate
-- [x] **DONE** Run end-to-end parity check versus PoC behavior.
-- [x] **DONE** Confirm publishable package integrity (`exports`, typings, dependency graph).
-- [ ] **TODO** Re-enable role-check in quality/CI and run it successfully after upstream role-enforcement package fix.
-- [ ] **TODO** Mark migration complete and ready for first lockstep release.
-
----
-
-## Suggested Task Order for Agents
-1. Section 0
-2. Section 1
-3. Section 2
-4. Section 3
-5. Section 4
-6. Section 5
-7. Section 6
-8. Section 7
-9. Section 8
-10. Section 9
+### 9) Release readiness
+- [ ] **TODO** Confirm package metadata, exports, and typings match the public API.
+- [ ] **TODO** Confirm npm publish config matches `@nt-ai-lab`.
+- [ ] **TODO** Confirm lockstep release flow works.
+- [ ] **TODO** Do not mark release-ready until README example and smoke tests both pass.
 
 ---
 
-## Out of Scope (until explicitly approved)
-- Major feature redesign beyond migration and decomposition.
-- Publishing the control center app.
-- Full example implementations (placeholder only in v1).
+## Acceptance criteria for “done”
+
+This repo is only ready when all of the following are true:
+
+- A consumer can create an OpenCode integration with one high-level factory.
+- A consumer can create a Claude Code integration with the preserved high-level CLI wrapper.
+- The main README shows that exact usage style.
+- The README example does not mention `appendEvent`, `getPendingEvents`, `RehydratableWorkflow`, or manual event rehydration.
+- A smoke test proves:
+  - blocked write in `PLANNING`
+  - allowed write in `DEVELOPING`
+- Control Center instructions work and the screenshot matches reality.
+- Package names/docs/exports all match the final `@nt-ai-lab` publish targets.
+
+---
+
+## Agent rule
+
+If an implementation forces consumers into low-level engine/event-sourcing internals, stop and discuss with the user before proceeding.

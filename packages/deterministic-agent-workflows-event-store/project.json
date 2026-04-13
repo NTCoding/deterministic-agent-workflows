@@ -7,7 +7,7 @@
     "build": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "tsc -p packages/deterministic-agent-workflows-event-store/tsconfig.json"
+        "command": "tsc -p packages/deterministic-agent-workflows-event-store/tsconfig.json && node tools/rewrite-relative-import-extensions.mjs packages/deterministic-agent-workflows-event-store/dist"
       }
     },
     "typecheck": {

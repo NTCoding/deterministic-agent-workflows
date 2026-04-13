@@ -4,11 +4,12 @@
   "commit": false,
   "fixed": [
     [
-      "@nick-tune/deterministic-agent-workflows-dsl",
-      "@nick-tune/deterministic-agent-workflows-engine",
-      "@nick-tune/deterministic-agent-workflows-event-store",
-      "@nick-tune/deterministic-agent-workflows-claude-code",
-      "@nick-tune/deterministic-agent-workflows-opencode"
+      "@nt-ai-lab/deterministic-agent-workflow-cli",
+      "@nt-ai-lab/deterministic-agent-workflow-dsl",
+      "@nt-ai-lab/deterministic-agent-workflow-engine",
+      "@nt-ai-lab/deterministic-agent-workflow-event-store",
+      "@nt-ai-lab/deterministic-agent-workflow-claude-code",
+      "@nt-ai-lab/deterministic-agent-workflow-opencode"
     ]
   ],
   "linked": [],

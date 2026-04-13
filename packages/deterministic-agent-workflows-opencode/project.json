@@ -7,7 +7,7 @@
     "build": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "tsc -p packages/deterministic-agent-workflows-opencode/tsconfig.json"
+        "command": "tsc -p packages/deterministic-agent-workflows-opencode/tsconfig.json && node tools/rewrite-relative-import-extensions.mjs packages/deterministic-agent-workflows-opencode/dist"
       }
     },
     "typecheck": {
@@ -24,8 +24,9 @@
     },
     "test": {
       "executor": "nx:run-commands",
+      "dependsOn": ["build", "^build"],
       "options": {
-        "command": "node -e \"process.exit(0)\""
+        "command": "pnpm --dir packages/deterministic-agent-workflows-opencode exec node smoke-test.mjs"
       }
     }
   }

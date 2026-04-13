@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url'
 const appDir = dirname(fileURLToPath(import.meta.url))
 const outDir = join(appDir, 'dist/ui')
 const srcDir = join(appDir, 'src/ui')
+const appEntryPoint = join(appDir, 'src/features/control-center/infra/web/app.ts')
 const watch = process.argv.includes('--watch')
 
 async function buildCss() {
@@ -23,7 +24,7 @@ async function buildHtml() {
 }
 
 const esbuildOptions = {
-  entryPoints: [join(srcDir, 'scripts/app.ts')],
+  entryPoints: [appEntryPoint],
   bundle: true,
   outfile: join(outDir, 'app.js'),
   format: 'esm',
