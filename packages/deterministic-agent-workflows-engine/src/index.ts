@@ -57,3 +57,14 @@ export type {
 } from './platform/infra/external-clients/transcript/transcript-reader'
 export type { IdentityCheckResult } from './platform/domain/identity-verification'
 export { checkIdentity } from './platform/domain/identity-verification'
+export {
+  workflowSpec,
+  WorkflowSpecError,
+} from './platform/domain/testing/workflow-spec'
+export type {
+  GivenPhase,
+  OperationResult,
+  SpecConfig,
+  ThrowResult,
+  WorkflowSpecification,
+} from './platform/domain/testing/workflow-spec'
