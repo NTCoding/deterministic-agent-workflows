@@ -15,8 +15,8 @@
     "verify": "pnpm build && pnpm lint && pnpm dep-check && pnpm typecheck && pnpm test && pnpm role-check",
     "prepare": "husky",
     "version-packages": "changeset version && pnpm install --no-frozen-lockfile",
-    "release": "pnpm build && pnpm publish -r --filter ./packages/* --access public --no-git-checks",
-    "publish:dry-run": "pnpm publish -r --filter ./packages/* --dry-run --access public --no-git-checks"
+    "release": "pnpm build && pnpm -r publish --access public --no-git-checks",
+    "publish:dry-run": "pnpm -r publish --dry-run --access public --no-git-checks"
   },
   "devDependencies": {
     "@changesets/cli": "^2.29.5",
