@@ -77,6 +77,86 @@ export default createOpenCodeWorkflowPlugin<
 
 ## Workflow definition + policy example
 
+`workflow-types.ts`
+
+```ts
+import { z } from 'zod'
+
+export const STATE_NAME_SCHEMA = z.enum(['PLANNING', 'DEVELOPING', 'REVIEWING'])
+
+export type StateName = z.infer<typeof STATE_NAME_SCHEMA>
+export type WorkflowOperation =
+  | 'record-plan'
+  | 'record-branch'
+  | 'record-implementation-progress'
+  | 'record-review-passed'
+  | 'record-review-failed'
+  | 'record-pr'
+
+export type WorkflowState = { currentStateMachineState: StateName }
+```
+
+`workflow.ts`
+
+```ts
+import {
+  pass,
+  type BaseEvent,
+  type PreconditionResult,
+  type RehydratableWorkflow,
+} from '@nt-ai-lab/deterministic-agent-workflow-engine'
+import { STATE_NAME_SCHEMA, type WorkflowState } from './workflow-types'
+
+export type WorkflowDeps = { now: () => string }
+
+export class Workflow implements RehydratableWorkflow<WorkflowState> {
+  private readonly pendingEvents: BaseEvent[] = []
+  private transcriptPath = ''
+
+  constructor(
+    private state: WorkflowState,
+    private readonly _deps: WorkflowDeps,
+  ) {}
+
+  getState(): WorkflowState {
+    return this.state
+  }
+
+  appendEvent(event: BaseEvent): void {
+    this.pendingEvents.push(event)
+    if (event.type === 'transitioned' && typeof event.to === 'string') {
+      this.state = { currentStateMachineState: STATE_NAME_SCHEMA.parse(event.to) }
+    }
+  }
+
+  getPendingEvents(): readonly BaseEvent[] {
+    return this.pendingEvents
+  }
+
+  startSession(transcriptPath: string): void {
+    this.transcriptPath = transcriptPath
+  }
+
+  getTranscriptPath(): string {
+    return this.transcriptPath
+  }
+
+  registerAgent(): PreconditionResult {
+    return pass()
+  }
+
+  handleTeammateIdle(): PreconditionResult {
+    return pass()
+  }
+}
+
+export function createWorkflow(state: WorkflowState, deps: WorkflowDeps): Workflow {
+  return new Workflow(state, deps)
+}
+```
+
+`workflow-definition.ts`
+
 ```ts
 import { z } from 'zod'
 import {
@@ -97,8 +177,6 @@ import type {
 export const STATE_NAME_SCHEMA = z.enum(['PLANNING', 'DEVELOPING', 'REVIEWING'])
 
 export type StateName = z.infer<typeof STATE_NAME_SCHEMA>
-export type WorkflowState = { currentStateMachineState: StateName }
-export type WorkflowDeps = { now: () => string }
 export type WorkflowOperation =
   | 'record-plan'
   | 'record-branch'
