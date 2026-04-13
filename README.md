@@ -77,6 +77,128 @@ export default createOpenCodeWorkflowPlugin<
 
 ## Workflow definition + policy example
 
+```ts
+export type WorkflowOperation =
+  | 'record-plan'
+  | 'record-branch'
+  | 'record-implementation-progress'
+  | 'record-review-passed'
+  | 'record-review-failed'
+  | 'record-pr'
+
+export const WORKFLOW_REGISTRY = {
+  PLANNING: {
+    canTransitionTo: ['DEVELOPING'],
+    allowedWorkflowOperations: ['record-plan'],
+    forbidden: { write: true },
+  },
+  DEVELOPING: {
+    canTransitionTo: ['REVIEWING'],
+    allowedWorkflowOperations: ['record-branch', 'record-implementation-progress'],
+  },
+  REVIEWING: {
+    canTransitionTo: ['DEVELOPING'],
+    allowedWorkflowOperations: ['record-review-passed', 'record-review-failed', 'record-pr'],
+    forbidden: { write: true },
+  },
+} as const
+
+export const PRE_TOOL_USE_POLICY = {
+  bashForbidden: {
+    commands: ['gh pr create'],
+  },
+  isWriteAllowed: (_filePath: string, state: WorkflowState) => {
+    return state.currentStateMachineState === 'DEVELOPING'
+  },
+} as const
+```
+
+That policy means a write is denied outside `DEVELOPING`.
+
+Full multi-file example is at the end of this README.
+
+## Claude Code example
+
+```ts
+import { createClaudeCodeWorkflowCli } from '@nt-ai-lab/deterministic-agent-workflow-claude-code'
+import { createDefaultProcessDeps } from '@nt-ai-lab/deterministic-agent-workflow-cli'
+
+createClaudeCodeWorkflowCli({
+  workflowDefinition: WORKFLOW_DEFINITION,
+  routes: ROUTES,
+  bashForbidden: PRE_TOOL_USE_POLICY.bashForbidden,
+  isWriteAllowed: PRE_TOOL_USE_POLICY.isWriteAllowed,
+  buildWorkflowDeps: (platform) => ({
+    now: platform.now,
+  }),
+  processDeps: createDefaultProcessDeps(),
+})
+```
+
+## Control Center
+
+The adapters write workflow events to `~/.workflow-events.db` by default.
+
+Start the UI:
+
+```bash
+pnpm --filter deterministic-agent-workflows-control-center build:ui
+pnpm --filter deterministic-agent-workflows-control-center start -- --db ~/.workflow-events.db --port 3120
+```
+
+Open `http://localhost:3120`
+
+![Control Center](docs/control-center.png)
+
+## Complete multi-file example
+
+Read these in order:
+
+1. define the plugin
+2. define the registry / workflow definition
+3. implement the workflow
+
+`opencode-plugin.ts`
+
+```ts
+import { createOpenCodeWorkflowPlugin } from '@nt-ai-lab/deterministic-agent-workflow-opencode'
+import { fileURLToPath } from 'node:url'
+import { dirname, join } from 'node:path'
+
+import type {
+  Workflow,
+  WorkflowDeps,
+} from './features/workflow/domain/workflow'
+import type {
+  WorkflowOperation,
+  WorkflowState,
+  StateName,
+} from './features/workflow/domain/workflow-types'
+import { WORKFLOW_DEFINITION } from './features/workflow/infra/persistence/workflow-definition'
+import { ROUTES, PRE_TOOL_USE_POLICY } from './features/workflow/entrypoint/workflow-cli'
+
+const pluginRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
+
+export default createOpenCodeWorkflowPlugin<
+  Workflow,
+  WorkflowState,
+  WorkflowDeps,
+  StateName,
+  WorkflowOperation
+>({
+  workflowDefinition: WORKFLOW_DEFINITION,
+  routes: ROUTES,
+  bashForbidden: PRE_TOOL_USE_POLICY.bashForbidden,
+  isWriteAllowed: PRE_TOOL_USE_POLICY.isWriteAllowed,
+  pluginRoot,
+  commandDirectories: [join(pluginRoot, 'commands')],
+  commandPrefix: 'dev-workflow:',
+  buildWorkflowDeps: (platform) => ({
+    now: platform.now,
+  }),
+})
+```
+
 `workflow-types.ts`
 
 ```ts
@@ -94,65 +216,6 @@ export type WorkflowOperation =
   | 'record-pr'
 
 export type WorkflowState = { currentStateMachineState: StateName }
-```
-
-`workflow.ts`
-
-```ts
-import {
-  pass,
-  type BaseEvent,
-  type PreconditionResult,
-  type RehydratableWorkflow,
-} from '@nt-ai-lab/deterministic-agent-workflow-engine'
-import { STATE_NAME_SCHEMA, type WorkflowState } from './workflow-types'
-
-export type WorkflowDeps = { now: () => string }
-
-export class Workflow implements RehydratableWorkflow<WorkflowState> {
-  private readonly pendingEvents: BaseEvent[] = []
-  private transcriptPath = ''
-
-  constructor(
-    private state: WorkflowState,
-    private readonly _deps: WorkflowDeps,
-  ) {}
-
-  getState(): WorkflowState {
-    return this.state
-  }
-
-  appendEvent(event: BaseEvent): void {
-    this.pendingEvents.push(event)
-    if (event.type === 'transitioned' && typeof event.to === 'string') {
-      this.state = { currentStateMachineState: STATE_NAME_SCHEMA.parse(event.to) }
-    }
-  }
-
-  getPendingEvents(): readonly BaseEvent[] {
-    return this.pendingEvents
-  }
-
-  startSession(transcriptPath: string): void {
-    this.transcriptPath = transcriptPath
-  }
-
-  getTranscriptPath(): string {
-    return this.transcriptPath
-  }
-
-  registerAgent(): PreconditionResult {
-    return pass()
-  }
-
-  handleTeammateIdle(): PreconditionResult {
-    return pass()
-  }
-}
-
-export function createWorkflow(state: WorkflowState, deps: WorkflowDeps): Workflow {
-  return new Workflow(state, deps)
-}
 ```
 
 `workflow-definition.ts`
@@ -242,51 +305,66 @@ export const WORKFLOW_DEFINITION: WorkflowDefinition<
     },
   }),
 }
-
-export const PRE_TOOL_USE_POLICY = {
-  bashForbidden: {
-    commands: ['gh pr create'],
-  },
-  isWriteAllowed: (filePath: string, state: WorkflowState) => {
-    return state.currentStateMachineState === 'DEVELOPING'
-  },
-} as const
 ```
 
-That policy means a write is denied outside `DEVELOPING`.
-
-## Claude Code example
+`workflow.ts`
 
 ```ts
-import { createClaudeCodeWorkflowCli } from '@nt-ai-lab/deterministic-agent-workflow-claude-code'
-import { createDefaultProcessDeps } from '@nt-ai-lab/deterministic-agent-workflow-cli'
+import {
+  pass,
+  type BaseEvent,
+  type PreconditionResult,
+  type RehydratableWorkflow,
+} from '@nt-ai-lab/deterministic-agent-workflow-engine'
+import { STATE_NAME_SCHEMA, type WorkflowState } from './workflow-types'
 
-createClaudeCodeWorkflowCli({
-  workflowDefinition: WORKFLOW_DEFINITION,
-  routes: ROUTES,
-  bashForbidden: PRE_TOOL_USE_POLICY.bashForbidden,
-  isWriteAllowed: PRE_TOOL_USE_POLICY.isWriteAllowed,
-  buildWorkflowDeps: (platform) => ({
-    now: platform.now,
-  }),
-  processDeps: createDefaultProcessDeps(),
-})
+export type WorkflowDeps = { now: () => string }
+
+export class Workflow implements RehydratableWorkflow<WorkflowState> {
+  private readonly pendingEvents: BaseEvent[] = []
+  private transcriptPath = ''
+
+  constructor(
+    private state: WorkflowState,
+    private readonly _deps: WorkflowDeps,
+  ) {}
+
+  getState(): WorkflowState {
+    return this.state
+  }
+
+  appendEvent(event: BaseEvent): void {
+    this.pendingEvents.push(event)
+    if (event.type === 'transitioned' && typeof event.to === 'string') {
+      this.state = { currentStateMachineState: STATE_NAME_SCHEMA.parse(event.to) }
+    }
+  }
+
+  getPendingEvents(): readonly BaseEvent[] {
+    return this.pendingEvents
+  }
+
+  startSession(transcriptPath: string): void {
+    this.transcriptPath = transcriptPath
+  }
+
+  getTranscriptPath(): string {
+    return this.transcriptPath
+  }
+
+  registerAgent(): PreconditionResult {
+    return pass()
+  }
+
+  handleTeammateIdle(): PreconditionResult {
+    return pass()
+  }
+}
+
+export function createWorkflow(state: WorkflowState, deps: WorkflowDeps): Workflow {
+  return new Workflow(state, deps)
+}
 ```
-
-## Control Center
-
-The adapters write workflow events to `~/.workflow-events.db` by default.
-
-Start the UI:
-
-```bash
-pnpm --filter deterministic-agent-workflows-control-center build:ui
-pnpm --filter deterministic-agent-workflows-control-center start -- --db ~/.workflow-events.db --port 3120
-```
-
-Open `http://localhost:3120`
-
-![Control Center](docs/control-center.png)
 
 ## References
 
