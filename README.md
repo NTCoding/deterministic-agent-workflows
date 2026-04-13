@@ -115,7 +115,54 @@ export const PRE_TOOL_USE_POLICY = {
 
 That policy means a write is denied outside `DEVELOPING`.
 
-Full multi-file example is at the end of this README.
+`workflow.ts`
+
+```ts
+import {
+  type BaseEvent,
+  type PreconditionResult,
+  type RehydratableWorkflow,
+} from '@nt-ai-lab/deterministic-agent-workflow-engine'
+import type { WorkflowState } from './workflow-types'
+
+export type WorkflowDeps = { now: () => string }
+
+export class Workflow implements RehydratableWorkflow<WorkflowState> {
+  constructor(state: WorkflowState, deps: WorkflowDeps) {}
+
+  getState(): WorkflowState {
+    // TODO
+  }
+
+  appendEvent(event: BaseEvent): void {
+    // TODO
+  }
+
+  getPendingEvents(): readonly BaseEvent[] {
+    // TODO
+  }
+
+  startSession(transcriptPath: string): void {
+    // TODO
+  }
+
+  getTranscriptPath(): string {
+    // TODO
+  }
+
+  registerAgent(): PreconditionResult {
+    // TODO
+  }
+
+  handleTeammateIdle(): PreconditionResult {
+    // TODO
+  }
+}
+
+export function createWorkflow(state: WorkflowState, deps: WorkflowDeps): Workflow {
+  // TODO
+}
+```
 
 ## Claude Code example
 
@@ -149,222 +196,6 @@ pnpm --filter deterministic-agent-workflows-control-center start -- --db ~/.work
 Open `http://localhost:3120`
 
 ![Control Center](docs/control-center.png)
-
-## Complete multi-file example
-
-Read these in order:
-
-1. define the plugin
-2. define the registry / workflow definition
-3. implement the workflow
-
-`opencode-plugin.ts`
-
-```ts
-import { createOpenCodeWorkflowPlugin } from '@nt-ai-lab/deterministic-agent-workflow-opencode'
-import { fileURLToPath } from 'node:url'
-import { dirname, join } from 'node:path'
-
-import type {
-  Workflow,
-  WorkflowDeps,
-} from './features/workflow/domain/workflow'
-import type {
-  WorkflowOperation,
-  WorkflowState,
-  StateName,
-} from './features/workflow/domain/workflow-types'
-import { WORKFLOW_DEFINITION } from './features/workflow/infra/persistence/workflow-definition'
-import { ROUTES, PRE_TOOL_USE_POLICY } from './features/workflow/entrypoint/workflow-cli'
-
-const pluginRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
-
-export default createOpenCodeWorkflowPlugin<
-  Workflow,
-  WorkflowState,
-  WorkflowDeps,
-  StateName,
-  WorkflowOperation
->({
-  workflowDefinition: WORKFLOW_DEFINITION,
-  routes: ROUTES,
-  bashForbidden: PRE_TOOL_USE_POLICY.bashForbidden,
-  isWriteAllowed: PRE_TOOL_USE_POLICY.isWriteAllowed,
-  pluginRoot,
-  commandDirectories: [join(pluginRoot, 'commands')],
-  commandPrefix: 'dev-workflow:',
-  buildWorkflowDeps: (platform) => ({
-    now: platform.now,
-  }),
-})
-```
-
-`workflow-types.ts`
-
-```ts
-import { z } from 'zod'
-
-export const STATE_NAME_SCHEMA = z.enum(['PLANNING', 'DEVELOPING', 'REVIEWING'])
-
-export type StateName = z.infer<typeof STATE_NAME_SCHEMA>
-export type WorkflowOperation =
-  | 'record-plan'
-  | 'record-branch'
-  | 'record-implementation-progress'
-  | 'record-review-passed'
-  | 'record-review-failed'
-  | 'record-pr'
-
-export type WorkflowState = { currentStateMachineState: StateName }
-```
-
-`workflow-definition.ts`
-
-```ts
-import { z } from 'zod'
-import {
-  createWorkflow,
-  type Workflow,
-  type WorkflowDeps,
-} from './features/workflow/domain/workflow'
-import type { WorkflowState } from './features/workflow/domain/workflow-types'
-import type {
-  WorkflowDefinition,
-  BaseEvent,
-} from '@nt-ai-lab/deterministic-agent-workflow-engine'
-import type {
-  WorkflowRegistry,
-  TransitionContext,
-} from '@nt-ai-lab/deterministic-agent-workflow-dsl'
-
-export const STATE_NAME_SCHEMA = z.enum(['PLANNING', 'DEVELOPING', 'REVIEWING'])
-
-export type StateName = z.infer<typeof STATE_NAME_SCHEMA>
-export type WorkflowOperation =
-  | 'record-plan'
-  | 'record-branch'
-  | 'record-implementation-progress'
-  | 'record-review-passed'
-  | 'record-review-failed'
-  | 'record-pr'
-
-export const WORKFLOW_REGISTRY: WorkflowRegistry<WorkflowState, StateName, WorkflowOperation> = {
-  PLANNING: {
-    emoji: '🧠',
-    agentInstructions: 'Plan only',
-    canTransitionTo: ['DEVELOPING'],
-    allowedWorkflowOperations: ['record-plan'],
-    forbidden: { write: true },
-  },
-  DEVELOPING: {
-    emoji: '🛠️',
-    agentInstructions: 'Implement changes',
-    canTransitionTo: ['REVIEWING'],
-    allowedWorkflowOperations: ['record-branch', 'record-implementation-progress'],
-  },
-  REVIEWING: {
-    emoji: '🔍',
-    agentInstructions: 'Review before merge',
-    canTransitionTo: ['DEVELOPING'],
-    allowedWorkflowOperations: ['record-review-passed', 'record-review-failed', 'record-pr'],
-    forbidden: { write: true },
-  },
-}
-
-export const WORKFLOW_DEFINITION: WorkflowDefinition<
-  Workflow,
-  WorkflowState,
-  WorkflowDeps,
-  StateName,
-  WorkflowOperation
-> = {
-  stateSchema: STATE_NAME_SCHEMA,
-  initialState: () => ({ currentStateMachineState: 'PLANNING' }),
-  buildWorkflow: createWorkflow,
-  fold: (state, event: BaseEvent) => {
-    if (event.type === 'transitioned' && typeof event.to === 'string') {
-      return { currentStateMachineState: STATE_NAME_SCHEMA.parse(event.to) }
-    }
-    return state
-  },
-  getRegistry: () => WORKFLOW_REGISTRY,
-  buildTransitionContext: (
-    state,
-    from,
-    to,
-  ): TransitionContext<WorkflowState, StateName> => ({
-    state,
-    from,
-    to,
-    gitInfo: {
-      currentBranch: 'main',
-      workingTreeClean: true,
-      headCommit: 'HEAD',
-      changedFilesVsDefault: [],
-      hasCommitsVsDefault: false,
-    },
-  }),
-}
-```
-
-`workflow.ts`
-
-```ts
-import {
-  pass,
-  type BaseEvent,
-  type PreconditionResult,
-  type RehydratableWorkflow,
-} from '@nt-ai-lab/deterministic-agent-workflow-engine'
-import { STATE_NAME_SCHEMA, type WorkflowState } from './workflow-types'
-
-export type WorkflowDeps = { now: () => string }
-
-export class Workflow implements RehydratableWorkflow<WorkflowState> {
-  private readonly pendingEvents: BaseEvent[] = []
-  private transcriptPath = ''
-
-  constructor(
-    private state: WorkflowState,
-    private readonly _deps: WorkflowDeps,
-  ) {}
-
-  getState(): WorkflowState {
-    return this.state
-  }
-
-  appendEvent(event: BaseEvent): void {
-    this.pendingEvents.push(event)
-    if (event.type === 'transitioned' && typeof event.to === 'string') {
-      this.state = { currentStateMachineState: STATE_NAME_SCHEMA.parse(event.to) }
-    }
-  }
-
-  getPendingEvents(): readonly BaseEvent[] {
-    return this.pendingEvents
-  }
-
-  startSession(transcriptPath: string): void {
-    this.transcriptPath = transcriptPath
-  }
-
-  getTranscriptPath(): string {
-    return this.transcriptPath
-  }
-
-  registerAgent(): PreconditionResult {
-    return pass()
-  }
-
-  handleTeammateIdle(): PreconditionResult {
-    return pass()
-  }
-}
-
-export function createWorkflow(state: WorkflowState, deps: WorkflowDeps): Workflow {
-  return new Workflow(state, deps)
-}
-```
 
 ## References
 
