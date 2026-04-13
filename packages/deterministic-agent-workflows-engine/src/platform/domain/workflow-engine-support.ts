@@ -40,7 +40,7 @@ export function enrichSessionStartedEvents<TStateName extends string>(
   engineDeps: WorkflowEngineDeps,
   events: readonly BaseEvent[],
   transcriptPath: string,
-  repository: string,
+  repository: string | undefined,
   currentState: TStateName,
   states: readonly string[],
 ): readonly BaseEvent[] {
@@ -52,7 +52,7 @@ export function enrichSessionStartedEvents<TStateName extends string>(
     return {
       ...event,
       transcriptPath,
-      repository,
+      ...(repository === undefined ? {} : { repository }),
       currentState,
       states: [...states],
     }
@@ -66,7 +66,7 @@ export function enrichSessionStartedEvents<TStateName extends string>(
     type: 'session-started',
     at: engineDeps.now(),
     transcriptPath,
-    repository,
+    ...(repository === undefined ? {} : { repository }),
     currentState,
     states: [...states],
   }, ...enriched]

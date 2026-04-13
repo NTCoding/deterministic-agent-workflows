@@ -51,12 +51,6 @@ export class WorkflowEngine<
     const initialState = this.factory.initialState()
     const workflow = this.factory.buildWorkflow(initialState, this.workflowDeps)
     const resolvedRepository = repository ?? this.engineDeps.getRepositoryName?.()
-    if (resolvedRepository === undefined || resolvedRepository === '') {
-      return {
-        type: 'error',
-        output: 'Could not determine repository name for session-started event.' 
-      }
-    }
 
     workflow.startSession(transcriptPath, resolvedRepository)
     const registry = this.factory.getRegistry()

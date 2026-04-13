@@ -28,7 +28,7 @@ export function checkOperationGate<
 /** @riviere-role value-object */
 export type RecordingOpDefinition<TArgs extends readonly unknown[]> = {
   readonly event: string
-  readonly payload: (...args: TArgs) => Record<string, unknown>
+  readonly payload: { bivarianceHack: (...args: TArgs) => Record<string, unknown> }['bivarianceHack']
 }
 
 /** @riviere-role value-object */
