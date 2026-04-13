@@ -4,7 +4,6 @@
   "private": true,
   "packageManager": "pnpm@10.0.0",
   "scripts": {
-    "changeset": "changeset",
     "lint": "nx run-many -t lint --all",
     "typecheck": "nx run-many -t typecheck --all",
     "test": "nx run-many -t test --all",
@@ -14,12 +13,9 @@
     "quality": "pnpm dep-check && pnpm typecheck && pnpm test && pnpm build",
     "verify": "pnpm build && pnpm lint && pnpm dep-check && pnpm typecheck && pnpm test && pnpm role-check",
     "prepare": "husky",
-    "version-packages": "changeset version && pnpm install --no-frozen-lockfile",
-    "release": "pnpm build && pnpm -r publish --access public --no-git-checks",
     "publish:dry-run": "pnpm -r publish --dry-run --access public --no-git-checks"
   },
   "devDependencies": {
-    "@changesets/cli": "^2.29.5",
     "@eslint-community/eslint-plugin-eslint-comments": "^4.5.0",
     "@living-architecture/riviere-role-enforcement": "^0.2.0",
     "@nx/eslint-plugin": "^20.3.1",

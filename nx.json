@@ -33,5 +33,30 @@
       "dependsOn": ["^build"],
       "inputs": ["default", "^production"]
     }
+  },
+  "release": {
+    "projectsRelationship": "independent",
+    "projects": [
+      "packages/*"
+    ],
+    "version": {
+      "preVersionCommand": "pnpm exec nx run-many -t build --projects=packages/*",
+      "conventionalCommits": true,
+      "fallbackCurrentVersionResolver": "disk",
+      "updateDependents": "auto"
+    },
+    "changelog": {
+      "projectChangelogs": false,
+      "workspaceChangelog": {
+        "file": "CHANGELOG.md",
+        "createRelease": "github"
+      }
+    },
+    "git": {
+      "commit": true,
+      "commitMessage": "chore(release): {version} [skip ci]",
+      "tag": true,
+      "push": true
+    }
   }
 }
