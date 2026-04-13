@@ -94,10 +94,16 @@ export type WorkflowOperation =
 export type WorkflowState = {
   currentStateMachineState: StateName
   transcriptPath?: string
+  planRecorded: boolean
+  branch?: string
+  implementationProgress?: string
+  reviewPassed?: boolean
+  prNumber?: number
 }
 
 export const INITIAL_STATE: WorkflowState = {
   currentStateMachineState: 'PLANNING',
+  planRecorded: false,
 }
 
 export const WORKFLOW_REGISTRY = {
@@ -133,24 +139,42 @@ That policy means a write is denied outside `DEVELOPING`.
 
 ```ts
 import { z } from 'zod'
-import { STATE_NAME_SCHEMA } from './workflow-types'
-
-const SESSION_STARTED_SCHEMA = z.object({
-  type: z.literal('session-started'),
+ 
+const PLAN_RECORDED_SCHEMA = z.object({
+  type: z.literal('plan-recorded'),
   at: z.string(),
-  transcriptPath: z.string().optional(),
 })
 
-const TRANSITIONED_SCHEMA = z.object({
-  type: z.literal('transitioned'),
+const BRANCH_RECORDED_SCHEMA = z.object({
+  type: z.literal('branch-recorded'),
   at: z.string(),
-  from: STATE_NAME_SCHEMA,
-  to: STATE_NAME_SCHEMA,
+  branch: z.string(),
+})
+
+const IMPLEMENTATION_PROGRESS_RECORDED_SCHEMA = z.object({
+  type: z.literal('implementation-progress-recorded'),
+  at: z.string(),
+  note: z.string(),
+})
+
+const REVIEW_RECORDED_SCHEMA = z.object({
+  type: z.literal('review-recorded'),
+  at: z.string(),
+  passed: z.boolean(),
+})
+
+const PR_RECORDED_SCHEMA = z.object({
+  type: z.literal('pr-recorded'),
+  at: z.string(),
+  prNumber: z.number(),
 })
 
 export const WORKFLOW_EVENT_SCHEMA = z.discriminatedUnion('type', [
-  SESSION_STARTED_SCHEMA,
-  TRANSITIONED_SCHEMA,
+  PLAN_RECORDED_SCHEMA,
+  BRANCH_RECORDED_SCHEMA,
+  IMPLEMENTATION_PROGRESS_RECORDED_SCHEMA,
+  REVIEW_RECORDED_SCHEMA,
+  PR_RECORDED_SCHEMA,
 ])
 
 export type WorkflowEvent = z.infer<typeof WORKFLOW_EVENT_SCHEMA>
@@ -159,25 +183,65 @@ export type WorkflowEvent = z.infer<typeof WORKFLOW_EVENT_SCHEMA>
 `fold.ts`
 
 ```ts
+import {
+  engineEventSchema,
+  type BaseEvent,
+} from '@nt-ai-lab/deterministic-agent-workflow-engine'
 import type { WorkflowEvent } from './workflow-events'
 import { INITIAL_STATE, type WorkflowState } from './workflow-types'
 
-export function applyEvent(state: WorkflowState, event: WorkflowEvent): WorkflowState {
-  switch (event.type) {
-    case 'session-started':
+export function applyEvent(state: WorkflowState, event: BaseEvent): WorkflowState {
+  const platformEvent = engineEventSchema.safeParse(event)
+  if (platformEvent.success) {
+    switch (platformEvent.data.type) {
+      case 'session-started':
+        return {
+          ...state,
+          ...(platformEvent.data.transcriptPath === undefined ? {} : { transcriptPath: platformEvent.data.transcriptPath }),
+        }
+      case 'transitioned':
+        return {
+          ...state,
+          currentStateMachineState: platformEvent.data.to,
+        }
+    }
+  }
+
+  const workflowEvent = WORKFLOW_EVENT_SCHEMA.safeParse(event)
+  if (!workflowEvent.success) {
+    return state
+  }
+
+  switch (workflowEvent.data.type) {
+    case 'plan-recorded':
       return {
         ...state,
-        ...(event.transcriptPath === undefined ? {} : { transcriptPath: event.transcriptPath }),
+        planRecorded: true,
       }
-    case 'transitioned':
+    case 'branch-recorded':
       return {
         ...state,
-        currentStateMachineState: event.to,
+        branch: workflowEvent.data.branch,
+      }
+    case 'implementation-progress-recorded':
+      return {
+        ...state,
+        implementationProgress: workflowEvent.data.note,
+      }
+    case 'review-recorded':
+      return {
+        ...state,
+        reviewPassed: workflowEvent.data.passed,
+      }
+    case 'pr-recorded':
+      return {
+        ...state,
+        prNumber: workflowEvent.data.prNumber,
       }
   }
 }
 
-export function applyEvents(events: readonly WorkflowEvent[]): WorkflowState {
+export function applyEvents(events: readonly BaseEvent[]): WorkflowState {
   return events.reduce(applyEvent, INITIAL_STATE)
 }
 ```
@@ -198,7 +262,7 @@ import type { WorkflowState } from './workflow-types'
 export type WorkflowDeps = { now: () => string }
 
 export class Workflow implements RehydratableWorkflow<WorkflowState> {
-  private pendingEvents: WorkflowEvent[] = []
+  private pendingEvents: BaseEvent[] = []
 
   constructor(
     private state: WorkflowState,
@@ -210,9 +274,8 @@ export class Workflow implements RehydratableWorkflow<WorkflowState> {
   }
 
   appendEvent(event: BaseEvent): void {
-    const workflowEvent = WORKFLOW_EVENT_SCHEMA.parse(event)
-    this.pendingEvents = [...this.pendingEvents, workflowEvent]
-    this.state = applyEvent(this.state, workflowEvent)
+    this.pendingEvents = [...this.pendingEvents, event]
+    this.state = applyEvent(this.state, event)
   }
 
   getPendingEvents(): readonly BaseEvent[] {
@@ -220,11 +283,10 @@ export class Workflow implements RehydratableWorkflow<WorkflowState> {
   }
 
   startSession(transcriptPath: string): void {
-    this.appendEvent({
-      type: 'session-started',
-      at: this._deps.now(),
+    this.state = {
+      ...this.state,
       transcriptPath,
-    })
+    }
   }
 
   getTranscriptPath(): string {
@@ -239,6 +301,40 @@ export class Workflow implements RehydratableWorkflow<WorkflowState> {
   }
 
   handleTeammateIdle(): PreconditionResult {
+    return pass()
+  }
+
+  recordPlan(): PreconditionResult {
+    this.appendEvent({ type: 'plan-recorded', at: this._deps.now() })
+    return pass()
+  }
+
+  recordBranch(branch: string): PreconditionResult {
+    this.appendEvent({ type: 'branch-recorded', at: this._deps.now(), branch })
+    return pass()
+  }
+
+  recordImplementationProgress(note: string): PreconditionResult {
+    this.appendEvent({
+      type: 'implementation-progress-recorded',
+      at: this._deps.now(),
+      note,
+    })
+    return pass()
+  }
+
+  recordReviewPassed(): PreconditionResult {
+    this.appendEvent({ type: 'review-recorded', at: this._deps.now(), passed: true })
+    return pass()
+  }
+
+  recordReviewFailed(): PreconditionResult {
+    this.appendEvent({ type: 'review-recorded', at: this._deps.now(), passed: false })
+    return pass()
+  }
+
+  recordPr(prNumber: number): PreconditionResult {
+    this.appendEvent({ type: 'pr-recorded', at: this._deps.now(), prNumber })
     return pass()
   }
 }
@@ -278,9 +374,11 @@ export const WORKFLOW_DEFINITION: WorkflowDefinition<
   WorkflowOperation
 > = {
   fold: (state: WorkflowState, event: BaseEvent): WorkflowState => {
-    const result = WORKFLOW_EVENT_SCHEMA.safeParse(event)
-    if (!result.success) return state
-    return applyEvent(state, result.data)
+    const customEvent = WORKFLOW_EVENT_SCHEMA.safeParse(event)
+    if (customEvent.success) {
+      return applyEvent(state, customEvent.data)
+    }
+    return applyEvent(state, event)
   },
   buildWorkflow: createWorkflow,
   stateSchema: STATE_NAME_SCHEMA,
