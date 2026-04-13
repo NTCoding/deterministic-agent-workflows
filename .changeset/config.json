@@ -16,5 +16,7 @@
   "access": "public",
   "baseBranch": "main",
   "updateInternalDependencies": "patch",
-  "ignore": []
+  "ignore": [
+    "deterministic-agent-workflows-control-center"
+  ]
 }

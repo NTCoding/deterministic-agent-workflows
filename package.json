@@ -14,8 +14,9 @@
     "quality": "pnpm dep-check && pnpm typecheck && pnpm test && pnpm build",
     "verify": "pnpm lint && pnpm quality && pnpm role-check",
     "prepare": "husky",
-    "version-packages": "changeset version",
-    "publish:dry-run": "pnpm -r --filter ./packages/* publish --dry-run --access public --no-git-checks"
+    "version-packages": "changeset version && pnpm install --no-frozen-lockfile",
+    "release": "pnpm build && changeset publish",
+    "publish:dry-run": "pnpm publish -r --filter ./packages/* --dry-run --access public --no-git-checks"
   },
   "devDependencies": {
     "@changesets/cli": "^2.29.5",
