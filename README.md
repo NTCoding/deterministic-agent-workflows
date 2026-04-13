@@ -125,7 +125,7 @@ export const WORKFLOW_DEFINITION: WorkflowDefinition<
   buildWorkflow: (state, deps) => new Workflow(state, deps),
   fold: (state, event: BaseEvent) => {
     if (event.type === 'transitioned' && typeof event.to === 'string') {
-      return { currentStateMachineState: event.to as StateName }
+      return { currentStateMachineState: STATE_NAME_SCHEMA.parse(event.to) }
     }
     return state
   },
