@@ -195,9 +195,14 @@ function handleHook<
 
   const common = commonParse.data
   if (common.hook_event_name === 'SessionStart') {
-    const result = engine.startSession(common.session_id, common.transcript_path, getRepositoryName(common.cwd))
     engine.persistSessionId(common.session_id)
-    return engineResultToRunnerResult(result)
+    if (!engine.hasSessionStarted(common.session_id)) {
+      return {
+        output: '',
+        exitCode: EXIT_ALLOW
+      }
+    }
+    return engineResultToRunnerResult(engine.startSession(common.session_id, common.transcript_path, getRepositoryName(common.cwd)))
   }
   if (!engine.hasSession(common.session_id)) return {
     output: '',
