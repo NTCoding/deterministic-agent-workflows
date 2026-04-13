@@ -79,10 +79,15 @@ export default createOpenCodeWorkflowPlugin<
 
 ```ts
 import { z } from 'zod'
+import {
+  createWorkflow,
+  type Workflow,
+  type WorkflowDeps,
+} from './features/workflow/domain/workflow'
+import type { WorkflowState } from './features/workflow/domain/workflow-types'
 import type {
   WorkflowDefinition,
   BaseEvent,
-  RehydratableWorkflow,
 } from '@nt-ai-lab/deterministic-agent-workflow-engine'
 import type {
   WorkflowRegistry,
@@ -101,10 +106,6 @@ export type WorkflowOperation =
   | 'record-review-passed'
   | 'record-review-failed'
   | 'record-pr'
-
-export interface Workflow extends RehydratableWorkflow<WorkflowState> {}
-
-declare function createWorkflow(state: WorkflowState, deps: WorkflowDeps): Workflow
 
 export const WORKFLOW_REGISTRY: WorkflowRegistry<WorkflowState, StateName, WorkflowOperation> = {
   PLANNING: {
