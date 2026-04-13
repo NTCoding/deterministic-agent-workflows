@@ -152,9 +152,7 @@ Add your normal `init` and `transition` routes alongside custom operations like 
 
 ```ts
 import {
-  pass,
   type BaseEvent,
-  type PreconditionResult,
   type RehydratableWorkflow,
 } from '@nt-ai-lab/deterministic-agent-workflow-engine'
 import { applyEvent } from './fold'
@@ -179,36 +177,12 @@ export class Workflow implements RehydratableWorkflow<WorkflowState> {
     this.state = applyEvent(this.state, event)
   }
 
-  getPendingEvents(): readonly BaseEvent[] {
-    return this.pendingEvents
-  }
-
-  startSession(transcriptPath: string): void {
-    this.state = { ...this.state, transcriptPath }
-  }
-
-  getTranscriptPath(): string {
-    if (this.state.transcriptPath === undefined) {
-      throw new Error('Transcript path not set')
-    }
-    return this.state.transcriptPath
-  }
-
-  registerAgent(): PreconditionResult {
-    return pass()
-  }
-
-  handleTeammateIdle(): PreconditionResult {
-    return pass()
-  }
-
-  recordPr(prNumber: number): PreconditionResult {
+  recordPr(prNumber: number) {
     this.appendEvent({
       type: 'pr-recorded',
       at: this.deps.now(),
       prNumber,
     })
-    return pass()
   }
 }
 ```
@@ -221,11 +195,8 @@ Use one function to update state from events, and use it in both places:
 - `WORKFLOW_DEFINITION.fold(...)` for rebuilding state from the event store
 
 ```ts
-import {
-  engineEventSchema,
-  type BaseEvent,
-} from '@nt-ai-lab/deterministic-agent-workflow-engine'
-import { WORKFLOW_EVENT_SCHEMA, type WorkflowEvent } from './workflow-events'
+import { parseEvent, type WorkflowEvent } from './workflow-events'
+import type { BaseEvent } from '@nt-ai-lab/deterministic-agent-workflow-engine'
 
 function applyWorkflowEvent(state: WorkflowState, event: WorkflowEvent): WorkflowState {
   switch (event.type) {
@@ -238,20 +209,18 @@ function applyWorkflowEvent(state: WorkflowState, event: WorkflowEvent): Workflo
 }
 
 export function applyEvent(state: WorkflowState, event: BaseEvent): WorkflowState {
-  const platformEvent = engineEventSchema.safeParse(event)
-  if (platformEvent.success && platformEvent.data.type === 'transitioned') {
-    return {
-      ...state,
-      currentStateMachineState: platformEvent.data.to,
-    }
+  const parsedEvent = parseEvent(event)
+  switch (parsedEvent.type) {
+    case 'transitioned':
+      return {
+        ...state,
+        currentStateMachineState: parsedEvent.to,
+      }
+    case 'pr-recorded':
+      return applyWorkflowEvent(state, parsedEvent)
+    default:
+      return state
   }
-
-  const workflowEvent = WORKFLOW_EVENT_SCHEMA.safeParse(event)
-  if (workflowEvent.success) {
-    return applyWorkflowEvent(state, workflowEvent.data)
-  }
-
-  return state
 }
 
 export const WORKFLOW_DEFINITION = {
