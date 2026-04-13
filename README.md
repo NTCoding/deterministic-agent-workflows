@@ -228,7 +228,10 @@ export class Workflow implements RehydratableWorkflow<WorkflowState> {
   }
 
   getTranscriptPath(): string {
-    return this.state.transcriptPath ?? ''
+    if (this.state.transcriptPath === undefined) {
+      throw new Error('Transcript path not set')
+    }
+    return this.state.transcriptPath
   }
 
   registerAgent(): PreconditionResult {
