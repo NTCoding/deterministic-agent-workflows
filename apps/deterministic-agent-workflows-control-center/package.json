@@ -1,6 +1,6 @@
 {
   "name": "deterministic-agent-workflows-control-center",
-  "version": "0.0.0",
+  "version": "0.0.2",
   "private": true,
   "type": "module",
   "description": "Real-time web-based analytics dashboard for deterministic workflow event stores",
@@ -17,8 +17,8 @@
     "dev:ui": "node build-ui.mjs --watch"
   },
   "dependencies": {
-    "@nt-ai-lab/deterministic-agent-workflow-engine": "workspace:*",
-    "@nt-ai-lab/deterministic-agent-workflow-event-store": "workspace:*",
+    "@nt-ai-lab/deterministic-agent-workflow-engine": "0.2.0",
+    "@nt-ai-lab/deterministic-agent-workflow-event-store": "0.2.0",
     "zod": "^3.25.76"
   },
   "devDependencies": {

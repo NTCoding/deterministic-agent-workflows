@@ -1,6 +1,6 @@
 {
   "name": "@nt-ai-lab/deterministic-agent-workflow-cli",
-  "version": "0.1.5",
+  "version": "0.2.0",
   "private": false,
   "type": "module",
   "exports": {
@@ -11,9 +11,9 @@
     "dist"
   ],
   "dependencies": {
-    "@nt-ai-lab/deterministic-agent-workflow-engine": "workspace:*",
-    "@nt-ai-lab/deterministic-agent-workflow-dsl": "workspace:*",
-    "@nt-ai-lab/deterministic-agent-workflow-event-store": "workspace:*",
+    "@nt-ai-lab/deterministic-agent-workflow-engine": "0.2.0",
+    "@nt-ai-lab/deterministic-agent-workflow-dsl": "0.2.0",
+    "@nt-ai-lab/deterministic-agent-workflow-event-store": "0.2.0",
     "zod": "^3.25.76"
   },
   "publishConfig": {
