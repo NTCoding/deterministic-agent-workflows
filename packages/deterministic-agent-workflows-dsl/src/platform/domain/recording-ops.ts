@@ -66,7 +66,7 @@ export function defineRecordingOps<
   TOperation extends string,
 >(
   registry: WorkflowRegistry<TState, TStateName, TOperation>,
-  ops: { readonly [K in string]: RecordingOpDefinition<readonly unknown[]> },
+  ops: { readonly [K in string]: RecordingOpDefinition<readonly never[]> },
 ): RecordingOpsFactory<TStateName, TState, TOperation> {
   return {
     executeOp: (
@@ -91,6 +91,7 @@ export function defineRecordingOps<
           reason: `Unknown recording operation: ${opName}`,
         }
       }
+      // @ts-expect-error Runtime args are forwarded to the consumer-defined payload factory unchanged.
       const payload = opDef.payload(...args)
       return {
         pass: true,
