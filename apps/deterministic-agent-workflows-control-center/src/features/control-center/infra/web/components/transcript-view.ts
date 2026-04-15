@@ -1,7 +1,6 @@
 import type {
   TranscriptEntry,
   TranscriptContentBlock,
-  TranscriptUsage,
   TranscriptResponse,
   SessionDetailDto,
 } from '../api-client'
@@ -54,63 +53,6 @@ function stateCssClass(state: string): string {
   return STATE_PALETTE[idx] ?? 's-idle'
 }
 
-/* ─── Pricing (USD per 1M tokens) ────────────────────────────────
-   Keep this tiny table explicit; fall back to zero when unknown. */
-type PriceRow = {
-  readonly input: number;
-  readonly output: number;
-  readonly cacheRead: number;
-  readonly cacheWrite: number 
-}
-const MODEL_PRICES: Record<string, PriceRow> = {
-  'claude-opus-4-5': {
-    input: 15,
-    output: 75,
-    cacheRead: 1.5,
-    cacheWrite: 18.75 
-  },
-  'claude-sonnet-4-6': {
-    input: 3,
-    output: 15,
-    cacheRead: 0.3,
-    cacheWrite: 3.75 
-  },
-  'claude-sonnet-4-5': {
-    input: 3,
-    output: 15,
-    cacheRead: 0.3,
-    cacheWrite: 3.75 
-  },
-  'claude-haiku-4-5': {
-    input: 0.8,
-    output: 4,
-    cacheRead: 0.08,
-    cacheWrite: 1 
-  },
-}
-function priceFor(model: string | undefined): PriceRow {
-  if (!model) return {
-    input: 0,
-    output: 0,
-    cacheRead: 0,
-    cacheWrite: 0 
-  }
-  for (const [k, v] of Object.entries(MODEL_PRICES)) {
-    if (model.includes(k)) return v
-  }
-  return {
-    input: 0,
-    output: 0,
-    cacheRead: 0,
-    cacheWrite: 0 
-  }
-}
-function costForUsage(u: TranscriptUsage, model: string | undefined): number {
-  const p = priceFor(model)
-  return (u.inputTokens * p.input + u.outputTokens * p.output +
-    u.cacheReadInputTokens * p.cacheRead + u.cacheCreationInputTokens * p.cacheWrite) / 1_000_000
-}
-
 /* ─── Formatting helpers ───────────────────────────────────────── */
 function formatTime(iso: string): string {
   if (!iso) return ''
@@ -129,10 +71,6 @@ function formatTokens(n: number): string {
   if (n < 1000) return `${n}`
   if (n < 1_000_000) return `${(n / 1000).toFixed(1)}k`
   return `${(n / 1_000_000).toFixed(2)}M`
-}
-function formatCost(usd: number): string {
-  if (usd < 0.01) return `$${usd.toFixed(4)}`
-  return `$${usd.toFixed(2)}`
 }
 function shortModel(model: string | undefined): string {
   if (!model) return ''
@@ -271,8 +209,6 @@ function renderEntryHeader(entry: TranscriptEntry, idx: number, state: string | 
     const hitPct = totalIn > 0 ? Math.round((cached / totalIn) * 100) : 0
     chips.push(`<span class="tr-chip tr-chip-tokens" title="input ${u.inputTokens} / output ${u.outputTokens} / cache-read ${u.cacheReadInputTokens} / cache-write ${u.cacheCreationInputTokens}">↓${formatTokens(u.inputTokens)} ↑${formatTokens(u.outputTokens)}</span>`)
     if (cached > 0) chips.push(`<span class="tr-chip tr-chip-cache" title="cache read ${u.cacheReadInputTokens} tokens">⚡ ${hitPct}% cached</span>`)
-    const cost = costForUsage(u, entry.model)
-    if (cost > 0) chips.push(`<span class="tr-chip tr-chip-tokens" title="cost estimate">${formatCost(cost)}</span>`)
   }
 
   return `<div class="tr-entry-head">` +
@@ -401,7 +337,7 @@ function renderToolFilterChips(counts: Record<string, number>): string {
   return `<div class="tr-tool-filter"><span style="font-size:10px;color:#7f8c8d;text-transform:uppercase;letter-spacing:0.4px;font-weight:600;padding-top:4px">Tools:</span>${chips}</div>`
 }
 
-/* ─── Session Analysis summary (tokens/cost/cache/tools/models) ── */
+/* ─── Session Analysis summary (tokens/cache/tools/models) ─────── */
 function renderAnalysis(resp: TranscriptResponse): string {
   const path = resp.transcriptPath
   const fileName = path ? path.split('/').pop() ?? path : ''
@@ -412,17 +348,6 @@ function renderAnalysis(resp: TranscriptResponse): string {
   const totalIn = t.inputTokens + t.cacheReadInputTokens
   const hitPct = totalIn > 0 ? Math.round((t.cacheReadInputTokens / totalIn) * 100) : 0
   const models = resp.modelsUsed
-
-  // cost from totals (approximate — assumes dominant model pricing)
-  let cost = 0
-  if (models.length > 0) {
-    cost = costForUsage({
-      inputTokens: t.inputTokens,
-      outputTokens: t.outputTokens,
-      cacheReadInputTokens: t.cacheReadInputTokens,
-      cacheCreationInputTokens: t.cacheCreationInputTokens,
-    }, models[0])
-  }
 
   const aggrItems = Object.entries(resp.toolCounts)
     .sort((a, b) => b[1] - a[1])
@@ -446,7 +371,6 @@ function renderAnalysis(resp: TranscriptResponse): string {
         (modifiedStr ? `<span class="tr-a-item"><span class="tr-a-key">Modified</span><span class="tr-a-val">${esc(modifiedStr)}</span></span>` : '') +
         (totalTokens > 0 ? `<span class="tr-a-item"><span class="tr-a-key">Tokens</span><span class="tr-a-val">↓${formatTokens(t.inputTokens)} ↑${formatTokens(t.outputTokens)}</span></span>` : '') +
         (t.cacheReadInputTokens > 0 ? `<span class="tr-a-item"><span class="tr-a-key">Cache hit</span><span class="tr-a-val">${hitPct}% (${formatTokens(t.cacheReadInputTokens)})</span></span>` : '') +
-        (cost > 0 ? `<span class="tr-a-item"><span class="tr-a-key">Cost est.</span><span class="tr-a-val">${formatCost(cost)}</span></span>` : '') +
       `</div>` +
       (modelChips ? `<div style="margin-top:8px;display:flex;gap:4px;align-items:center"><span style="font-size:10px;color:#7f8c8d;text-transform:uppercase;letter-spacing:0.4px;font-weight:600">Models:</span> ${modelChips}</div>` : '') +
       (aggrItems ? `<div class="tr-tool-aggr">${aggrItems}</div>` : '') +
