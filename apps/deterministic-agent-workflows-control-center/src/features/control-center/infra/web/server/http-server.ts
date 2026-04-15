@@ -13,6 +13,8 @@ import {
 import type { SessionHandlerDeps } from './handlers/session-handlers'
 import { handleGetTranscript } from './handlers/transcript-handler'
 import type { TranscriptHandlerDeps } from './handlers/transcript-handler'
+import { handleGetSessionActivity } from './handlers/activity-handler'
+import type { ActivityHandlerDeps } from './handlers/activity-handler'
 import {
   handleAnalyticsOverview,
   handleAnalyticsTrends,
@@ -66,12 +68,17 @@ export function createHttpServer(deps: HttpServerDeps): HttpServerInstance {
     queryDeps: deps.queryDeps,
   }
 
+  const activityDeps: ActivityHandlerDeps = {
+    queryDeps: deps.queryDeps,
+  }
+
   router.get('/api/sessions', handleListSessions(sessionDeps))
   router.get('/api/sessions/:id', handleGetSession(sessionDeps))
   router.get('/api/sessions/:id/events', handleGetSessionEvents(sessionDeps))
   router.get('/api/sessions/:id/journal', handleGetSessionJournal(sessionDeps))
   router.get('/api/sessions/:id/insights', handleGetSessionInsights(sessionDeps))
   router.get('/api/sessions/:id/transcript', handleGetTranscript(transcriptDeps))
+  router.get('/api/sessions/:id/activity', handleGetSessionActivity(activityDeps))
   router.get('/api/analytics/overview', handleAnalyticsOverview(analyticsDeps))
   router.get('/api/analytics/trends', handleAnalyticsTrends(analyticsDeps))
   router.get('/api/analytics/patterns', handleAnalyticsPatterns(analyticsDeps))

@@ -345,6 +345,44 @@ const transcriptTotalsSchema = z.object({
   assistantMessages: z.number(),
 })
 
+const fileActivitySchema = z.object({ path: z.string(), count: z.number() })
+const bashCommandSchema = z.object({ command: z.string(), count: z.number() })
+const searchQuerySchema = z.object({ pattern: z.string(), count: z.number() })
+const taskDelegationSchema = z.object({ subagent: z.string(), description: z.string() })
+const webHitSchema = z.object({ url: z.string(), count: z.number() })
+
+const activityReportSchema = z.object({
+  totalToolCalls: z.number(),
+  toolCounts: z.record(z.number()),
+  bashCommands: z.array(bashCommandSchema),
+  bashTotal: z.number(),
+  filesRead: z.array(fileActivitySchema),
+  filesEdited: z.array(fileActivitySchema),
+  filesWritten: z.array(fileActivitySchema),
+  filesTouchedTotal: z.number(),
+  grepSearches: z.array(searchQuerySchema),
+  globSearches: z.array(searchQuerySchema),
+  tasksDelegated: z.array(taskDelegationSchema),
+  webFetches: z.array(webHitSchema),
+  webSearches: z.array(webHitSchema),
+})
+
+const perStateActivitySchema = z.object({
+  state: z.string(),
+  startedAt: z.string(),
+  endedAt: z.string().nullable(),
+  report: activityReportSchema,
+})
+
+const activityResponseSchema = z.object({
+  overall: activityReportSchema,
+  byState: z.array(perStateActivitySchema),
+})
+
+export type ActivityReport = z.infer<typeof activityReportSchema>
+export type PerStateActivity = z.infer<typeof perStateActivitySchema>
+export type ActivityResponse = z.infer<typeof activityResponseSchema>
+
 const transcriptResponseSchema = z.object({
   entries: z.array(transcriptEntrySchema),
   total: z.number(),
@@ -374,6 +412,10 @@ export const api = {
 
   getSession(id: string) {
     return fetchParsedJson(`/api/sessions/${id}`, sessionDetailSchema)
+  },
+
+  getSessionActivity(id: string) {
+    return fetchParsedJson(`/api/sessions/${id}/activity`, activityResponseSchema)
   },
 
   getSessionEvents(id: string, params?: {

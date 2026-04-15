@@ -395,3 +395,62 @@
   .tr-stream-layout { grid-template-columns: 1fr; }
   .tr-minimap { border-left: none; border-top: 1px solid #d0d0d0; max-height: 300px; }
 }
+
+/* ─────────────────────────────────────────────────────────────
+   Activity panel ("What happened")
+   ───────────────────────────────────────────────────────────── */
+.ac-host { margin-bottom: 20px; }
+.ac-loading { padding: 14px; color: #95a5a6; font-size: 12px; font-style: italic; background: white; border: 1px solid #ddd; border-radius: 2px; }
+.ac-wrap { display: flex; flex-direction: column; gap: 14px; }
+
+.ac-section { background: white; border: 1px solid #d0d0d0; border-radius: 3px; overflow: hidden; }
+.ac-section-head { padding: 8px 12px; background: #2c3e50; color: #ecf0f1; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; border-bottom: 2px solid #1a252f; }
+.ac-section-head .ac-section-sub { font-weight: 400; letter-spacing: 0; text-transform: none; color: #bdc3c7; margin-left: 6px; }
+
+.ac-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 12px; border-bottom: 1px solid #eee; }
+.ac-tool-chip { font-size: 11px; padding: 2px 8px; border-radius: 10px; background: #ecf3fa; color: #1f6aa5; font-family: monospace; border: 1px solid #c5dcef; }
+.ac-tool-chip .ac-tool-n { opacity: 0.7; margin-left: 3px; }
+
+.ac-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 0; }
+.ac-col { padding: 10px 12px; }
+.ac-col + .ac-col { border-left: 1px solid #eee; }
+
+.ac-sub { margin-bottom: 14px; }
+.ac-sub:last-child { margin-bottom: 0; }
+.ac-sub-head { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #7f8c8d; margin-bottom: 4px; display: flex; align-items: baseline; gap: 6px; }
+.ac-sub-head .ac-n { font-family: monospace; font-size: 10px; color: #bdc3c7; font-weight: 400; }
+
+.ac-row { display: flex; align-items: baseline; gap: 8px; padding: 2px 0; font-size: 12px; border-bottom: 1px solid #f5f5f5; line-height: 1.5; }
+.ac-row:last-child { border-bottom: none; }
+.ac-row-n { font-family: monospace; font-size: 11px; color: #95a5a6; min-width: 28px; text-align: right; flex-shrink: 0; }
+.ac-cmd { font-family: monospace; font-size: 12px; color: #2c3e50; background: #f7f9fb; padding: 1px 5px; border-radius: 2px; word-break: break-all; white-space: pre-wrap; display: inline-block; max-width: 100%; }
+
+.ac-file-base { font-family: monospace; font-size: 12px; font-weight: 600; color: #2c3e50; }
+.ac-file-dir { font-family: monospace; font-size: 10px; color: #95a5a6; opacity: 0.8; }
+.ac-row.ac-file-edited .ac-file-base { color: #a04a00; }
+.ac-row.ac-file-written .ac-file-base { color: #1e8449; }
+.ac-row.ac-file-read .ac-file-base { color: #1f6aa5; }
+
+.ac-task-agent { font-family: monospace; font-size: 11px; color: #6c3483; background: #f0eafb; padding: 1px 6px; border-radius: 10px; font-weight: 600; }
+.ac-task-desc { font-size: 12px; color: #2c3e50; flex: 1; }
+
+.ac-more { font-size: 11px; color: #95a5a6; font-style: italic; margin-top: 4px; padding-left: 36px; }
+.ac-empty { padding: 14px; color: #95a5a6; font-size: 12px; font-style: italic; text-align: center; }
+
+/* Per-state rows */
+.ac-state-row { border-top: 1px solid #eee; }
+.ac-state-row:first-of-type { border-top: none; }
+.ac-state-head { display: flex; align-items: center; gap: 10px; padding: 8px 12px; cursor: pointer; user-select: none; }
+.ac-state-head:hover { background: #fafbfc; }
+.ac-state-row.ac-state-empty .ac-state-head { cursor: default; opacity: 0.5; }
+.ac-state-row.ac-state-empty .ac-state-head:hover { background: transparent; }
+.ac-state-arrow { color: #95a5a6; font-size: 10px; width: 10px; flex-shrink: 0; }
+.ac-state-time { font-family: monospace; font-size: 11px; color: #7f8c8d; }
+.ac-state-summary { font-size: 12px; color: #555; margin-left: auto; font-family: monospace; }
+.ac-state-body { display: none; padding: 0 12px 12px; border-top: 1px solid #f0f0f0; background: #fafbfc; }
+.ac-state-body.open { display: block; }
+
+@media (max-width: 900px) {
+  .ac-cols { grid-template-columns: 1fr; }
+  .ac-col + .ac-col { border-left: none; border-top: 1px solid #eee; }
+}

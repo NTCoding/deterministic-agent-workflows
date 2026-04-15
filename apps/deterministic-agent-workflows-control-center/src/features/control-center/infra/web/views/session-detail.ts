@@ -23,6 +23,9 @@ import {
   renderTranscript, attachTranscriptListeners
 } from '../components/transcript-view'
 import {
+  renderActivityPanel, attachActivityListeners
+} from '../components/activity-panel'
+import {
   html, esc, formatDuration, formatTimestamp, formatTimeOnly, truncateId
 } from '../render'
 import {
@@ -140,6 +143,10 @@ export async function renderSessionDetail(container: HTMLElement, sessionId: str
         attachTranscriptListeners()
       }
 
+      if (state.activeTab === 'overview') {
+        void hydrateActivityPanel(sessionId, container)
+      }
+
       clearInterval(sessionTimer)
       ;(window as unknown as Record<string, unknown>)['__sessionTimer'] = undefined
       if (state.activeTab === 'overview') {
@@ -156,6 +163,7 @@ export async function renderSessionDetail(container: HTMLElement, sessionId: str
                 clearInterval(sessionTimer)
                 await renderContent()
               })
+              void hydrateActivityPanel(sessionId, container)
             }
           } catch {
             // silent
@@ -174,6 +182,19 @@ export async function renderSessionDetail(container: HTMLElement, sessionId: str
     await renderContent()
   } catch {
     container.innerHTML = html`<div class="loading">Session not found</div>`
+  }
+}
+
+async function hydrateActivityPanel(sessionId: string, container: HTMLElement): Promise<void> {
+  const host = container.querySelector('#activity-panel-host')
+  if (!(host instanceof HTMLElement)) return
+  try {
+    const data = await api.getSessionActivity(sessionId)
+    host.innerHTML = renderActivityPanel(data)
+    attachActivityListeners(host)
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Unknown error'
+    host.innerHTML = `<div class="ac-empty" style="color:#c0392b">Failed to load activity: ${esc(msg)}</div>`
   }
 }
 
@@ -306,7 +327,10 @@ function renderOverviewTab(session: SessionDetailDto): string {
 
   const segments = computeTimelineSegments(session.statePeriods)
 
+  const activityPlaceholder = `<div id="activity-panel-host" class="ac-host"><div class="ac-loading">Loading activity…</div></div>`
+
   return analysisHtml +
+    activityPlaceholder +
     renderMetricCards([
       {
         label: 'Duration',
