@@ -1,132 +1,148 @@
-import type { EventDto } from '../api-client'
-import { html, esc, formatTimeOnly } from '../render'
-import { storeWindowValue, readWindowValue } from '../dom'
+import type { TranscriptEntry, TranscriptContentBlock } from '../api-client'
+import { html, esc } from '../render'
 
-// Extracts a human-readable summary from an event
-export function formatEventSummary(event: EventDto): string {
-  const p = event.payload
-  switch (event.type) {
-    case 'transitioned':
-      return `→ ${String(p['to'] ?? '')}  (was ${String(p['from'] ?? '')})`
-    case 'journal-entry':
-      return String(p['content'] ?? '')
-    case 'bash-allowed':
-      return `$ ${String(p['command'] ?? p['cmd'] ?? '')}`
-    case 'bash-denied':
-      return `DENIED: $ ${String(p['command'] ?? p['cmd'] ?? '')}`
-    case 'write-allowed':
-      return `write ${String(p['path'] ?? p['file'] ?? '')}`
-    case 'write-denied':
-      return `DENIED: write ${String(p['path'] ?? p['file'] ?? '')}`
-    case 'agent-registered':
-      return `Agent registered: ${String(p['agentName'] ?? p['agent_type'] ?? '')}`
-    case 'session-started':
-      return `Session started in state ${String(p['currentState'] ?? '')}`
-    case 'identity-verified':
-      return `Identity verified (${String(p['status'] ?? '')})`
-    case 'context-requested':
-      return `Context requested`
-    default:
-      return event.type
+function formatTime(iso: string): string {
+  if (!iso) return ''
+  return iso.slice(11, 19)
+}
+
+function renderToolUseBlock(name: string, input: Record<string, unknown>): string {
+  const key = Object.keys(input)[0] ?? ''
+  const val = key ? String(Object.values(input)[0] ?? '').slice(0, 80) : ''
+  const preview = key ? `${key}: ${val}` : ''
+  const fullJson = esc(JSON.stringify(input, null, 2))
+  const id = `tool-${Math.random().toString(36).slice(2)}`
+  return `<div class="tr-tool" style="margin:4px 0">` +
+    `<div class="tr-tool-head" data-toggle="${id}" style="cursor:pointer;display:inline-flex;align-items:center;gap:6px;background:#f0f4f8;border:1px solid #dde3eb;border-radius:4px;padding:3px 8px;font-size:11px;font-family:monospace">` +
+    `<span style="color:#3498db">⚙ ${esc(name)}</span>` +
+    (preview ? `<span style="color:#888">${esc(preview)}</span>` : '') +
+    `<span style="color:#aaa;font-size:10px">▶</span>` +
+    `</div>` +
+    `<pre id="${id}" style="display:none;margin:4px 0 0 0;background:#f9f9f9;border:1px solid #eee;border-radius:4px;padding:8px;font-size:11px;overflow-x:auto;white-space:pre-wrap">${fullJson}</pre>` +
+    `</div>`
+}
+
+function renderToolResultBlock(toolName: string, text: string): string {
+  const preview = text.slice(0, 100).replace(/\n/g, ' ')
+  const id = `result-${Math.random().toString(36).slice(2)}`
+  const escaped = esc(text)
+  return `<div class="tr-result" style="margin:4px 0">` +
+    `<div class="tr-result-head" data-toggle="${id}" style="cursor:pointer;display:inline-flex;align-items:center;gap:6px;background:#f9f9f9;border:1px solid #eee;border-radius:4px;padding:3px 8px;font-size:11px;font-family:monospace">` +
+    `<span style="color:#27ae60">↩ ${esc(toolName)}</span>` +
+    `<span style="color:#aaa">${esc(preview)}${text.length > 100 ? '…' : ''}</span>` +
+    `<span style="color:#aaa;font-size:10px">▶</span>` +
+    `</div>` +
+    `<pre id="${id}" style="display:none;margin:4px 0 0 0;background:#f9f9f9;border:1px solid #eee;border-radius:4px;padding:8px;font-size:11px;overflow-x:auto;white-space:pre-wrap">${escaped}</pre>` +
+    `</div>`
+}
+
+function renderContentBlock(block: TranscriptContentBlock): string {
+  if (block.kind === 'text') {
+    return `<div class="tr-text" style="white-space:pre-wrap;word-break:break-word;font-size:13px;line-height:1.6;color:#222">${esc(block.text)}</div>`
   }
-}
-
-function agentLabel(event: EventDto): string {
-  const p = event.payload
-  const name = p['agentName'] ?? p['agent_type'] ?? p['agentType'] ?? null
-  return name ? esc(String(name)) : '<span style="color:#aaa">—</span>'
-}
-
-function typeBadge(type: string): string {
-  const color: Record<string, string> = {
-    'transitioned':    '#3498db',
-    'journal-entry':   '#9b59b6',
-    'bash-allowed':    '#2ecc71',
-    'bash-denied':     '#e74c3c',
-    'write-allowed':   '#27ae60',
-    'write-denied':    '#c0392b',
-    'session-started': '#95a5a6',
-    'agent-registered':'#1abc9c',
+  if (block.kind === 'tool_use') {
+    return renderToolUseBlock(block.name, block.input)
   }
-  const bg = color[type] ?? '#7f8c8d'
-  const short = type.length > 18 ? type.slice(0, 17) + '…' : type
-  return `<span style="display:inline-block;background:${bg};color:#fff;border-radius:3px;padding:1px 6px;font-size:10px;font-family:monospace;white-space:nowrap">${esc(short)}</span>`
+  if (block.kind === 'tool_result') {
+    return renderToolResultBlock(block.toolName, block.text)
+  }
+  return ''
 }
 
-export function renderTranscript(events: ReadonlyArray<EventDto>, total: number): string {
-  storeWindowValue('__transcriptEvents', events)
+function renderEntry(entry: TranscriptEntry, idx: number): string {
+  const time = formatTime(entry.timestamp)
+  const contentHtml = entry.content.map(renderContentBlock).join('')
 
-  const rows = events.map((evt, idx) => {
-    const time = formatTimeOnly(evt.at)
-    const badge = typeBadge(evt.type)
-    const agent = agentLabel(evt)
-    const summary = esc(formatEventSummary(evt))
-    return `<div class="tr-row" data-idx="${idx}" style="display:flex;gap:12px;padding:6px 0;border-bottom:1px solid #f0f0f0;cursor:pointer;font-size:13px;align-items:baseline">` +
-      `<span style="color:#aaa;font-family:monospace;white-space:nowrap;min-width:60px">${time}</span>` +
-      `<span style="min-width:160px">${badge}</span>` +
-      `<span style="min-width:100px;color:#555">${agent}</span>` +
-      `<span style="flex:1;color:#333">${summary}</span>` +
+  if (entry.type === 'assistant') {
+    return `<div class="tr-entry tr-assistant" data-idx="${idx}" style="display:flex;gap:12px;padding:12px 0;border-bottom:1px solid #f0f0f0">` +
+      `<div style="min-width:60px;color:#aaa;font-size:11px;font-family:monospace;padding-top:2px">${time}</div>` +
+      `<div style="flex:1">` +
+      `<div style="font-size:11px;font-weight:600;color:#3498db;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px">Agent</div>` +
+      contentHtml +
+      `</div>` +
       `</div>`
-  }).join('')
+  }
 
-  return html`<div style="padding:16px">` +
-    html`<div style="display:flex;gap:12px;align-items:center;margin-bottom:12px">` +
-    html`<input id="transcript-search" type="text" placeholder="Search transcript..." style="flex:1;padding:6px 10px;border:1px solid #ddd;border-radius:4px;font-size:13px" />` +
-    html`<span id="transcript-count" style="color:#aaa;font-size:13px">${total} events</span>` +
+  if (entry.type === 'user') {
+    // User entries are mostly tool results and hook context — render compactly
+    const hasOnlyToolResults = entry.content.every(b => b.kind === 'tool_result')
+    if (hasOnlyToolResults) {
+      return `<div class="tr-entry tr-tool-results" data-idx="${idx}" style="display:flex;gap:12px;padding:6px 0;border-bottom:1px solid #f8f8f8">` +
+        `<div style="min-width:60px;color:#ccc;font-size:11px;font-family:monospace;padding-top:2px">${time}</div>` +
+        `<div style="flex:1">${contentHtml}</div>` +
+        `</div>`
+    }
+    return `<div class="tr-entry tr-user" data-idx="${idx}" style="display:flex;gap:12px;padding:8px 0;border-bottom:1px solid #f5f5f5">` +
+      `<div style="min-width:60px;color:#aaa;font-size:11px;font-family:monospace;padding-top:2px">${time}</div>` +
+      `<div style="flex:1">` +
+      `<div style="font-size:11px;font-weight:600;color:#95a5a6;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px">Context</div>` +
+      contentHtml +
+      `</div>` +
+      `</div>`
+  }
+
+  return ''
+}
+
+export function renderTranscript(entries: ReadonlyArray<TranscriptEntry>, total: number): string {
+  if (entries.length === 0) {
+    return html`<div style="padding:24px;color:#aaa">No transcript entries found.</div>`
+  }
+
+  const rows = entries.map((e, i) => renderEntry(e, i)).filter(Boolean).join('')
+
+  return `<div style="padding:16px">` +
+    `<div style="display:flex;gap:12px;align-items:center;margin-bottom:16px">` +
+    `<input id="transcript-search" type="text" placeholder="Search transcript..." style="flex:1;padding:6px 10px;border:1px solid #ddd;border-radius:4px;font-size:13px" />` +
+    `<label style="font-size:12px;color:#888;display:flex;align-items:center;gap:4px;cursor:pointer">` +
+    `<input id="transcript-agent-only" type="checkbox" /> Agent messages only` +
+    `</label>` +
+    `<span id="transcript-count" style="color:#aaa;font-size:13px">${total} entries</span>` +
     `</div>` +
     `<div id="transcript-rows">${rows}</div>` +
     `</div>`
 }
 
-function isEventDtoArray(v: unknown): v is ReadonlyArray<EventDto> {
-  return Array.isArray(v)
-}
-
 export function attachTranscriptListeners(): void {
   const searchInput = document.getElementById('transcript-search')
+  const agentOnly = document.getElementById('transcript-agent-only')
   const rowsContainer = document.getElementById('transcript-rows')
-  if (!(searchInput instanceof HTMLInputElement) || !rowsContainer) return
+  if (!rowsContainer) return
 
-  const events = readWindowValue('__transcriptEvents', isEventDtoArray) ?? []
-
-  // Expand/collapse on click
+  // Toggle collapsible tool blocks
   rowsContainer.addEventListener('click', (e) => {
-    const row = (e.target as HTMLElement).closest('.tr-row')
-    if (!(row instanceof HTMLElement)) return
-    const existing = row.nextElementSibling
-    if (existing?.classList.contains('tr-detail')) {
-      existing.remove()
-      return
-    }
-    const idx = parseInt(row.getAttribute('data-idx') ?? '-1', 10)
-    const evt = events[idx]
-    if (!evt) return
-    const fields = Object.entries(evt.payload)
-      .filter(([k]) => k !== 'type' && k !== 'at')
-      .map(([k, v]) => `<div style="display:flex;gap:8px;padding:2px 0"><span style="color:#aaa;min-width:120px;font-family:monospace;font-size:11px">${esc(k)}</span><span style="color:#333;font-size:11px;word-break:break-all">${esc(JSON.stringify(v))}</span></div>`)
-      .join('')
-    const detail = document.createElement('div')
-    detail.className = 'tr-detail'
-    detail.style.cssText = 'background:#f9f9f9;padding:8px 12px;border-bottom:1px solid #f0f0f0;margin-left:72px'
-    detail.innerHTML = fields || '<span style="color:#aaa;font-size:11px">no payload fields</span>'
-    row.after(detail)
+    const head = (e.target as HTMLElement).closest('[data-toggle]')
+    if (!(head instanceof HTMLElement)) return
+    const targetId = head.getAttribute('data-toggle')
+    if (!targetId) return
+    const target = document.getElementById(targetId)
+    if (!target) return
+    const isHidden = target.style.display === 'none'
+    target.style.display = isHidden ? 'block' : 'none'
+    const arrow = head.querySelector('span:last-child')
+    if (arrow) arrow.textContent = isHidden ? '▼' : '▶'
   })
 
-  // Search filter
-  searchInput.addEventListener('input', () => {
-    const query = searchInput.value.toLowerCase()
-    rowsContainer.querySelectorAll<HTMLElement>('.tr-row').forEach((row, idx) => {
-      const evt = events[idx]
-      if (!evt) return
-      const text = (formatEventSummary(evt) + ' ' + evt.type + ' ' + JSON.stringify(evt.payload)).toLowerCase()
-      row.style.display = query === '' || text.includes(query) ? '' : 'none'
-      const detail = row.nextElementSibling
-      if (detail?.classList.contains('tr-detail')) {
-        (detail as HTMLElement).style.display = row.style.display
+  function applyFilters(): void {
+    const query = searchInput instanceof HTMLInputElement ? searchInput.value.toLowerCase() : ''
+    const onlyAgent = agentOnly instanceof HTMLInputElement ? agentOnly.checked : false
+    let visible = 0
+    rowsContainer?.querySelectorAll<HTMLElement>('.tr-entry').forEach((row) => {
+      const isAgent = row.classList.contains('tr-assistant')
+      if (onlyAgent && !isAgent) {
+        row.style.display = 'none'
+        return
       }
+      const text = row.textContent?.toLowerCase() ?? ''
+      const show = !query || text.includes(query)
+      row.style.display = show ? '' : 'none'
+      if (show) visible++
     })
-    const visible = rowsContainer.querySelectorAll<HTMLElement>('.tr-row:not([style*="none"])').length
     const countEl = document.getElementById('transcript-count')
-    if (countEl) countEl.textContent = `${visible} of ${events.length} events`
-  })
+    const total = rowsContainer?.querySelectorAll('.tr-entry').length ?? 0
+    if (countEl) countEl.textContent = `${visible} of ${total} entries`
+  }
+
+  searchInput?.addEventListener('input', applyFilters)
+  agentOnly?.addEventListener('change', applyFilters)
 }

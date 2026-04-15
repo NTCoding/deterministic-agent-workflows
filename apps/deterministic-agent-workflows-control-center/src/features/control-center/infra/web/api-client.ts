@@ -91,6 +91,26 @@ export type EventDto = {
 }
 
 /** @riviere-role web-tbc */
+export type TranscriptContentBlock =
+  | { readonly kind: 'text'; readonly text: string }
+  | { readonly kind: 'tool_use'; readonly name: string; readonly input: Record<string, unknown> }
+  | { readonly kind: 'tool_result'; readonly toolName: string; readonly text: string }
+
+/** @riviere-role web-tbc */
+export type TranscriptEntry = {
+  readonly type: 'assistant' | 'user' | 'system' | 'other'
+  readonly timestamp: string
+  readonly content: ReadonlyArray<TranscriptContentBlock>
+}
+
+/** @riviere-role web-tbc */
+export type TranscriptResponse = {
+  readonly entries: ReadonlyArray<TranscriptEntry>
+  readonly total: number
+  readonly transcriptPath: string
+}
+
+/** @riviere-role web-tbc */
 export type AnalyticsOverviewDto = {
   totalSessions: number
   activeSessions: number
@@ -262,6 +282,24 @@ async function fetchParsedJson<T>(path: string, schema: z.ZodType<T>): Promise<T
   return schema.parse(body)
 }
 
+const transcriptContentBlockSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('text'), text: z.string() }),
+  z.object({ kind: z.literal('tool_use'), name: z.string(), input: z.record(z.unknown()) }),
+  z.object({ kind: z.literal('tool_result'), toolName: z.string(), text: z.string() }),
+])
+
+const transcriptEntrySchema = z.object({
+  type: z.enum(['assistant', 'user', 'system', 'other']),
+  timestamp: z.string(),
+  content: z.array(transcriptContentBlockSchema),
+})
+
+const transcriptResponseSchema = z.object({
+  entries: z.array(transcriptEntrySchema),
+  total: z.number(),
+  transcriptPath: z.string(),
+})
+
 /** @riviere-role web-tbc */
 export const api = {
   getSessions(params?: {
@@ -318,5 +356,9 @@ export const api = {
 
   getComparison(a: string, b: string) {
     return fetchParsedJson(`/api/analytics/compare?a=${a}&b=${b}`, comparisonSchema)
+  },
+
+  getTranscript(id: string) {
+    return fetchParsedJson(`/api/sessions/${id}/transcript`, transcriptResponseSchema)
   },
 }

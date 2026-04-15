@@ -1,5 +1,5 @@
 import type {
-  SessionDetailDto, EventDto, SuggestionDto 
+  SessionDetailDto, EventDto, SuggestionDto
 } from '../api-client'
 import { api } from '../api-client'
 import { renderMetricCards } from '../components/metric-cards'
@@ -44,8 +44,7 @@ export async function renderSessionDetail(container: HTMLElement, sessionId: str
       activeTab: TabName
       eventsCache: Array<EventDto> | null
       eventsTotal: number
-      transcriptCache: Array<EventDto> | null
-      transcriptTotal: number
+      transcriptRendered: string | null
       drillFilter: {
         dimension: string
         value: string
@@ -54,13 +53,12 @@ export async function renderSessionDetail(container: HTMLElement, sessionId: str
       activeTab: 'overview',
       eventsCache: null,
       eventsTotal: 0,
-      transcriptCache: null,
-      transcriptTotal: 0,
+      transcriptRendered: null,
       drillFilter: null,
     }
 
     async function renderContent(): Promise<void> {
-      container.innerHTML = renderSessionPage(session, state.activeTab, state.eventsCache, state.eventsTotal, state.transcriptCache, state.transcriptTotal)
+      container.innerHTML = renderSessionPage(session, state.activeTab, state.eventsCache, state.eventsTotal, state.transcriptRendered)
       attachTabListeners(container, (tab: TabName) => {
         state.activeTab = tab
         state.drillFilter = null
@@ -105,21 +103,24 @@ export async function renderSessionDetail(container: HTMLElement, sessionId: str
         }
       }
 
-      if (state.activeTab === 'transcript' && !state.transcriptCache) {
+      if (state.activeTab === 'transcript' && state.transcriptRendered === null) {
         const transcriptEl = container.querySelector('#transcript-tab-content')
-        const { events, total } = await api.getSessionEvents(sessionId, { limit: 500 })
-        state.transcriptCache = events
-        state.transcriptTotal = total
-        if (transcriptEl) {
-          transcriptEl.innerHTML = renderTranscript(events, total)
-          attachTranscriptListeners()
-        } else {
-          await renderContent()
+        try {
+          const data = await api.getTranscript(sessionId)
+          const rendered = renderTranscript(data.entries, data.total)
+          state.transcriptRendered = rendered
+          if (transcriptEl) {
+            transcriptEl.innerHTML = rendered
+            attachTranscriptListeners()
+          }
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : 'Unknown error'
+          if (transcriptEl) transcriptEl.innerHTML = `<div style="padding:24px;color:#e74c3c">Failed to load transcript: ${esc(msg)}</div>`
         }
         return
       }
 
-      if (state.activeTab === 'transcript' && state.transcriptCache) {
+      if (state.activeTab === 'transcript' && state.transcriptRendered !== null) {
         attachTranscriptListeners()
       }
 
@@ -169,7 +170,7 @@ function missing(): string {
   return '<span style="color:#c0392b;font-weight:500">MISSING</span>'
 }
 
-function renderSessionPage(session: SessionDetailDto, activeTab: TabName, events: Array<EventDto> | null, eventsTotal: number, transcriptEvents: Array<EventDto> | null, transcriptTotal: number): string {
+function renderSessionPage(session: SessionDetailDto, activeTab: TabName, events: Array<EventDto> | null, eventsTotal: number, transcriptRendered: string | null): string {
   const headerParts: Array<string> = []
 
   const repoDisplay = session.repository ? esc(session.repository) : missing()
@@ -256,8 +257,8 @@ function renderSessionPage(session: SessionDetailDto, activeTab: TabName, events
     events: events
       ? renderEventStream(events, eventsTotal)
       : html`<div id="events-tab-content" class="loading">Loading events...</div>`,
-    transcript: transcriptEvents
-      ? renderTranscript(transcriptEvents, transcriptTotal)
+    transcript: transcriptRendered !== null
+      ? `<div id="transcript-tab-content">${transcriptRendered}</div>`
       : html`<div id="transcript-tab-content" class="loading">Loading transcript...</div>`,
     journal: renderJournalList(session.journalEntries),
     insights: renderInsights(session.insights),

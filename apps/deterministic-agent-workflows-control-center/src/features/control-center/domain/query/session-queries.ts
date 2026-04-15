@@ -159,3 +159,17 @@ export function getTotalEventCount(deps: SessionQueryDeps): number {
   const row = getSingleRow(deps.db.prepare('SELECT COUNT(*) as count FROM events').get(), parseCountRow)
   return row.count
 }
+
+/** @riviere-role query-model */
+export function getTranscriptPath(deps: SessionQueryDeps, sessionId: string): string | null {
+  const rows = deps.db
+    .prepare("SELECT payload FROM events WHERE session_id = ? AND type = 'session-started' LIMIT 1")
+    .all(sessionId)
+  if (rows.length === 0) return null
+  const row = rows[0] as { payload: string }
+  const payload: unknown = JSON.parse(row.payload)
+  if (typeof payload === 'object' && payload !== null && 'transcriptPath' in payload && typeof (payload as Record<string,unknown>)['transcriptPath'] === 'string') {
+    return (payload as Record<string,unknown>)['transcriptPath'] as string
+  }
+  return null
+}
