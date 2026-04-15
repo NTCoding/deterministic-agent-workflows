@@ -31,7 +31,6 @@ export interface RehydratableWorkflow<TState extends BaseWorkflowState> {
   getTranscriptPath(): string
   registerAgent(agentType: string, agentId: string): PreconditionResult
   handleTeammateIdle(agentName: string): PreconditionResult
-  writeJournal?(agentName: string, content: string): PreconditionResult
 }
 
 /** @riviere-role value-object */

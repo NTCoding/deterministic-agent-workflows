@@ -44,8 +44,6 @@ export type {
 } from './platform/domain/workflow-registry'
 
 export { WorkflowEngine } from './platform/domain/workflow-engine'
-export { BaseWorkflow } from './platform/domain/base-workflow'
-export type { BaseWorkflowDeps } from './platform/domain/base-workflow'
 export type {
   EngineResult,
   RehydratableWorkflow,
