@@ -386,7 +386,8 @@ export class WorkflowEngine<
   private persistEvents(sessionId: string, workflow: TWorkflow): void {
     const pending = workflow.getPendingEvents()
     if (pending.length === 0) return
-    this.engineDeps.store.appendEvents(sessionId, this.wrapEvents(pending, workflow.getState()))
+    const preAppendState = this.rehydrateFromEvents(sessionId).getState()
+    this.engineDeps.store.appendEvents(sessionId, this.wrapEvents(pending, preAppendState))
   }
 
   private wrapEvents(events: readonly BaseEvent[], startState: TState): readonly StoredEvent[] {

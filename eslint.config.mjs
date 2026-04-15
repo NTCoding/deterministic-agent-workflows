@@ -213,30 +213,6 @@ export default tseslint.config(
     },
   },
   {
-    files: [
-      'apps/deterministic-agent-workflows-control-center/src/features/control-center/infra/web/components/**/*.ts',
-      'apps/deterministic-agent-workflows-control-center/src/features/control-center/infra/web/server/handlers/transcript-handler.ts',
-      'apps/deterministic-agent-workflows-control-center/src/features/control-center/infra/web/server/handlers/activity-handler.ts',
-    ],
-    rules: {
-      '@typescript-eslint/consistent-type-assertions': 'off',
-      '@typescript-eslint/no-non-null-assertion': 'off',
-      'no-restricted-syntax': 'off',
-      'no-negated-condition': 'off',
-      'no-inline-comments': 'off',
-      'max-depth': 'off',
-      'max-lines': 'off',
-      complexity: 'off',
-      'sonarjs/cognitive-complexity': 'off',
-      'sonarjs/no-nested-template-literals': 'off',
-      'sonarjs/no-nested-conditional': 'off',
-      'sonarjs/pseudo-random': 'off',
-      'sonarjs/prefer-regexp-exec': 'off',
-      'sonarjs/no-redundant-jump': 'off',
-      '@typescript-eslint/no-empty-function': 'off',
-    },
-  },
-  {
     files: ['**/*.spec.ts', '**/*.spec.tsx', '**/*.test.ts', '**/*.test.tsx'],
     plugins: { vitest },
     rules: {
