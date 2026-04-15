@@ -1,5 +1,7 @@
 # AGENTS
 
+Bypassing lint rules and test coverage is forbidden. You are not allowed to modify lint or test coverage files. 
+
 ## Agent startup checklist
 
 1. Read `plan.md` and continue with the next unfinished item.

@@ -224,9 +224,9 @@ export class WorkflowEngine<
     }
 
     const exemptions = registry[currentStateName].allowForbidden?.bash ?? []
-    const result = checkBashCommand(command, bashForbidden, exemptions)
-    if (!result.pass) {
-      const reason = `Bash command blocked in ${currentStateName}. ${result.reason}`
+    const bashCheckResult = checkBashCommand(command, bashForbidden, exemptions)
+    if (!bashCheckResult.pass) {
+      const reason = `Bash command blocked in ${currentStateName}. ${bashCheckResult.reason}`
       workflow.appendEvent({
         type: 'bash-checked',
         at: this.engineDeps.now(),
@@ -421,16 +421,16 @@ export class WorkflowEngine<
     const expectedPrefix = getExpectedPrefix(state, registry)
     const pattern = buildPrefixPattern(registry)
     const messages = this.engineDeps.transcriptReader.readMessages(transcriptPath)
-    const result = checkIdentity(messages, pattern)
+    const identityCheckResult = checkIdentity(messages, pattern)
 
     this.engineDeps.store.appendEvents(sessionId, this.wrapEvents([{
       type: 'identity-verified',
       at: this.engineDeps.now(),
-      status: result.status,
+      status: identityCheckResult.status,
       transcriptPath,
     }], workflow.getState()))
 
-    if (result.status === 'lost') {
+    if (identityCheckResult.status === 'lost') {
       return `You forgot. Next message MUST begin with: ${expectedPrefix}`
     }
 
