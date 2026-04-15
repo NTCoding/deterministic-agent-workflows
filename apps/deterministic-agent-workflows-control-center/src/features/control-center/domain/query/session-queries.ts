@@ -70,6 +70,21 @@ function parseMaxSeqRow(row: unknown): { readonly maxSeq: number | null } {
   throw new TypeError('Expected numeric maxSeq row.')
 }
 
+function parseTranscriptPath(value: unknown): string | null {
+  if (!isRecord(value)) {
+    return null
+  }
+  const transcriptPath = value['transcriptPath']
+  return typeof transcriptPath === 'string' ? transcriptPath : null
+}
+
+function parseTranscriptPayloadRow(row: unknown): { readonly payload: string } {
+  if (!isRecord(row) || typeof row['payload'] !== 'string') {
+    throw new TypeError('Expected transcript payload row.')
+  }
+  return {payload: row['payload'],}
+}
+
 /** @riviere-role query-model */
 export function getDistinctSessionIds(deps: SessionQueryDeps): ReadonlyArray<string> {
   const rows = getRows(
@@ -85,7 +100,7 @@ export function getSessionEvents(
   sessionId: string,
 ): ReadonlyArray<ParsedEvent> {
   const rows = getRows(
-    deps.db.prepare('SELECT seq, session_id, type, at, state, payload FROM events WHERE session_id = ? ORDER BY seq').all(sessionId),
+    deps.db.prepare('SELECT seq, session_id, type, at, NULL as state, payload FROM events WHERE session_id = ? ORDER BY seq').all(sessionId),
     (row) => eventRowSchema.parse(row),
   )
   return rows.map(parseEventRow)
@@ -124,7 +139,7 @@ export function getSessionEventsPaginated(
   const rows = getRows(
     deps.db
       .prepare(
-        `SELECT seq, session_id, type, at, state, payload FROM events WHERE ${whereClause} ORDER BY seq LIMIT ? OFFSET ?`,
+        `SELECT seq, session_id, type, at, NULL as state, payload FROM events WHERE ${whereClause} ORDER BY seq LIMIT ? OFFSET ?`,
       )
       .all(...params, limit, offset),
     (row) => eventRowSchema.parse(row),
@@ -150,7 +165,7 @@ export function getEventsSinceSeq(
   const rows = getRows(
     deps.db
       .prepare(
-        'SELECT seq, session_id, type, at, state, payload FROM events WHERE seq > ? ORDER BY seq',
+        'SELECT seq, session_id, type, at, NULL as state, payload FROM events WHERE seq > ? ORDER BY seq',
       )
       .all(sinceSeq),
     (row) => eventRowSchema.parse(row),
@@ -179,10 +194,7 @@ export function getTranscriptPath(deps: SessionQueryDeps, sessionId: string): st
     .prepare("SELECT payload FROM events WHERE session_id = ? AND type = 'session-started' LIMIT 1")
     .all(sessionId)
   if (rows.length === 0) return null
-  const row = rows[0] as { payload: string }
+  const row = parseTranscriptPayloadRow(rows[0])
   const payload: unknown = JSON.parse(row.payload)
-  if (typeof payload === 'object' && payload !== null && 'transcriptPath' in payload && typeof (payload as Record<string,unknown>)['transcriptPath'] === 'string') {
-    return (payload as Record<string,unknown>)['transcriptPath'] as string
-  }
-  return null
+  return parseTranscriptPath(payload)
 }

@@ -64,13 +64,9 @@ export function createHttpServer(deps: HttpServerDeps): HttpServerInstance {
     now: deps.now,
   }
 
-  const transcriptDeps: TranscriptHandlerDeps = {
-    queryDeps: deps.queryDeps,
-  }
+  const transcriptDeps: TranscriptHandlerDeps = {queryDeps: deps.queryDeps,}
 
-  const activityDeps: ActivityHandlerDeps = {
-    queryDeps: deps.queryDeps,
-  }
+  const activityDeps: ActivityHandlerDeps = {queryDeps: deps.queryDeps,}
 
   router.get('/api/sessions', handleListSessions(sessionDeps))
   router.get('/api/sessions/:id', handleGetSession(sessionDeps))

@@ -7,13 +7,13 @@
     "build": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "tsc -p apps/deterministic-agent-workflows-control-center/tsconfig.json && node apps/deterministic-agent-workflows-control-center/build-ui.mjs"
+        "command": "pnpm --dir apps/deterministic-agent-workflows-control-center exec tsc -p tsconfig.json && node apps/deterministic-agent-workflows-control-center/build-ui.mjs"
       }
     },
     "typecheck": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "tsc -p apps/deterministic-agent-workflows-control-center/tsconfig.json --noEmit"
+        "command": "pnpm --dir apps/deterministic-agent-workflows-control-center exec tsc -p tsconfig.json --noEmit"
       }
     },
     "lint": {

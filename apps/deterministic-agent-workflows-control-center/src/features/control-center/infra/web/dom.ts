@@ -8,7 +8,13 @@ export class MissingElementError extends Error {
 
 const EMPTY_STRING = ''
 
-declare global { interface Window { __events?: unknown; __transcriptEvents?: unknown } }
+declare global { interface Window {
+  __events?: unknown;
+  __transcriptEvents?: unknown;
+  __dashboardTimer?: ReturnType<typeof setInterval>;
+  __sessionTimer?: ReturnType<typeof setInterval>;
+  __trGotoEventsHandler?: EventListener 
+} }
 
 /** @riviere-role web-tbc */
 export function getRequiredElement<T extends HTMLElement>(

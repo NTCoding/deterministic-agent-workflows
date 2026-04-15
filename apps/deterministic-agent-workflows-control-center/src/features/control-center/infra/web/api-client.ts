@@ -1,4 +1,22 @@
 import { z } from 'zod'
+export type {
+  ActivityReport,
+  ActivityResponse,
+  AnalyticsOverviewDto,
+  ComparisonDto,
+  EventDto,
+  PerStateActivity,
+  SessionDetailDto,
+  SessionListResponse,
+  SessionSummaryDto,
+  SuggestionDto,
+  TranscriptContentBlock,
+  TranscriptEntry,
+  TranscriptResponse,
+  TranscriptTotals,
+  TranscriptUsage,
+  WebHit,
+} from './api-types'
 
 const BASE = ''
 
@@ -13,167 +31,6 @@ async function fetchJson(path: string): Promise<unknown> {
   const res = await fetch(`${BASE}${path}`)
   if (!res.ok) throw new ApiError(res.status)
   return await res.json()
-}
-
-/** @riviere-role web-tbc */
-export type SessionListResponse = {
-  sessions: Array<SessionSummaryDto>
-  total: number
-}
-
-/** @riviere-role web-tbc */
-export type SessionSummaryDto = {
-  sessionId: string
-  currentState: string
-  workflowStates: Array<string>
-  status: string
-  totalEvents: number
-  firstEventAt: string
-  lastEventAt: string
-  durationMs: number
-  activeAgents: Array<string>
-  transitionCount: number
-  permissionDenials: {
-    write: number;
-    bash: number;
-    pluginRead: number;
-    idle: number 
-  }
-  repository?: string | undefined
-  issueNumber?: number | undefined
-  featureBranch?: string | undefined
-  prNumber?: number | undefined
-}
-
-/** @riviere-role web-tbc */
-export type SuggestionDto = {
-  title: string
-  rationale: string
-  change: string
-  tradeoff: string
-  prompt?: string | undefined
-}
-
-/** @riviere-role web-tbc */
-export type SessionDetailDto = SessionSummaryDto & {
-  journalEntries: Array<{
-    agentName: string;
-    content: string;
-    at: string;
-    state: string 
-  }>
-  insights: Array<{
-    severity: string;
-    title: string;
-    evidence: string;
-    prompt?: string | undefined
-  }>
-  suggestions: Array<SuggestionDto>
-  statePeriods: Array<{
-    state: string;
-    startedAt: string;
-    endedAt?: string | undefined;
-    durationMs: number 
-  }>
-}
-
-/** @riviere-role web-tbc */
-export type EventDto = {
-  seq: number
-  sessionId: string
-  type: string
-  at: string
-  payload: Record<string, unknown>
-  category: string
-  state: string
-  detail: string
-  denied?: boolean | undefined
-}
-
-/** @riviere-role web-tbc */
-export type TranscriptContentBlock =
-  | { readonly kind: 'text'; readonly text: string }
-  | { readonly kind: 'thinking'; readonly text: string }
-  | { readonly kind: 'tool_use'; readonly id: string; readonly name: string; readonly input: Record<string, unknown> }
-  | { readonly kind: 'tool_result'; readonly toolUseId: string; readonly toolName: string; readonly text: string; readonly isError: boolean }
-
-/** @riviere-role web-tbc */
-export type TranscriptUsage = {
-  readonly inputTokens: number
-  readonly outputTokens: number
-  readonly cacheReadInputTokens: number
-  readonly cacheCreationInputTokens: number
-}
-
-/** @riviere-role web-tbc */
-export type TranscriptEntry = {
-  readonly type: 'assistant' | 'user' | 'system' | 'other'
-  readonly timestamp: string
-  readonly content: ReadonlyArray<TranscriptContentBlock>
-  readonly messageId?: string | undefined
-  readonly parentUuid?: string | null | undefined
-  readonly isSidechain?: boolean | undefined
-  readonly model?: string | undefined
-  readonly stopReason?: string | undefined
-  readonly usage?: TranscriptUsage | undefined
-}
-
-/** @riviere-role web-tbc */
-export type TranscriptTotals = {
-  readonly inputTokens: number
-  readonly outputTokens: number
-  readonly cacheReadInputTokens: number
-  readonly cacheCreationInputTokens: number
-  readonly assistantMessages: number
-}
-
-/** @riviere-role web-tbc */
-export type TranscriptResponse = {
-  readonly entries: ReadonlyArray<TranscriptEntry>
-  readonly total: number
-  readonly transcriptPath: string
-  readonly fileSize?: number | undefined
-  readonly fileModified?: string | undefined
-  readonly totals: TranscriptTotals
-  readonly toolCounts: Record<string, number>
-  readonly modelsUsed: ReadonlyArray<string>
-}
-
-/** @riviere-role web-tbc */
-export type AnalyticsOverviewDto = {
-  totalSessions: number
-  activeSessions: number
-  completedSessions: number
-  staleSessions: number
-  averageDurationMs: number
-  averageTransitionCount: number
-  averageDenialCount: number
-  totalEvents: number
-  denialHotspots: Array<{
-    target: string;
-    count: number 
-  }>
-  stateTimeDistribution: Array<{
-    state: string;
-    totalMs: number;
-    percentage: number 
-  }>
-}
-
-/** @riviere-role web-tbc */
-export type ComparisonDto = {
-  sessionA: SessionDetailDto
-  sessionB: SessionDetailDto
-  deltas: {
-    durationMs: number;
-    durationPercent: number
-    transitionCount: number;
-    transitionPercent: number
-    totalDenials: number;
-    denialPercent: number
-    eventCount: number;
-    eventPercent: number
-  }
 }
 
 const permissionDenialsSchema = z.object({
@@ -312,10 +169,27 @@ async function fetchParsedJson<T>(path: string, schema: z.ZodType<T>): Promise<T
 }
 
 const transcriptContentBlockSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('text'), text: z.string() }),
-  z.object({ kind: z.literal('thinking'), text: z.string() }),
-  z.object({ kind: z.literal('tool_use'), id: z.string(), name: z.string(), input: z.record(z.unknown()) }),
-  z.object({ kind: z.literal('tool_result'), toolUseId: z.string(), toolName: z.string(), text: z.string(), isError: z.boolean() }),
+  z.object({
+    kind: z.literal('text'),
+    text: z.string() 
+  }),
+  z.object({
+    kind: z.literal('thinking'),
+    text: z.string() 
+  }),
+  z.object({
+    kind: z.literal('tool_use'),
+    id: z.string(),
+    name: z.string(),
+    input: z.record(z.unknown()) 
+  }),
+  z.object({
+    kind: z.literal('tool_result'),
+    toolUseId: z.string(),
+    toolName: z.string(),
+    text: z.string(),
+    isError: z.boolean() 
+  }),
 ])
 
 const transcriptUsageSchema = z.object({
@@ -345,11 +219,26 @@ const transcriptTotalsSchema = z.object({
   assistantMessages: z.number(),
 })
 
-const fileActivitySchema = z.object({ path: z.string(), count: z.number() })
-const bashCommandSchema = z.object({ command: z.string(), count: z.number() })
-const searchQuerySchema = z.object({ pattern: z.string(), count: z.number() })
-const taskDelegationSchema = z.object({ subagent: z.string(), description: z.string() })
-const webHitSchema = z.object({ url: z.string(), count: z.number() })
+const fileActivitySchema = z.object({
+  path: z.string(),
+  count: z.number() 
+})
+const bashCommandSchema = z.object({
+  command: z.string(),
+  count: z.number() 
+})
+const searchQuerySchema = z.object({
+  pattern: z.string(),
+  count: z.number() 
+})
+const taskDelegationSchema = z.object({
+  subagent: z.string(),
+  description: z.string() 
+})
+const webHitSchema = z.object({
+  url: z.string(),
+  count: z.number() 
+})
 
 const activityReportSchema = z.object({
   totalToolCalls: z.number(),
@@ -378,10 +267,6 @@ const activityResponseSchema = z.object({
   overall: activityReportSchema,
   byState: z.array(perStateActivitySchema),
 })
-
-export type ActivityReport = z.infer<typeof activityReportSchema>
-export type PerStateActivity = z.infer<typeof perStateActivitySchema>
-export type ActivityResponse = z.infer<typeof activityResponseSchema>
 
 const transcriptResponseSchema = z.object({
   entries: z.array(transcriptEntrySchema),

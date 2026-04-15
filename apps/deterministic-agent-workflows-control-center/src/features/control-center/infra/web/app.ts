@@ -8,7 +8,9 @@ import { renderAnalytics } from './views/analytics'
 import { renderSessionCompare } from './views/session-compare'
 import { createSseClient } from './sse-client'
 import {
-  MissingElementError, asHtmlElement, getDatasetValue
+  MissingElementError,
+  asHtmlElement,
+  getDatasetValue,
 } from './dom'
 
 console.log('App module loaded')
@@ -40,8 +42,8 @@ function getAppContainer(): HTMLElement {
 }
 
 async function renderRoute(route: Route): Promise<void> {
-  clearInterval((window as unknown as Record<string, unknown>)['__dashboardTimer'] as number | undefined)
-  clearInterval((window as unknown as Record<string, unknown>)['__sessionTimer'] as number | undefined)
+  clearInterval(window.__dashboardTimer)
+  clearInterval(window.__sessionTimer)
   const container = getAppContainer()
 
   document.querySelectorAll('.nav-link').forEach((link) => {

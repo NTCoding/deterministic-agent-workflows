@@ -92,8 +92,8 @@ If docs or APIs force that, the repo is not ready.
 
 ### Critical gaps
 - [ ] Claude Code still needs the same level of consumer-proof validation now added for OpenCode.
-- [ ] Lint still does not pass against the full workspace.
-- [ ] `role-check` is still pending re-enable/fix.
+- [x] Lint now passes against the full workspace.
+- [x] `role-check` is re-enabled and passing.
 
 ---
 
@@ -160,7 +160,7 @@ Status legend: `TODO`, `IN_PROGRESS`, `BLOCKED`, `DONE`
 - [x] **DONE** Add smoke test for blocked operation before allowed state.
 - [x] **DONE** Add smoke test for allowed operation after transition.
 - [ ] **TODO** Verify install, lint, typecheck, test, build from clean checkout.
-- [ ] **TODO** Re-enable and pass `role-check` once upstream packaging issue is resolved or a stable workaround is chosen.
+- [x] **DONE** Re-enable and pass `role-check` once upstream packaging issue is resolved or a stable workaround is chosen.
 
 ### 9) Release readiness
 - [ ] **TODO** Confirm package metadata, exports, and typings match the public API.

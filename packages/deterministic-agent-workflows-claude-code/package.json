@@ -11,8 +11,8 @@
     "dist"
   ],
   "dependencies": {
-    "@nt-ai-lab/deterministic-agent-workflow-cli": "0.2.0",
-    "@nt-ai-lab/deterministic-agent-workflow-engine": "0.2.0",
+    "@nt-ai-lab/deterministic-agent-workflow-cli": "workspace:*",
+    "@nt-ai-lab/deterministic-agent-workflow-engine": "workspace:*",
     "zod": "^3.25.76"
   },
   "publishConfig": {
