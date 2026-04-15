@@ -2,7 +2,7 @@
   "name": "deterministic-agent-workflows",
   "version": "0.0.0",
   "private": true,
-  "packageManager": "pnpm@10.0.0",
+  "packageManager": "pnpm@10.28.0",
   "scripts": {
     "lint": "nx run-many -t lint --all",
     "typecheck": "nx run-many -t typecheck --all",
@@ -31,6 +31,7 @@
     "husky": "^9.1.7",
     "nx": "^20.3.1",
     "oxlint": "^1.19.0",
+    "typescript": "~5.9.2",
     "typescript-eslint": "^8.16.0"
   }
 }

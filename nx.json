@@ -6,7 +6,10 @@
   },
   "namedInputs": {
     "sharedGlobals": [],
-    "default": ["{projectRoot}/**/*", "sharedGlobals"],
+    "default": [
+      "{projectRoot}/**/*",
+      "sharedGlobals"
+    ],
     "production": [
       "default",
       "!{projectRoot}/**/*.spec.ts",
@@ -16,22 +19,40 @@
   "targetDefaults": {
     "build": {
       "cache": true,
-      "dependsOn": ["^build"],
-      "inputs": ["production", "^production"]
+      "dependsOn": [
+        "^build"
+      ],
+      "inputs": [
+        "production",
+        "^production"
+      ]
     },
     "lint": {
       "cache": true,
-      "inputs": ["default", "{workspaceRoot}/eslint.config.mjs"]
+      "inputs": [
+        "default",
+        "{workspaceRoot}/eslint.config.mjs"
+      ]
     },
     "test": {
       "cache": true,
-      "dependsOn": ["^build"],
-      "inputs": ["default", "^production"]
+      "dependsOn": [
+        "^build"
+      ],
+      "inputs": [
+        "default",
+        "^production"
+      ]
     },
     "typecheck": {
       "cache": true,
-      "dependsOn": ["^build"],
-      "inputs": ["default", "^production"]
+      "dependsOn": [
+        "^build"
+      ],
+      "inputs": [
+        "default",
+        "^production"
+      ]
     }
   },
   "release": {
@@ -43,10 +64,7 @@
       "preVersionCommand": "pnpm exec nx run-many -t build --projects=packages/*",
       "conventionalCommits": true,
       "fallbackCurrentVersionResolver": "disk",
-      "updateDependents": "auto",
-      "generatorOptions": {
-        "skipLockFileUpdate": true
-      }
+      "updateDependents": "auto"
     },
     "changelog": {
       "projectChangelogs": false,
