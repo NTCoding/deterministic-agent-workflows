@@ -198,3 +198,30 @@ export function getTranscriptPath(deps: SessionQueryDeps, sessionId: string): st
   const payload: unknown = JSON.parse(row.payload)
   return parseTranscriptPath(payload)
 }
+
+/** @riviere-role query-model */
+export function getInitialState(deps: SessionQueryDeps, sessionId: string): {
+  readonly state: string;
+  readonly startedAt: string 
+} | null {
+  const rows = deps.db
+    .prepare("SELECT at, payload FROM events WHERE session_id = ? AND type = 'session-started' LIMIT 1")
+    .all(sessionId)
+  if (rows.length === 0) return null
+  const row = rows[0]
+  if (!isRecord(row)) return null
+  const payload: unknown = typeof row['payload'] === 'string' ? JSON.parse(row['payload']) : null
+  if (!isRecord(payload)) return null
+  const currentState = payload['currentState']
+  if (typeof currentState !== 'string' || currentState.length === 0) return null
+  return {
+    state: currentState,
+    startedAt: resolveStartedAt(row, payload),
+  }
+}
+
+function resolveStartedAt(row: Record<string, unknown>, payload: Record<string, unknown>): string {
+  if (typeof row['at'] === 'string') return row['at']
+  if (typeof payload['at'] === 'string') return payload['at']
+  return ''
+}

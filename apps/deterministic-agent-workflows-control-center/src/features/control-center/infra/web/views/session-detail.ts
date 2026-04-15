@@ -61,15 +61,26 @@ function hasContinue(session: SessionDetailDto): boolean {
     session.suggestions.some((suggestion) => typeof suggestion.prompt === 'string' && suggestion.prompt.length > 0)
 }
 
+function renderGithubNumber(repoRaw: string | undefined, kind: 'issues' | 'pull', n: number | undefined): string {
+  if (n === undefined) return 'MISSING'
+  if (repoRaw === undefined) return `#${n}`
+  return `<a href="https://github.com/${esc(repoRaw)}/${kind}/${n}" target="_blank" rel="noopener">#${n}</a>`
+}
+
+function renderRepoLink(repoRaw: string | undefined): string {
+  if (repoRaw === undefined) return '<span style="color:#c0392b">MISSING</span>'
+  return `<a href="https://github.com/${esc(repoRaw)}" target="_blank" rel="noopener">${esc(repoRaw)}</a>`
+}
+
 function renderHeader(session: SessionDetailDto): string {
-  const repo = session.repository === undefined ? '<span style="color:#c0392b">MISSING</span>' : esc(session.repository)
-  const issue = session.issueNumber === undefined ? 'MISSING' : `#${session.issueNumber}`
-  const pr = session.prNumber === undefined ? 'MISSING' : `#${session.prNumber}`
+  const repoHtml = renderRepoLink(session.repository)
+  const issueHtml = renderGithubNumber(session.repository, 'issues', session.issueNumber)
+  const prHtml = renderGithubNumber(session.repository, 'pull', session.prNumber)
   return `<div class="header" style="margin:-20px -24px 0;padding:10px 24px">` +
     `<div class="header-row">` +
     `<a href="#/" class="page-back">← Sessions</a>` +
     `<span class="sep">│</span>` +
-    `<h1>${repo}</h1>` +
+    `<h1>${repoHtml}</h1>` +
     `<span class="sep">│</span>` +
     `<span>Session ${truncateId(session.sessionId)}</span>` +
     `<span class="sep">│</span>` +
@@ -78,8 +89,8 @@ function renderHeader(session: SessionDetailDto): string {
     `<span>Started ${esc(formatTimestamp(session.firstEventAt))}</span>` +
     `<span>(${formatDuration(session.durationMs)})</span>` +
     `<span class="sep">│</span>` +
-    `<span>Issue ${esc(issue)}</span>` +
-    `<span>PR ${esc(pr)}</span>` +
+    `<span>Issue ${issueHtml}</span>` +
+    `<span>PR ${prHtml}</span>` +
     `</div></div>`
 }
 
@@ -154,7 +165,7 @@ function renderOverviewTab(session: SessionDetailDto): string {
   const insights = renderInsights(session.insights)
   const suggestions = renderSuggestions(session.suggestions)
   const activity = '<div id="activity-panel-host" class="ac-host"><div class="ac-loading">Loading activity…</div></div>'
-  return insights + suggestions + activity + metrics + renderTimelineBar(segments, session.workflowStates)
+  return insights + suggestions + metrics + renderTimelineBar(segments, session.workflowStates) + activity
 }
 
 function renderTabContent(session: SessionDetailDto, state: RenderState): string {

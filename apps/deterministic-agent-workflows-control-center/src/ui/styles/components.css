@@ -415,10 +415,21 @@
 .ac-col { padding: 10px 12px; }
 .ac-col + .ac-col { border-left: 1px solid #eee; }
 
-.ac-sub { margin-bottom: 14px; }
-.ac-sub:last-child { margin-bottom: 0; }
-.ac-sub-head { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #7f8c8d; margin-bottom: 4px; display: flex; align-items: baseline; gap: 6px; }
-.ac-sub-head .ac-n { font-family: monospace; font-size: 10px; color: #bdc3c7; font-weight: 400; }
+.ac-body { padding: 8px 12px; }
+.ac-sub { border-top: 1px solid #eee; padding: 6px 0; }
+.ac-sub:first-child { border-top: none; padding-top: 0; }
+.ac-sub:last-child { padding-bottom: 0; }
+.ac-sub-head { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #7f8c8d; margin-bottom: 4px; display: flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; }
+.ac-sub-head:hover { color: #2c3e50; }
+.ac-sub-head .ac-n { font-family: monospace; font-size: 10px; color: #bdc3c7; font-weight: 400; background: #ecf0f1; padding: 1px 6px; border-radius: 8px; }
+.ac-sub-arrow { color: #95a5a6; font-size: 9px; width: 9px; flex-shrink: 0; }
+.ac-sub-title { flex-shrink: 0; }
+.ac-sub-body { display: none; padding-left: 15px; }
+.ac-sub-body.open { display: block; }
+
+/* State chip used inside activity panel (pill with palette colour) */
+.ac-state-head .tr-state-chip,
+.ac-state-row .tr-state-chip { font-size: 10px; padding: 2px 8px; border-radius: 3px; color: white; font-weight: 700; letter-spacing: 0.4px; text-transform: uppercase; font-family: monospace; }
 
 .ac-row { display: flex; align-items: baseline; gap: 8px; padding: 2px 0; font-size: 12px; border-bottom: 1px solid #f5f5f5; line-height: 1.5; }
 .ac-row:last-child { border-bottom: none; }

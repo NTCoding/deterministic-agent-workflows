@@ -10,6 +10,7 @@ import {
   getSessionCount,
   getTotalEventCount,
   getTranscriptPath,
+  getInitialState,
 } from './session-queries'
 import {
   createTestDb,
@@ -196,6 +197,65 @@ describe('session-queries', () => {
 
     it('throws for malformed transcript payload rows', () => {
       expect(() => getTranscriptPath(createCustomDeps([{ payload: 123 }]), 'test-1')).toThrow('Expected transcript payload row.')
+    })
+  })
+
+  describe('getInitialState', () => {
+    it('returns null when session-started event is missing', () => {
+      expect(getInitialState(createTestQueryDeps(state.db), 'missing')).toBeNull()
+    })
+
+    it('returns state and startedAt from session-started payload', () => {
+      insertEvent(state.db, 'test-1', 'session-started', '2026-01-01T00:00:00Z', { currentState: 'IMPLEMENTING' })
+      expect(getInitialState(createTestQueryDeps(state.db), 'test-1')).toStrictEqual({
+        state: 'IMPLEMENTING',
+        startedAt: '2026-01-01T00:00:00Z',
+      })
+    })
+
+    it('returns null when currentState is missing', () => {
+      insertEvent(state.db, 'test-1', 'session-started', '2026-01-01T00:00:00Z', { foo: 'bar' })
+      expect(getInitialState(createTestQueryDeps(state.db), 'test-1')).toBeNull()
+    })
+
+    it('returns null when currentState is empty string', () => {
+      insertEvent(state.db, 'test-1', 'session-started', '2026-01-01T00:00:00Z', { currentState: '' })
+      expect(getInitialState(createTestQueryDeps(state.db), 'test-1')).toBeNull()
+    })
+
+    it('returns null when payload is not an object', () => {
+      state.db.prepare('INSERT INTO events (session_id, type, at, payload) VALUES (?, ?, ?, ?)')
+        .run('test-1', 'session-started', '2026-01-01T00:00:00Z', JSON.stringify('scalar'))
+      expect(getInitialState(createTestQueryDeps(state.db), 'test-1')).toBeNull()
+    })
+
+    it('returns null when row is not a record', () => {
+      expect(getInitialState(createCustomDeps(['not-a-record']), 'test-1')).toBeNull()
+    })
+
+    it('falls back to payload.at when row.at is absent', () => {
+      const result = getInitialState(createCustomDeps([{
+        payload: JSON.stringify({
+          currentState: 'DEV',
+          at: '2026-02-02T00:00:00Z' 
+        }),
+      }]), 'test-1')
+      expect(result).toStrictEqual({
+        state: 'DEV',
+        startedAt: '2026-02-02T00:00:00Z' 
+      })
+    })
+
+    it('returns empty startedAt when no at available', () => {
+      const result = getInitialState(createCustomDeps([{payload: JSON.stringify({ currentState: 'DEV' }),}]), 'test-1')
+      expect(result).toStrictEqual({
+        state: 'DEV',
+        startedAt: '' 
+      })
+    })
+
+    it('returns null when payload is not a JSON string', () => {
+      expect(getInitialState(createCustomDeps([{ payload: 42 }]), 'test-1')).toBeNull()
     })
   })
 })
