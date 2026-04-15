@@ -40,20 +40,18 @@ function stateForTimestamp(periods: ReadonlyArray<StatePeriod>, iso: string): st
   return null
 }
 
+const STATE_PALETTE: ReadonlyArray<string> = [
+  's-dev', 's-review', 's-commit', 's-pr', 's-feedback',
+  's-spawn', 's-cr', 's-respawn', 's-done', 's-plan',
+]
+
 function stateCssClass(state: string): string {
-  const s = state.toLowerCase()
-  if (s.includes('spawn')) return 's-spawn'
-  if (s.includes('plan')) return 's-plan'
-  if (s.includes('respawn')) return 's-respawn'
-  if (s.includes('dev')) return 's-dev'
-  if (s.includes('review') && !s.includes('cr')) return 's-review'
-  if (s.includes('commit')) return 's-commit'
-  if (s === 'cr' || s.includes('code_review')) return 's-cr'
-  if (s.includes('pr')) return 's-pr'
-  if (s.includes('done') || s.includes('complete')) return 's-done'
-  if (s.includes('block')) return 's-blocked'
-  if (s.includes('feedback')) return 's-feedback'
-  return 's-idle'
+  let hash = 0
+  for (let i = 0; i < state.length; i++) {
+    hash = ((hash << 5) - hash + state.charCodeAt(i)) | 0
+  }
+  const idx = Math.abs(hash) % STATE_PALETTE.length
+  return STATE_PALETTE[idx] ?? 's-idle'
 }
 
 /* ─── Pricing (USD per 1M tokens) ────────────────────────────────
@@ -190,13 +188,18 @@ function renderToolUseBlock(id: string, name: string, input: Record<string, unkn
   const fullJson = esc(JSON.stringify(input, null, 2))
   const bodyId = `tool-${id || Math.random().toString(36).slice(2)}`
   const diffHtml = (name === 'Edit' || name === 'Write' || name === 'MultiEdit') ? renderDiff(input) : ''
+  const body =
+    `<div id="${bodyId}" class="tr-tool-body">` +
+      `<pre>${fullJson}</pre>` +
+      diffHtml +
+    `</div>`
   return `<div class="tr-tool" data-tool-id="${esc(id)}" data-tool-name="${esc(name)}">` +
     `<div class="tr-tool-head" data-toggle="${bodyId}" data-pair-src="${esc(id)}">` +
       `<span class="tr-tool-name">⚙ ${esc(name)}</span>` +
       (preview ? `<span class="tr-tool-preview">${esc(preview)}</span>` : `<span class="tr-tool-preview"></span>`) +
       `<span class="tr-tool-arrow">▶</span>` +
     `</div>` +
-    `<pre id="${bodyId}" class="tr-tool-body">${fullJson}${diffHtml ? `\n</pre>${diffHtml}<pre class="tr-tool-body open" style="display:none">` : ''}</pre>` +
+    body +
   `</div>`
 }
 
@@ -564,7 +567,11 @@ function getFilterState(): FilterState {
   let query = searchVal.toLowerCase()
   const rxMatch = searchVal.match(/^\/(.+)\/([gimsuy]*)$/)
   if (rxMatch?.[1]) {
-    try { regex = new RegExp(rxMatch[1], rxMatch[2] ?? 'i'); query = '' } catch { regex = null }
+    try {
+      const flags = (rxMatch[2] ?? 'i').replaceAll(/[gy]/g, '')
+      regex = new RegExp(rxMatch[1], flags)
+      query = ''
+    } catch { regex = null }
   }
   const chk = (id: string): boolean => {
     const el = g(id); return el instanceof HTMLInputElement ? el.checked : false
@@ -625,9 +632,9 @@ function applyFilters(rowsContainer: HTMLElement): void {
   if (countEl) countEl.textContent = `${visible} of ${total} messages`
 
   // sync minimap visibility
-  document.querySelectorAll<HTMLElement>('.tr-mm-item').forEach((item) => {
+  document.querySelectorAll<HTMLElement>('.tr-mm-item, .tr-mm-transition').forEach((item) => {
     const idx = item.getAttribute('data-mm-idx')
-    const row = document.getElementById(`msg-${idx}`)
+    const row = idx ? document.getElementById(`msg-${idx}`) : null
     item.style.display = row && row.style.display !== 'none' ? '' : 'none'
   })
 }
@@ -859,12 +866,13 @@ export function attachTranscriptListeners(): void {
     else if (e.key === '?') { kbdHelp?.classList.toggle('open') }
     else if (e.key === 'Escape') { kbdHelp?.classList.remove('open') }
   }
-  // Only attach once per session to avoid stacking
   const w = window as unknown as Record<string, unknown>
-  if (w['__trKbdAttached'] !== true) {
-    document.addEventListener('keydown', onKey)
-    w['__trKbdAttached'] = true
+  const previous = w['__trKbdHandler']
+  if (typeof previous === 'function') {
+    document.removeEventListener('keydown', previous as EventListener)
   }
+  document.addEventListener('keydown', onKey)
+  w['__trKbdHandler'] = onKey
 
   // Deep-link: if URL has #msg-N, scroll into view
   const hash = window.location.hash

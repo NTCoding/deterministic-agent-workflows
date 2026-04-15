@@ -179,7 +179,7 @@ function renderPerStateRow(p: PerStateActivity, idx: number): string {
       `<span class="ac-state-time">${esc(time)}</span>` +
       summary +
     `</div>` +
-    (empty ? '' : `<div class="ac-state-body" id="ac-state-body-${idx}">${renderReportBody(p.report)}</div>`) +
+    (empty ? '' : `<div class="ac-state-body">${renderReportBody(p.report)}</div>`) +
   `</div>`
 }
 
@@ -207,11 +207,9 @@ export function attachActivityListeners(container: HTMLElement): void {
   const stateToggles = container.querySelectorAll<HTMLElement>('[data-ac-toggle]')
   for (const head of stateToggles) {
     head.addEventListener('click', () => {
-      const idx = head.getAttribute('data-ac-toggle')
-      if (idx === null) return
-      const body = container.querySelector<HTMLElement>(`#ac-state-body-${idx}`)
+      const body = head.nextElementSibling
       const arrow = head.querySelector<HTMLElement>('.ac-state-arrow')
-      if (body === null || arrow === null) return
+      if (!(body instanceof HTMLElement) || !body.classList.contains('ac-state-body') || arrow === null) return
       const open = body.classList.toggle('open')
       arrow.textContent = open ? '▼' : '▶'
     })

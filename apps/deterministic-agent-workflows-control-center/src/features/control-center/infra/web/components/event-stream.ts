@@ -58,7 +58,9 @@ type FacetCounts = {
 }
 
 function isEventDtoArray(value: unknown): value is Array<EventDto> {
-  return Array.isArray(value)
+  return Array.isArray(value) && value.every((item) =>
+    typeof item === 'object' && item !== null && 'type' in item && 'payload' in item
+  )
 }
 
 function buildFacetCounts(events: Array<EventDto>): FacetCounts {

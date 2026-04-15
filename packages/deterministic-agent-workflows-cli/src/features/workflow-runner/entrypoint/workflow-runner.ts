@@ -152,8 +152,8 @@ function handleWriteJournalRoute<
   const agentNameIndex = hasExplicitSessionId ? 2 : 1
   const contentIndex = hasExplicitSessionId ? 3 : 2
   const agentName = args[agentNameIndex]
-  const content = args[contentIndex]
-  if (typeof sessionId !== 'string' || typeof agentName !== 'string' || typeof content !== 'string') {
+  const content = args.slice(contentIndex).join(' ').trim()
+  if (typeof sessionId !== 'string' || typeof agentName !== 'string' || content.length === 0) {
     return {
       output: 'write-journal requires <agent-name> and <content> arguments',
       exitCode: EXIT_ERROR,

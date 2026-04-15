@@ -262,13 +262,18 @@ export async function renderSessionDetail(container: HTMLElement, sessionId: str
       transcript: null,
     }
 
+    const renderSeq = { current: 0 }
     const render = async (): Promise<void> => {
+      renderSeq.current += 1
+      const thisSeq = renderSeq.current
       if (state.activeTab === 'events' && state.events === null) {
         await loadEvents(sessionId, state)
       }
+      if (thisSeq !== renderSeq.current) return
       if (state.activeTab === 'transcript' && state.transcript === null) {
         await loadTranscript(sessionId, session, state)
       }
+      if (thisSeq !== renderSeq.current) return
 
       container.innerHTML = renderPage(session, state)
       attachDetailListeners(container)
@@ -290,7 +295,8 @@ export async function renderSessionDetail(container: HTMLElement, sessionId: str
     }
 
     await render()
-  } catch {
+  } catch (error) {
+    console.error('Failed to load session:', error)
     container.innerHTML = html`<div class="loading">Session not found</div>`
   }
 }

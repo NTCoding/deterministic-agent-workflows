@@ -26,9 +26,9 @@ export interface StoredEvent {
 /** @riviere-role domain-service */
 export function flattenStoredEvent(stored: StoredEvent): BaseEvent {
   return {
+    ...stripEnvelopeKeys(stored.payload),
     type: stored.envelope.type,
     at: stored.envelope.at,
-    ...stored.payload,
   }
 }
 

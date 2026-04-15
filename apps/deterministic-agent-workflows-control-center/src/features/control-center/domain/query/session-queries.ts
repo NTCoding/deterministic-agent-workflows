@@ -5,6 +5,21 @@ import type { SqliteDatabase } from './sqlite-runtime'
 /** @riviere-role query-model */
 export type SessionQueryDeps = {readonly db: SqliteDatabase}
 
+const stateColumnCache = new WeakMap<SqliteDatabase, boolean>()
+
+function hasStateColumn(db: SqliteDatabase): boolean {
+  const cached = stateColumnCache.get(db)
+  if (cached !== undefined) return cached
+  const rows = db.prepare('PRAGMA table_info(events)').all()
+  const has = rows.some((row) => isRecord(row) && row['name'] === 'state')
+  stateColumnCache.set(db, has)
+  return has
+}
+
+function stateProjection(db: SqliteDatabase): string {
+  return hasStateColumn(db) ? 'state' : 'NULL as state'
+}
+
 function parseEventRow(row: unknown): ParsedEvent {
   const validated = eventRowSchema.parse(row)
   const payload: unknown = JSON.parse(validated.payload)
@@ -100,7 +115,7 @@ export function getSessionEvents(
   sessionId: string,
 ): ReadonlyArray<ParsedEvent> {
   const rows = getRows(
-    deps.db.prepare('SELECT seq, session_id, type, at, NULL as state, payload FROM events WHERE session_id = ? ORDER BY seq').all(sessionId),
+    deps.db.prepare(`SELECT seq, session_id, type, at, ${stateProjection(deps.db)}, payload FROM events WHERE session_id = ? ORDER BY seq`).all(sessionId),
     (row) => eventRowSchema.parse(row),
   )
   return rows.map(parseEventRow)
@@ -139,7 +154,7 @@ export function getSessionEventsPaginated(
   const rows = getRows(
     deps.db
       .prepare(
-        `SELECT seq, session_id, type, at, NULL as state, payload FROM events WHERE ${whereClause} ORDER BY seq LIMIT ? OFFSET ?`,
+        `SELECT seq, session_id, type, at, ${stateProjection(deps.db)}, payload FROM events WHERE ${whereClause} ORDER BY seq LIMIT ? OFFSET ?`,
       )
       .all(...params, limit, offset),
     (row) => eventRowSchema.parse(row),
@@ -165,7 +180,7 @@ export function getEventsSinceSeq(
   const rows = getRows(
     deps.db
       .prepare(
-        'SELECT seq, session_id, type, at, NULL as state, payload FROM events WHERE seq > ? ORDER BY seq',
+        `SELECT seq, session_id, type, at, ${stateProjection(deps.db)}, payload FROM events WHERE seq > ? ORDER BY seq`,
       )
       .all(sinceSeq),
     (row) => eventRowSchema.parse(row),
@@ -190,11 +205,11 @@ export function getTotalEventCount(deps: SessionQueryDeps): number {
 
 /** @riviere-role query-model */
 export function getTranscriptPath(deps: SessionQueryDeps, sessionId: string): string | null {
-  const rows = deps.db
-    .prepare("SELECT payload FROM events WHERE session_id = ? AND type = 'session-started' LIMIT 1")
-    .all(sessionId)
-  if (rows.length === 0) return null
-  const row = parseTranscriptPayloadRow(rows[0])
+  const raw = deps.db
+    .prepare("SELECT payload FROM events WHERE session_id = ? AND type = 'session-started' ORDER BY seq ASC LIMIT 1")
+    .get(sessionId)
+  if (raw === undefined || raw === null) return null
+  const row = parseTranscriptPayloadRow(raw)
   const payload: unknown = JSON.parse(row.payload)
   return parseTranscriptPath(payload)
 }
@@ -204,11 +219,11 @@ export function getInitialState(deps: SessionQueryDeps, sessionId: string): {
   readonly state: string;
   readonly startedAt: string 
 } | null {
-  const rows = deps.db
-    .prepare("SELECT at, payload FROM events WHERE session_id = ? AND type = 'session-started' LIMIT 1")
-    .all(sessionId)
-  if (rows.length === 0) return null
-  const row = rows[0]
+  const raw = deps.db
+    .prepare("SELECT at, payload FROM events WHERE session_id = ? AND type = 'session-started' ORDER BY seq ASC LIMIT 1")
+    .get(sessionId)
+  if (raw === undefined || raw === null) return null
+  const row = raw
   if (!isRecord(row)) return null
   const payload: unknown = typeof row['payload'] === 'string' ? JSON.parse(row['payload']) : null
   if (!isRecord(payload)) return null

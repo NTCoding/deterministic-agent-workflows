@@ -214,10 +214,9 @@ type OpencodePartRow = {
 }
 
 function readOpencodeTranscript(dbPath: string, sessionId: string): TranscriptEntry[] {
+  const db = openSqliteDatabase(dbPath, { readonly: true })
   try {
-    const db = openSqliteDatabase(dbPath, { readonly: true })
-    try {
-      const rows = db.prepare(`
+    const rows = db.prepare(`
         SELECT m.id as message_id,
                json_extract(m.data, '$.role') as role,
                m.time_created,
@@ -228,89 +227,86 @@ function readOpencodeTranscript(dbPath: string, sessionId: string): TranscriptEn
         ORDER BY m.time_created ASC, p.time_created ASC
       `).all(sessionId) as unknown[]
 
-      const entriesByMessage = new Map<string, OpencodePartRow[]>()
-      for (const row of rows) {
-        const r = row as Record<string, unknown>
-        const msgId = r['message_id'] as string
-        if (!entriesByMessage.has(msgId)) {
-          entriesByMessage.set(msgId, [])
-        }
-        entriesByMessage.get(msgId)!.push({
-          message_id: msgId,
-          role: (typeof r['role'] === 'string' ? r['role'] : 'other') as string,
-          time_created: (typeof r['time_created'] === 'number' ? r['time_created'] : 0) as number,
-          part_data: (typeof r['part_data'] === 'string' ? r['part_data'] : '{}') as string,
-        })
+    const entriesByMessage = new Map<string, OpencodePartRow[]>()
+    for (const row of rows) {
+      const r = row as Record<string, unknown>
+      const msgId = r['message_id'] as string
+      if (!entriesByMessage.has(msgId)) {
+        entriesByMessage.set(msgId, [])
       }
+      entriesByMessage.get(msgId)!.push({
+        message_id: msgId,
+        role: (typeof r['role'] === 'string' ? r['role'] : 'other') as string,
+        time_created: (typeof r['time_created'] === 'number' ? r['time_created'] : 0) as number,
+        part_data: (typeof r['part_data'] === 'string' ? r['part_data'] : '{}') as string,
+      })
+    }
 
-      const entries: TranscriptEntry[] = []
-      for (const [msgId, partRows] of entriesByMessage) {
-        if (partRows.length === 0) continue
-        const first = partRows[0]
-        if (!first) continue
-        const role = first.role
-        const timestamp = new Date(first.time_created).toISOString()
-        const type: 'assistant' | 'user' | 'system' | 'other' = (
-          role === 'assistant' ? 'assistant' :
-            role === 'user' ? 'user' :
-              'other'
-        )
+    const entries: TranscriptEntry[] = []
+    for (const [msgId, partRows] of entriesByMessage) {
+      if (partRows.length === 0) continue
+      const first = partRows[0]
+      if (!first) continue
+      const role = first.role
+      const timestamp = new Date(first.time_created).toISOString()
+      const type: 'assistant' | 'user' | 'system' | 'other' = (
+        role === 'assistant' ? 'assistant' :
+          role === 'user' ? 'user' :
+            'other'
+      )
 
-        const content: TranscriptContentBlock[] = []
-        for (const part of partRows) {
-          let partObj: unknown
-          try { partObj = JSON.parse(part.part_data) } catch { continue }
-          if (typeof partObj !== 'object' || partObj === null) continue
-          const p = partObj as Record<string, unknown>
-          const partType = p['type'] as string | undefined
+      const content: TranscriptContentBlock[] = []
+      for (const part of partRows) {
+        let partObj: unknown
+        try { partObj = JSON.parse(part.part_data) } catch { continue }
+        if (typeof partObj !== 'object' || partObj === null) continue
+        const p = partObj as Record<string, unknown>
+        const partType = p['type'] as string | undefined
 
-          if (partType === 'text') {
-            const text = typeof p['text'] === 'string' ? (p['text'] as string).trim() : ''
-            if (text) content.push({
-              kind: 'text',
-              text 
-            })
-          } else if (partType === 'tool') {
-            const toolName = typeof p['tool'] === 'string' ? p['tool'] : 'tool'
-            const toolId = typeof p['id'] === 'string' ? p['id'] : ''
-            const state = typeof p['state'] === 'object' && p['state'] !== null ? p['state'] as Record<string, unknown> : {}
-            const input = (typeof state['input'] === 'object' && state['input'] !== null ? state['input'] : {}) as Record<string, unknown>
-            const output = state['output']
+        if (partType === 'text') {
+          const text = typeof p['text'] === 'string' ? (p['text'] as string).trim() : ''
+          if (text) content.push({
+            kind: 'text',
+            text 
+          })
+        } else if (partType === 'tool') {
+          const toolName = typeof p['tool'] === 'string' ? p['tool'] : 'tool'
+          const toolId = typeof p['id'] === 'string' ? p['id'] : ''
+          const state = typeof p['state'] === 'object' && p['state'] !== null ? p['state'] as Record<string, unknown> : {}
+          const input = (typeof state['input'] === 'object' && state['input'] !== null ? state['input'] : {}) as Record<string, unknown>
+          const output = state['output']
+          content.push({
+            kind: 'tool_use',
+            id: toolId,
+            name: toolName,
+            input 
+          })
+          if (output !== undefined) {
+            const outputText = typeof output === 'string' ? output : JSON.stringify(output)
             content.push({
-              kind: 'tool_use',
-              id: toolId,
-              name: toolName,
-              input 
+              kind: 'tool_result',
+              toolUseId: toolId,
+              toolName,
+              text: outputText.slice(0, 4000),
+              isError: false 
             })
-            if (output !== undefined) {
-              const outputText = typeof output === 'string' ? output : JSON.stringify(output)
-              content.push({
-                kind: 'tool_result',
-                toolUseId: toolId,
-                toolName,
-                text: outputText.slice(0, 4000),
-                isError: false 
-              })
-            }
           }
         }
-
-        if (content.length > 0) {
-          entries.push({
-            type,
-            timestamp,
-            content,
-            messageId: msgId 
-          })
-        }
       }
 
-      return entries
-    } finally {
-      db.close()
+      if (content.length > 0) {
+        entries.push({
+          type,
+          timestamp,
+          content,
+          messageId: msgId 
+        })
+      }
     }
-  } catch {
-    return []
+
+    return entries
+  } finally {
+    db.close()
   }
 }
 
@@ -362,33 +358,35 @@ export function handleGetTranscript(
       return
     }
 
-    console.log(`[transcript] sessionId=${sessionId}`)
     const transcriptPath = getTranscriptPath(deps.queryDeps, sessionId)
-    console.log(`[transcript] path=${transcriptPath}`)
     if (!transcriptPath) {
       sendError(res, 404, 'No transcript path for this session')
       return
     }
     if (!existsSync(transcriptPath)) {
-      console.log(`[transcript] file not found: ${transcriptPath}`)
       sendError(res, 404, `Transcript file not found: ${transcriptPath}`)
       return
     }
 
     let entries: TranscriptEntry[] = []
 
-    if (transcriptPath.endsWith('.jsonl')) {
-      const raw = readFileSync(transcriptPath, 'utf8')
-      const lines = raw.split('\n').filter(l => l.trim())
-      const toolNames = new Map<string, string>()
-      entries = lines.flatMap(line => {
-        const parsed = parseEntry(line, toolNames)
-        return parsed ? [parsed] : []
-      })
-    } else if (transcriptPath.endsWith('.db')) {
-      entries = readOpencodeTranscript(transcriptPath, sessionId)
-    } else {
-      sendError(res, 422, `Unsupported transcript format: ${transcriptPath}`)
+    try {
+      if (transcriptPath.endsWith('.jsonl')) {
+        const raw = readFileSync(transcriptPath, 'utf8')
+        const lines = raw.split('\n').filter(l => l.trim())
+        const toolNames = new Map<string, string>()
+        entries = lines.flatMap(line => {
+          const parsed = parseEntry(line, toolNames)
+          return parsed ? [parsed] : []
+        })
+      } else if (transcriptPath.endsWith('.db')) {
+        entries = readOpencodeTranscript(transcriptPath, sessionId)
+      } else {
+        sendError(res, 422, `Unsupported transcript format: ${transcriptPath}`)
+        return
+      }
+    } catch (error) {
+      sendError(res, 500, `Failed to read transcript: ${String(error)}`)
       return
     }
 

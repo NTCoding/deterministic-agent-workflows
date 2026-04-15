@@ -143,45 +143,41 @@ function extractToolCallsFromJsonl(path: string): ToolCall[] {
 }
 
 function extractToolCallsFromOpencode(dbPath: string, sessionId: string): ToolCall[] {
+  const db = openSqliteDatabase(dbPath, { readonly: true })
   try {
-    const db = openSqliteDatabase(dbPath, { readonly: true })
-    try {
-      const rows = db.prepare(`
-        SELECT m.time_created as m_time, p.time_created as p_time, p.data as part_data
-        FROM message m
-        JOIN part p ON p.message_id = m.id
-        WHERE m.session_id = ?
-        ORDER BY m.time_created ASC, p.time_created ASC
-      `).all(sessionId) as unknown[]
-      const calls: ToolCall[] = []
-      for (const row of rows) {
-        const r = row as Record<string, unknown>
-        const pTime = typeof r['p_time'] === 'number' ? r['p_time'] as number : 0
-        const mTime = typeof r['m_time'] === 'number' ? r['m_time'] as number : 0
-        const ts = pTime || mTime
-        const raw = typeof r['part_data'] === 'string' ? r['part_data'] as string : ''
-        let partObj: unknown
-        try { partObj = JSON.parse(raw) } catch { continue }
-        if (typeof partObj !== 'object' || partObj === null) continue
-        const p = partObj as Record<string, unknown>
-        if (p['type'] !== 'tool') continue
-        const name = str(p['tool'])
-        const state = typeof p['state'] === 'object' && p['state'] !== null ? p['state'] as Record<string, unknown> : {}
-        const input = typeof state['input'] === 'object' && state['input'] !== null
-          ? state['input'] as Record<string, unknown>
-          : {}
-        if (name) calls.push({
-          name,
-          input,
-          timestampMs: ts 
-        })
-      }
-      return calls
-    } finally {
-      db.close()
+    const rows = db.prepare(`
+      SELECT m.time_created as m_time, p.time_created as p_time, p.data as part_data
+      FROM message m
+      JOIN part p ON p.message_id = m.id
+      WHERE m.session_id = ?
+      ORDER BY m.time_created ASC, p.time_created ASC
+    `).all(sessionId) as unknown[]
+    const calls: ToolCall[] = []
+    for (const row of rows) {
+      const r = row as Record<string, unknown>
+      const pTime = typeof r['p_time'] === 'number' ? r['p_time'] as number : 0
+      const mTime = typeof r['m_time'] === 'number' ? r['m_time'] as number : 0
+      const ts = pTime || mTime
+      const raw = typeof r['part_data'] === 'string' ? r['part_data'] as string : ''
+      let partObj: unknown
+      try { partObj = JSON.parse(raw) } catch { continue }
+      if (typeof partObj !== 'object' || partObj === null) continue
+      const p = partObj as Record<string, unknown>
+      if (p['type'] !== 'tool') continue
+      const name = str(p['tool'])
+      const state = typeof p['state'] === 'object' && p['state'] !== null ? p['state'] as Record<string, unknown> : {}
+      const input = typeof state['input'] === 'object' && state['input'] !== null
+        ? state['input'] as Record<string, unknown>
+        : {}
+      if (name) calls.push({
+        name,
+        input,
+        timestampMs: ts,
+      })
     }
-  } catch {
-    return []
+    return calls
+  } finally {
+    db.close()
   }
 }
 
@@ -349,10 +345,15 @@ export function handleGetSessionActivity(
     const transcriptPath = getTranscriptPath(deps.queryDeps, sessionId)
     let calls: ToolCall[] = []
     if (transcriptPath && existsSync(transcriptPath)) {
-      if (transcriptPath.endsWith('.jsonl')) {
-        calls = extractToolCallsFromJsonl(transcriptPath)
-      } else if (transcriptPath.endsWith('.db')) {
-        calls = extractToolCallsFromOpencode(transcriptPath, sessionId)
+      try {
+        if (transcriptPath.endsWith('.jsonl')) {
+          calls = extractToolCallsFromJsonl(transcriptPath)
+        } else if (transcriptPath.endsWith('.db')) {
+          calls = extractToolCallsFromOpencode(transcriptPath, sessionId)
+        }
+      } catch (error) {
+        sendError(res, 500, `Failed to read transcript for activity: ${String(error)}`)
+        return
       }
     }
 
