@@ -27,7 +27,7 @@ const esbuildOptions = {
   entryPoints: [appEntryPoint],
   bundle: true,
   outfile: join(outDir, 'app.js'),
-  format: 'esm',
+  format: 'iife',
   target: 'es2022',
   minify: !watch,
   sourcemap: watch,

@@ -1,5 +1,5 @@
 import {
-  parseRoute, onRouteChange 
+  parseRoute, onRouteChange
 } from './router'
 import type { Route } from './router'
 import { renderDashboard } from './views/dashboard'
@@ -8,8 +8,34 @@ import { renderAnalytics } from './views/analytics'
 import { renderSessionCompare } from './views/session-compare'
 import { createSseClient } from './sse-client'
 import {
-  MissingElementError, asHtmlElement, getDatasetValue 
+  MissingElementError,
+  asHtmlElement,
+  getDatasetValue,
 } from './dom'
+
+function renderFatalError(container: HTMLElement, title: string, detail: string): void {
+  const div = document.createElement('div')
+  div.style.cssText = 'color: red; padding: 20px; white-space: pre-wrap; font-family: monospace; font-size: 12px;'
+  div.textContent = `${title}: ${detail}`
+  container.innerHTML = ''
+  container.append(div)
+}
+
+window.addEventListener('error', (event) => {
+  const app = document.getElementById('app')
+  if (app?.innerHTML.length === 0) {
+    renderFatalError(app, 'ERROR', `${event.message}\n${event.filename}:${event.lineno}`)
+  }
+  console.error('Global error:', event.error)
+})
+
+window.addEventListener('unhandledrejection', (event) => {
+  const app = document.getElementById('app')
+  if (app) {
+    renderFatalError(app, 'UNHANDLED REJECTION', String(event.reason))
+  }
+  console.error('Unhandled rejection:', event.reason)
+})
 
 function getAppContainer(): HTMLElement {
   const el = document.getElementById('app')
@@ -18,6 +44,8 @@ function getAppContainer(): HTMLElement {
 }
 
 async function renderRoute(route: Route): Promise<void> {
+  clearInterval(window.__dashboardTimer)
+  clearInterval(window.__sessionTimer)
   const container = getAppContainer()
 
   document.querySelectorAll('.nav-link').forEach((link) => {
@@ -66,9 +94,17 @@ function initSse(): void {
   })
 }
 
+function showRouteError(err: unknown): void {
+  const container = document.getElementById('app')
+  if (container) {
+    renderFatalError(container, 'Error', err instanceof Error ? err.message : String(err))
+  }
+  console.error('Failed to render route:', err)
+}
+
 const initialRoute = parseRoute()
-void renderRoute(initialRoute)
+renderRoute(initialRoute).catch(showRouteError)
 onRouteChange((route) => {
-  void renderRoute(route)
+  renderRoute(route).catch(showRouteError)
 })
 initSse()

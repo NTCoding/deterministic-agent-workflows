@@ -1,7 +1,9 @@
 import type {
-  BaseWorkflowState, EngineResult, RehydratableWorkflow, WorkflowEngineDeps 
+  BaseWorkflowState, EngineResult, RehydratableWorkflow, WorkflowEngineDeps
 } from '@nt-ai-lab/deterministic-agent-workflow-engine'
-import { WorkflowEngine } from '@nt-ai-lab/deterministic-agent-workflow-engine'
+import {
+  pass, WorkflowEngine 
+} from '@nt-ai-lab/deterministic-agent-workflow-engine'
 import {
   EXIT_ALLOW, EXIT_BLOCK, EXIT_ERROR 
 } from '../../../shell/exit-codes'
@@ -128,7 +130,7 @@ export function createWorkflowRunner<
   return (args, engineDeps, workflowDeps, options) => {
     const engine = new WorkflowEngine(config.workflowDefinition, engineDeps, workflowDeps)
     if (args.length > 0) {
-      return handleRoute(engine, config, args, args[0], options?.getSessionId, options?.getSessionTranscriptPath, options?.getSessionRepository)
+      return handleRoute(engine, engineDeps, config, args, args[0], options?.getSessionId, options?.getSessionTranscriptPath, options?.getSessionRepository)
     }
     if (options?.readStdin === undefined) return {
       output: 'No command and no stdin available',
@@ -138,17 +140,50 @@ export function createWorkflowRunner<
   }
 }
 
+function handleWriteJournalRoute<
+  TWorkflow extends RehydratableWorkflow<TState>,
+  TState extends BaseWorkflowState<TStateName>,
+  TDeps,
+  TStateName extends string,
+  TOperation extends string,
+>(engine: WorkflowEngine<TWorkflow, TState, TDeps, TStateName, TOperation>, engineDeps: WorkflowEngineDeps, args: readonly string[], getSessionId?: () => string): RunnerResult {
+  const hasExplicitSessionId = getSessionId === undefined
+  const sessionId = hasExplicitSessionId ? args[1] : getSessionId()
+  const agentNameIndex = hasExplicitSessionId ? 2 : 1
+  const contentIndex = hasExplicitSessionId ? 3 : 2
+  const agentName = args[agentNameIndex]
+  const content = args.slice(contentIndex).join(' ').trim()
+  if (typeof sessionId !== 'string' || typeof agentName !== 'string' || content.length === 0) {
+    return {
+      output: 'write-journal requires <agent-name> and <content> arguments',
+      exitCode: EXIT_ERROR,
+    }
+  }
+  return engineResultToRunnerResult(engine.transaction(sessionId, 'write-journal', (workflow) => {
+    workflow.appendEvent({
+      type: 'journal-entry',
+      at: engineDeps.now(),
+      agentName,
+      content,
+    })
+    return pass()
+  }))
+}
+
 function handleRoute<
   TWorkflow extends RehydratableWorkflow<TState>,
   TState extends BaseWorkflowState<TStateName>,
   TDeps,
   TStateName extends string,
   TOperation extends string,
->(engine: WorkflowEngine<TWorkflow, TState, TDeps, TStateName, TOperation>, config: WorkflowRunnerConfig<TWorkflow, TState, TDeps, TStateName, TOperation>, args: readonly string[], routeName: string, getSessionId?: () => string, getSessionTranscriptPath?: () => string, getSessionRepository?: () => string | undefined): RunnerResult {
+>(engine: WorkflowEngine<TWorkflow, TState, TDeps, TStateName, TOperation>, engineDeps: WorkflowEngineDeps, config: WorkflowRunnerConfig<TWorkflow, TState, TDeps, TStateName, TOperation>, args: readonly string[], routeName: string, getSessionId?: () => string, getSessionTranscriptPath?: () => string, getSessionRepository?: () => string | undefined): RunnerResult {
+  if (routeName === 'write-journal') {
+    return handleWriteJournalRoute(engine, engineDeps, args, getSessionId)
+  }
   const routeDef = Object.hasOwn(config.routes, routeName) ? config.routes[routeName] : undefined
   if (routeDef === undefined) return {
     output: `Unknown command: ${routeName}`,
-    exitCode: EXIT_ERROR 
+    exitCode: EXIT_ERROR
   }
 
   const parsedArgs = parseArgs(routeDef.args, args, routeName)

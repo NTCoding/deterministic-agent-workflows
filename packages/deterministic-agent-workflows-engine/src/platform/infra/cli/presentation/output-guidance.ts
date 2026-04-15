@@ -1,8 +1,26 @@
 export const SEPARATOR = '----------------------------------------------------------------'
 
+export const PLATFORM_NOTIFICATION_FENCE = '****************************************************************'
+
+export const JOURNAL_GUIDANCE = [
+  PLATFORM_NOTIFICATION_FENCE,
+  'PLATFORM NOTIFICATION',
+  '',
+  'Record your progress and reasoning as you work by calling:',
+  '  write-journal <agent-name> "<1\u20133 sentence note>"',
+  '',
+  'Use it for key decisions, progress milestones, and blockers.',
+  'Every session should have a journal trail of the work performed.',
+  PLATFORM_NOTIFICATION_FENCE,
+].join('\n')
+
 /** @riviere-role cli-output-formatter */
 export function formatBlock(title: string, body: string): string {
   return `${title}\n${SEPARATOR}\n${body}`
+}
+
+function appendJournalGuidance(body: string): string {
+  return `${body}\n\n${JOURNAL_GUIDANCE}`
 }
 
 /** @riviere-role cli-output-formatter */
@@ -11,7 +29,7 @@ export function formatTransitionSuccess(
   procedureContent: string,
   expectedPrefix: string,
 ): string {
-  return formatBlock(title, `${procedureContent}\n\nNext message MUST begin with: ${expectedPrefix}`)
+  return formatBlock(title, appendJournalGuidance(`${procedureContent}\n\nNext message MUST begin with: ${expectedPrefix}`))
 }
 
 /** @riviere-role cli-output-formatter */
@@ -51,5 +69,5 @@ export function formatOperationSuccess(op: string, body: string, expectedPrefix:
 
 /** @riviere-role cli-output-formatter */
 export function formatInitSuccess(procedureContent: string, expectedPrefix: string): string {
-  return formatBlock('Feature team initialized', `${procedureContent}\n\nNext message MUST begin with: ${expectedPrefix}`)
+  return formatBlock('Feature team initialized', appendJournalGuidance(`${procedureContent}\n\nNext message MUST begin with: ${expectedPrefix}`))
 }

@@ -5,23 +5,51 @@ import type { SqliteDatabase } from './sqlite-runtime'
 /** @riviere-role query-model */
 export type SessionQueryDeps = {readonly db: SqliteDatabase}
 
+const stateColumnCache = new WeakMap<SqliteDatabase, boolean>()
+
+function hasStateColumn(db: SqliteDatabase): boolean {
+  const cached = stateColumnCache.get(db)
+  if (cached !== undefined) return cached
+  const rows = db.prepare('PRAGMA table_info(events)').all()
+  const has = rows.some((row) => isRecord(row) && row['name'] === 'state')
+  stateColumnCache.set(db, has)
+  return has
+}
+
+function stateProjection(db: SqliteDatabase): string {
+  return hasStateColumn(db) ? 'state' : 'NULL as state'
+}
+
 function parseEventRow(row: unknown): ParsedEvent {
   const validated = eventRowSchema.parse(row)
   const payload: unknown = JSON.parse(validated.payload)
   if (!isRecord(payload)) {
     throw new TypeError('Event payload must be an object.')
   }
-  return {
+  const base = {
     seq: validated.seq,
     sessionId: validated.session_id,
     type: validated.type,
     at: validated.at,
-    payload,
+    payload: stripEnvelopeKeys(payload),
+  }
+  return validated.state === null ? base : {
+    ...base,
+    state: validated.state,
   }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
+}
+
+function stripEnvelopeKeys(record: Record<string, unknown>): Record<string, unknown> {
+  const result: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(record)) {
+    if (key === 'type' || key === 'at') continue
+    result[key] = value
+  }
+  return result
 }
 
 function getRows<T>(statementResult: readonly unknown[], parseRow: (row: unknown) => T): ReadonlyArray<T> {
@@ -57,6 +85,21 @@ function parseMaxSeqRow(row: unknown): { readonly maxSeq: number | null } {
   throw new TypeError('Expected numeric maxSeq row.')
 }
 
+function parseTranscriptPath(value: unknown): string | null {
+  if (!isRecord(value)) {
+    return null
+  }
+  const transcriptPath = value['transcriptPath']
+  return typeof transcriptPath === 'string' ? transcriptPath : null
+}
+
+function parseTranscriptPayloadRow(row: unknown): { readonly payload: string } {
+  if (!isRecord(row) || typeof row['payload'] !== 'string') {
+    throw new TypeError('Expected transcript payload row.')
+  }
+  return {payload: row['payload'],}
+}
+
 /** @riviere-role query-model */
 export function getDistinctSessionIds(deps: SessionQueryDeps): ReadonlyArray<string> {
   const rows = getRows(
@@ -72,7 +115,7 @@ export function getSessionEvents(
   sessionId: string,
 ): ReadonlyArray<ParsedEvent> {
   const rows = getRows(
-    deps.db.prepare('SELECT seq, session_id, type, at, payload FROM events WHERE session_id = ? ORDER BY seq').all(sessionId),
+    deps.db.prepare(`SELECT seq, session_id, type, at, ${stateProjection(deps.db)}, payload FROM events WHERE session_id = ? ORDER BY seq`).all(sessionId),
     (row) => eventRowSchema.parse(row),
   )
   return rows.map(parseEventRow)
@@ -111,7 +154,7 @@ export function getSessionEventsPaginated(
   const rows = getRows(
     deps.db
       .prepare(
-        `SELECT seq, session_id, type, at, payload FROM events WHERE ${whereClause} ORDER BY seq LIMIT ? OFFSET ?`,
+        `SELECT seq, session_id, type, at, ${stateProjection(deps.db)}, payload FROM events WHERE ${whereClause} ORDER BY seq LIMIT ? OFFSET ?`,
       )
       .all(...params, limit, offset),
     (row) => eventRowSchema.parse(row),
@@ -137,7 +180,7 @@ export function getEventsSinceSeq(
   const rows = getRows(
     deps.db
       .prepare(
-        'SELECT seq, session_id, type, at, payload FROM events WHERE seq > ? ORDER BY seq',
+        `SELECT seq, session_id, type, at, ${stateProjection(deps.db)}, payload FROM events WHERE seq > ? ORDER BY seq`,
       )
       .all(sinceSeq),
     (row) => eventRowSchema.parse(row),
@@ -158,4 +201,42 @@ export function getSessionCount(deps: SessionQueryDeps): number {
 export function getTotalEventCount(deps: SessionQueryDeps): number {
   const row = getSingleRow(deps.db.prepare('SELECT COUNT(*) as count FROM events').get(), parseCountRow)
   return row.count
+}
+
+/** @riviere-role query-model */
+export function getTranscriptPath(deps: SessionQueryDeps, sessionId: string): string | null {
+  const raw = deps.db
+    .prepare("SELECT payload FROM events WHERE session_id = ? AND type = 'session-started' ORDER BY seq ASC LIMIT 1")
+    .get(sessionId)
+  if (raw === undefined || raw === null) return null
+  const row = parseTranscriptPayloadRow(raw)
+  const payload: unknown = JSON.parse(row.payload)
+  return parseTranscriptPath(payload)
+}
+
+/** @riviere-role query-model */
+export function getInitialState(deps: SessionQueryDeps, sessionId: string): {
+  readonly state: string;
+  readonly startedAt: string 
+} | null {
+  const raw = deps.db
+    .prepare("SELECT at, payload FROM events WHERE session_id = ? AND type = 'session-started' ORDER BY seq ASC LIMIT 1")
+    .get(sessionId)
+  if (raw === undefined || raw === null) return null
+  const row = raw
+  if (!isRecord(row)) return null
+  const payload: unknown = typeof row['payload'] === 'string' ? JSON.parse(row['payload']) : null
+  if (!isRecord(payload)) return null
+  const currentState = payload['currentState']
+  if (typeof currentState !== 'string' || currentState.length === 0) return null
+  return {
+    state: currentState,
+    startedAt: resolveStartedAt(row, payload),
+  }
+}
+
+function resolveStartedAt(row: Record<string, unknown>, payload: Record<string, unknown>): string {
+  if (typeof row['at'] === 'string') return row['at']
+  if (typeof payload['at'] === 'string') return payload['at']
+  return ''
 }

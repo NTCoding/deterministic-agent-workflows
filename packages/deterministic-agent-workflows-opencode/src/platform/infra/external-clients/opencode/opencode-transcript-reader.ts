@@ -13,11 +13,9 @@ const textPartSchema = z.object({
   text: z.string() 
 })
 
-const messageDataSchema = z.object({ parts: z.array(z.unknown()) })
-
-const messageRowSchema = z.object({
-  id: z.string(),
-  data: z.string(),
+const partRowSchema = z.object({
+  message_id: z.string(),
+  part_data: z.string(),
 })
 
 /** @riviere-role external-client-model */
@@ -38,37 +36,52 @@ export class OpenCodeTranscriptReader implements TranscriptReader {
   }
 
   private queryMessages(db: SqliteDatabase): readonly TranscriptMessage[] {
-    return db
+    const textByMessage = new Map<string, string[]>()
+
+    const rows = db
       .prepare(
-        `SELECT id, data FROM message
-         WHERE session_id = ? AND json_extract(data, '$.role') = 'assistant'
-         ORDER BY time_created ASC`,
+        `SELECT m.id AS message_id, p.data AS part_data
+         FROM message m
+         JOIN part p ON p.message_id = m.id
+         WHERE m.session_id = ? AND json_extract(m.data, '$.role') = 'assistant'
+         ORDER BY m.time_created ASC, p.time_created ASC`,
       )
       .all(this.sessionId)
-      .flatMap((row) => this.parseRow(row))
+
+    for (const row of rows) {
+      const parsedRow = partRowSchema.safeParse(row)
+      if (!parsedRow.success) {
+        continue
+      }
+
+      const textContent = this.parseTextPart(parsedRow.data.part_data)
+      if (textContent === undefined) {
+        continue
+      }
+
+      const existingParts = textByMessage.get(parsedRow.data.message_id) ?? []
+      existingParts.push(textContent)
+      textByMessage.set(parsedRow.data.message_id, existingParts)
+    }
+
+    return [...textByMessage.entries()].map(([id, parts]) => ({
+      id,
+      textContent: parts.join('\n'),
+    }))
   }
 
-  private parseRow(row: unknown): TranscriptMessage[] {
-    const rowResult = messageRowSchema.safeParse(row)
-    if (!rowResult.success) {
-      return []
+  private parseTextPart(partData: string): string | undefined {
+    const parsedData: unknown = JSON.parse(partData)
+    const textPart = textPartSchema.safeParse(parsedData)
+    if (!textPart.success) {
+      return undefined
     }
-    const parsedData: unknown = JSON.parse(rowResult.data.data)
-    const dataResult = messageDataSchema.safeParse(parsedData)
-    if (!dataResult.success) {
-      return []
-    }
-    return [{
-      id: rowResult.data.id,
-      textContent: extractFirstText(dataResult.data.parts),
-    }]
-  }
-}
 
-function extractFirstText(parts: readonly unknown[]): string | undefined {
-  for (const part of parts) {
-    const result = textPartSchema.safeParse(part)
-    if (result.success) return result.data.text
+    const textContent = textPart.data.text.trim()
+    if (textContent.length === 0) {
+      return undefined
+    }
+
+    return textContent
   }
-  return undefined
 }
