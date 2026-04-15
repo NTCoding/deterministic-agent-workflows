@@ -8,7 +8,7 @@ export class MissingElementError extends Error {
 
 const EMPTY_STRING = ''
 
-declare global { interface Window { __events?: unknown } }
+declare global { interface Window { __events?: unknown; __transcriptEvents?: unknown } }
 
 /** @riviere-role web-tbc */
 export function getRequiredElement<T extends HTMLElement>(
@@ -55,12 +55,12 @@ export function getTextContent(node: Node): string {
 }
 
 /** @riviere-role web-tbc */
-export function storeWindowValue(key: '__events', value: unknown): void {
+export function storeWindowValue(key: '__events' | '__transcriptEvents', value: unknown): void {
   window[key] = value
 }
 
 /** @riviere-role web-tbc */
-export function readWindowValue<T>(key: '__events', predicate: (value: unknown) => value is T): T | undefined {
+export function readWindowValue<T>(key: '__events' | '__transcriptEvents', predicate: (value: unknown) => value is T): T | undefined {
   const value = window[key]
   return predicate(value) ? value : undefined
 }

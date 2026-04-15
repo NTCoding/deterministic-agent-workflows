@@ -40,6 +40,8 @@ function getAppContainer(): HTMLElement {
 }
 
 async function renderRoute(route: Route): Promise<void> {
+  clearInterval((window as unknown as Record<string, unknown>)['__dashboardTimer'] as number | undefined)
+  clearInterval((window as unknown as Record<string, unknown>)['__sessionTimer'] as number | undefined)
   const container = getAppContainer()
 
   document.querySelectorAll('.nav-link').forEach((link) => {

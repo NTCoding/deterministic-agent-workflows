@@ -17,10 +17,13 @@ import {
   renderSuggestions, attachSuggestionListeners 
 } from '../components/suggestion-cards'
 import {
-  renderContinueTab, attachContinueListeners 
+  renderContinueTab, attachContinueListeners
 } from '../components/continue-tab'
 import {
-  html, esc, formatDuration, formatTimestamp, formatTimeOnly, truncateId 
+  renderTranscript, attachTranscriptListeners
+} from '../components/transcript-view'
+import {
+  html, esc, formatDuration, formatTimestamp, formatTimeOnly, truncateId
 } from '../render'
 import {
   asHtmlElement,
@@ -28,7 +31,7 @@ import {
   storeWindowValue,
 } from '.././dom'
 
-type TabName = 'overview' | 'events' | 'journal' | 'insights' | 'continue'
+type TabName = 'overview' | 'events' | 'journal' | 'insights' | 'continue' | 'transcript'
 
 /** @riviere-role web-tbc */
 export async function renderSessionDetail(container: HTMLElement, sessionId: string): Promise<void> {
@@ -36,10 +39,13 @@ export async function renderSessionDetail(container: HTMLElement, sessionId: str
 
   try {
     const session = await api.getSession(sessionId)
+    let sessionTimer: ReturnType<typeof setInterval> | undefined
     const state: {
       activeTab: TabName
       eventsCache: Array<EventDto> | null
       eventsTotal: number
+      transcriptCache: Array<EventDto> | null
+      transcriptTotal: number
       drillFilter: {
         dimension: string
         value: string
@@ -48,11 +54,13 @@ export async function renderSessionDetail(container: HTMLElement, sessionId: str
       activeTab: 'overview',
       eventsCache: null,
       eventsTotal: 0,
+      transcriptCache: null,
+      transcriptTotal: 0,
       drillFilter: null,
     }
 
     async function renderContent(): Promise<void> {
-      container.innerHTML = renderSessionPage(session, state.activeTab, state.eventsCache, state.eventsTotal)
+      container.innerHTML = renderSessionPage(session, state.activeTab, state.eventsCache, state.eventsTotal, state.transcriptCache, state.transcriptTotal)
       attachTabListeners(container, (tab: TabName) => {
         state.activeTab = tab
         state.drillFilter = null
@@ -66,9 +74,10 @@ export async function renderSessionDetail(container: HTMLElement, sessionId: str
         state.activeTab = 'events'
         state.drillFilter = {
           dimension: dim,
-          value: val 
+          value: val
         }
         state.eventsCache = null
+        clearInterval(sessionTimer)
         await renderContent()
       })
 
@@ -77,11 +86,11 @@ export async function renderSessionDetail(container: HTMLElement, sessionId: str
           const filterParams = state.drillFilter?.dimension === 'outcome' && state.drillFilter.value === 'denied'
             ? {
               limit: 500,
-              denied: true 
+              denied: true
             }
             : { limit: 500 }
           const {
-            events, total 
+            events, total
           } = await api.getSessionEvents(sessionId, filterParams)
           state.eventsCache = events
           state.eventsTotal = total
@@ -94,6 +103,54 @@ export async function renderSessionDetail(container: HTMLElement, sessionId: str
         } else if (state.eventsCache) {
           attachEventStreamListeners()
         }
+      }
+
+      if (state.activeTab === 'transcript' && !state.transcriptCache) {
+        const transcriptEl = container.querySelector('#transcript-tab-content')
+        const { events, total } = await api.getSessionEvents(sessionId, { limit: 500 })
+        state.transcriptCache = events
+        state.transcriptTotal = total
+        if (transcriptEl) {
+          transcriptEl.innerHTML = renderTranscript(events, total)
+          attachTranscriptListeners()
+        } else {
+          await renderContent()
+        }
+        return
+      }
+
+      if (state.activeTab === 'transcript' && state.transcriptCache) {
+        attachTranscriptListeners()
+      }
+
+      clearInterval(sessionTimer)
+      ;(window as unknown as Record<string, unknown>)['__sessionTimer'] = undefined
+      if (state.activeTab === 'overview') {
+        sessionTimer = setInterval(async () => {
+          try {
+            const fresh = await api.getSession(sessionId)
+            const overviewEl = container.querySelector('#overview-tab-content')
+            if (overviewEl instanceof HTMLElement) {
+              overviewEl.innerHTML = renderOverviewTab(fresh)
+              attachDrillDownListeners(container, async (dim, val) => {
+                state.activeTab = 'events'
+                state.drillFilter = { dimension: dim, value: val }
+                state.eventsCache = null
+                clearInterval(sessionTimer)
+                await renderContent()
+              })
+            }
+          } catch {
+            // silent
+          }
+        }, 120_000)
+        ;(window as unknown as Record<string, unknown>)['__sessionTimer'] = sessionTimer
+      } else {
+        // Don't update UI, but silently pre-fetch so tab switches feel instant
+        sessionTimer = setInterval(async () => {
+          try { await api.getSession(sessionId) } catch { /* silent */ }
+        }, 120_000)
+        ;(window as unknown as Record<string, unknown>)['__sessionTimer'] = sessionTimer
       }
     }
 
@@ -112,7 +169,7 @@ function missing(): string {
   return '<span style="color:#c0392b;font-weight:500">MISSING</span>'
 }
 
-function renderSessionPage(session: SessionDetailDto, activeTab: TabName, events: Array<EventDto> | null, eventsTotal: number): string {
+function renderSessionPage(session: SessionDetailDto, activeTab: TabName, events: Array<EventDto> | null, eventsTotal: number, transcriptEvents: Array<EventDto> | null, transcriptTotal: number): string {
   const headerParts: Array<string> = []
 
   const repoDisplay = session.repository ? esc(session.repository) : missing()
@@ -163,7 +220,12 @@ function renderSessionPage(session: SessionDetailDto, activeTab: TabName, events
     {
       name: 'events',
       label: 'Event Log',
-      count: session.totalEvents 
+      count: session.totalEvents
+    },
+    {
+      name: 'transcript' as const,
+      label: 'Transcript',
+      count: session.totalEvents
     },
     {
       name: 'journal',
@@ -190,10 +252,13 @@ function renderSessionPage(session: SessionDetailDto, activeTab: TabName, events
   }).join('')
 
   const tabContentByName: Record<TabName, string> = {
-    overview: renderOverviewTab(session),
+    overview: `<div id="overview-tab-content">${renderOverviewTab(session)}</div>`,
     events: events
       ? renderEventStream(events, eventsTotal)
       : html`<div id="events-tab-content" class="loading">Loading events...</div>`,
+    transcript: transcriptEvents
+      ? renderTranscript(transcriptEvents, transcriptTotal)
+      : html`<div id="transcript-tab-content" class="loading">Loading transcript...</div>`,
     journal: renderJournalList(session.journalEntries),
     insights: renderInsights(session.insights),
     continue: renderContinueTab(session.insights, session.suggestions),
@@ -267,7 +332,7 @@ function attachTabListeners(
     tabEl.addEventListener('click', () => {
       if (!asHtmlElement(tabEl)) return
       const tabName = getDatasetValue(tabEl, 'tab')
-      if (tabName === 'overview' || tabName === 'events' || tabName === 'journal' || tabName === 'insights' || tabName === 'continue') {
+      if (tabName === 'overview' || tabName === 'events' || tabName === 'journal' || tabName === 'insights' || tabName === 'continue' || tabName === 'transcript') {
         onTabChange(tabName)
       }
     })

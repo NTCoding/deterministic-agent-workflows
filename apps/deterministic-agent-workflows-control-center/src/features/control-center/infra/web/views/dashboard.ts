@@ -57,6 +57,7 @@ function renderControls(activeFilter: StatusFilter): string {
 
 /** @riviere-role web-tbc */
 export async function renderDashboard(container: HTMLElement): Promise<void> {
+  clearInterval((window as unknown as Record<string, unknown>)['__dashboardTimer'] as number | undefined)
   container.innerHTML = html`<div class="loading">Loading sessions...</div>`
 
   try {
@@ -130,6 +131,13 @@ export async function renderDashboard(container: HTMLElement): Promise<void> {
     }
 
     render()
+    ;(window as unknown as Record<string, unknown>)['__dashboardTimer'] = setInterval(async () => {
+      try {
+        await renderDashboard(container)
+      } catch {
+        // silent - don't disrupt user on error
+      }
+    }, 120_000)
   } catch (err) {
     container.innerHTML = html`<div class="loading">Error loading sessions: ${err instanceof Error ? err.message : 'Unknown error'}</div>`
   }
