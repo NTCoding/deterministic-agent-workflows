@@ -138,6 +138,33 @@ export function createWorkflowRunner<
   }
 }
 
+function handleWriteJournalRoute<
+  TWorkflow extends RehydratableWorkflow<TState>,
+  TState extends BaseWorkflowState<TStateName>,
+  TDeps,
+  TStateName extends string,
+  TOperation extends string,
+>(engine: WorkflowEngine<TWorkflow, TState, TDeps, TStateName, TOperation>, args: readonly string[], getSessionId?: () => string): RunnerResult {
+  const hasExplicitSessionId = getSessionId === undefined
+  const sessionId = hasExplicitSessionId ? args[1] : getSessionId()
+  const agentNameIndex = hasExplicitSessionId ? 2 : 1
+  const contentIndex = hasExplicitSessionId ? 3 : 2
+  const agentName = args[agentNameIndex]
+  const content = args[contentIndex]
+  if (typeof sessionId !== 'string' || typeof agentName !== 'string' || typeof content !== 'string') {
+    return {
+      output: 'write-journal requires <agent-name> and <content> arguments',
+      exitCode: EXIT_ERROR,
+    }
+  }
+  return engineResultToRunnerResult(engine.transaction(sessionId, 'write-journal', (workflow) => {
+    if (typeof workflow.writeJournal !== 'function') {
+      throw new TypeError('Workflow does not implement writeJournal(agentName, content). Add this method to enable platform journaling.')
+    }
+    return workflow.writeJournal(agentName, content)
+  }))
+}
+
 function handleRoute<
   TWorkflow extends RehydratableWorkflow<TState>,
   TState extends BaseWorkflowState<TStateName>,
@@ -145,10 +172,13 @@ function handleRoute<
   TStateName extends string,
   TOperation extends string,
 >(engine: WorkflowEngine<TWorkflow, TState, TDeps, TStateName, TOperation>, config: WorkflowRunnerConfig<TWorkflow, TState, TDeps, TStateName, TOperation>, args: readonly string[], routeName: string, getSessionId?: () => string, getSessionTranscriptPath?: () => string, getSessionRepository?: () => string | undefined): RunnerResult {
+  if (routeName === 'write-journal') {
+    return handleWriteJournalRoute(engine, args, getSessionId)
+  }
   const routeDef = Object.hasOwn(config.routes, routeName) ? config.routes[routeName] : undefined
   if (routeDef === undefined) return {
     output: `Unknown command: ${routeName}`,
-    exitCode: EXIT_ERROR 
+    exitCode: EXIT_ERROR
   }
 
   const parsedArgs = parseArgs(routeDef.args, args, routeName)
