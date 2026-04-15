@@ -1,5 +1,5 @@
 import {
-  parseRoute, onRouteChange 
+  parseRoute, onRouteChange
 } from './router'
 import type { Route } from './router'
 import { renderDashboard } from './views/dashboard'
@@ -8,8 +8,30 @@ import { renderAnalytics } from './views/analytics'
 import { renderSessionCompare } from './views/session-compare'
 import { createSseClient } from './sse-client'
 import {
-  MissingElementError, asHtmlElement, getDatasetValue 
+  MissingElementError, asHtmlElement, getDatasetValue
 } from './dom'
+
+console.log('App module loaded')
+
+// Global error handler for module execution
+window.addEventListener('error', (event) => {
+  const app = document.getElementById('app')
+  if (app?.innerHTML.length === 0) {
+    const appEl = document.getElementById('app')
+    if (appEl) {
+      appEl.innerHTML = `<div style="color: red; padding: 20px; white-space: pre-wrap; font-family: monospace; font-size: 12px;">ERROR: ${event.message}\n${event.filename}:${event.lineno}</div>`
+    }
+  }
+  console.error('Global error:', event.error)
+})
+
+window.addEventListener('unhandledrejection', (event) => {
+  const app = document.getElementById('app')
+  if (app) {
+    app.innerHTML = `<div style="color: red; padding: 20px; white-space: pre-wrap; font-family: monospace; font-size: 12px;">UNHANDLED REJECTION: ${event.reason}</div>`
+  }
+  console.error('Unhandled rejection:', event.reason)
+})
 
 function getAppContainer(): HTMLElement {
   const el = document.getElementById('app')
@@ -67,8 +89,16 @@ function initSse(): void {
 }
 
 const initialRoute = parseRoute()
-void renderRoute(initialRoute)
+renderRoute(initialRoute).catch((err) => {
+  const container = document.getElementById('app')
+  if (container) {
+    container.innerHTML = `<div style="color:red;padding:20px;">Error: ${err instanceof Error ? err.message : String(err)}</div>`
+  }
+  console.error('Failed to render initial route:', err)
+})
 onRouteChange((route) => {
-  void renderRoute(route)
+  renderRoute(route).catch((err) => {
+    console.error('Failed to render route:', err)
+  })
 })
 initSse()
