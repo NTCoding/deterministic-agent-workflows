@@ -399,12 +399,12 @@
 /* ─────────────────────────────────────────────────────────────
    Activity panel ("What happened")
    ───────────────────────────────────────────────────────────── */
-.ac-host { margin-bottom: 20px; }
+.ac-host { margin-top: 16px; margin-bottom: 20px; }
 .ac-loading { padding: 14px; color: #95a5a6; font-size: 12px; font-style: italic; background: white; border: 1px solid #ddd; border-radius: 2px; }
 .ac-wrap { display: flex; flex-direction: column; gap: 14px; }
 
 .ac-section { background: white; border: 1px solid #d0d0d0; border-radius: 3px; overflow: hidden; }
-.ac-section-head { padding: 8px 12px; background: #2c3e50; color: #ecf0f1; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; border-bottom: 2px solid #1a252f; }
+.ac-section-head { padding: 8px 12px; background: #2c3e50; color: #ecf0f1; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; border-bottom: 2px solid #1a252f; display: flex; align-items: center; gap: 8px; cursor: pointer; }
 .ac-section-head .ac-section-sub { font-weight: 400; letter-spacing: 0; text-transform: none; color: #bdc3c7; margin-left: 6px; }
 
 .ac-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 12px; border-bottom: 1px solid #eee; }
