@@ -68,7 +68,7 @@ function annotateEvents(events: ReadonlyArray<import('../../../../domain/query/q
   return events.map((event) => ({
     ...event,
     category: categorizeEvent(event.type),
-    state: stateMap.get(event.seq) ?? 'idle',
+    state: event.state ?? stateMap.get(event.seq) ?? 'idle',
     detail: extractEventDetail(event),
     denied: isPermissionDenied(event),
   }))

@@ -27,7 +27,7 @@ export async function startServer(cliArgs: StartControlCenterInput): Promise<{ r
   const queryDeps: SessionQueryDeps = { db }
 
   const currentDir = dirname(fileURLToPath(import.meta.url))
-  const distDir = join(currentDir, '..', 'dist', 'ui')
+  const distDir = join(currentDir, '..', '..', 'dist', 'ui')
 
   const httpServer = createHttpServer({
     queryDeps,

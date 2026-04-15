@@ -286,6 +286,13 @@ export function projectSessionSummary(
 }
 
 function freezeProjection(mutable: MutableProjection): SessionProjection {
+  const statePeriods = mutable.statePeriods.map((period) => ({ ...period }))
+  const lastPeriod = statePeriods[statePeriods.length - 1]
+  if (lastPeriod !== undefined && lastPeriod.endedAt === undefined && mutable.lastEventAt) {
+    lastPeriod.endedAt = mutable.lastEventAt
+    lastPeriod.durationMs = new Date(mutable.lastEventAt).getTime() - new Date(lastPeriod.startedAt).getTime()
+  }
+
   return {
     sessionId: mutable.sessionId,
     currentState: mutable.currentState,
@@ -300,7 +307,7 @@ function freezeProjection(mutable: MutableProjection): SessionProjection {
     issueNumber: mutable.issueNumber,
     featureBranch: mutable.featureBranch,
     prNumber: mutable.prNumber,
-    statePeriods: mutable.statePeriods.map((period) => ({ ...period })),
+    statePeriods,
     journalEntries: [...mutable.journalEntries],
     journalEntryCount: mutable.journalEntryCount,
   }

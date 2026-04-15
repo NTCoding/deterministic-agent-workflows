@@ -4,6 +4,16 @@ export { WorkflowStateError } from './platform/domain/workflow-state'
 export type { BaseEvent } from './platform/domain/base-event'
 export { baseEventSchema } from './platform/domain/base-event'
 
+export type {
+  EventEnvelope,
+  StoredEvent,
+} from './platform/domain/stored-event'
+export {
+  flattenStoredEvent,
+  stripEnvelopeKeys,
+  toPayload,
+} from './platform/domain/stored-event'
+
 export { engineEventSchema } from './platform/domain/engine-events'
 export type {
   EngineEvent,

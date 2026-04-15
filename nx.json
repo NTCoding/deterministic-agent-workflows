@@ -43,10 +43,7 @@
       "preVersionCommand": "pnpm exec nx run-many -t build --projects=packages/*",
       "conventionalCommits": true,
       "fallbackCurrentVersionResolver": "disk",
-      "updateDependents": "auto",
-      "generatorOptions": {
-        "skipLockFileUpdate": true
-      }
+      "updateDependents": "auto"
     },
     "changelog": {
       "projectChangelogs": false,

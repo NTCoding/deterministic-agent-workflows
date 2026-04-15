@@ -273,7 +273,28 @@ pnpm --filter deterministic-agent-workflows-control-center start -- --db ~/.work
 
 Open `http://localhost:3120`
 
+View all sessions stored in the database:
 ![Control Center](docs/control-center.png)
+
+Analyze how much time was spent in each state of an inidividual session:
+
+![Actiity by state](docs/session-timeline.png)
+
+Explore what happened during each state:
+
+![Activity by state](docs/activity-by-state.png)
+
+Dig into the session transcript organized by workflow state:
+
+![Transcript by state](docs/transcript-by-state.png)
+
+Search the event log:
+
+![Event log](docs/event-log.png)
+
+
+
+
 
 ## References
 

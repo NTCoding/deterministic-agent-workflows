@@ -57,6 +57,7 @@ function renderControls(activeFilter: StatusFilter): string {
 
 /** @riviere-role web-tbc */
 export async function renderDashboard(container: HTMLElement): Promise<void> {
+  clearInterval(window.__dashboardTimer)
   container.innerHTML = html`<div class="loading">Loading sessions...</div>`
 
   try {
@@ -130,8 +131,17 @@ export async function renderDashboard(container: HTMLElement): Promise<void> {
     }
 
     render()
+    window.__dashboardTimer = setInterval(() => {
+      void renderDashboard(container).catch(() => undefined)
+    }, 120_000)
   } catch (err) {
-    container.innerHTML = html`<div class="loading">Error loading sessions: ${err instanceof Error ? err.message : 'Unknown error'}</div>`
+    const message = err instanceof Error ? err.message : 'Unknown error'
+    const div = document.createElement('div')
+    div.className = 'loading'
+    div.textContent = `Error loading sessions: ${message}`
+    container.innerHTML = ''
+    container.append(div)
+    console.error('Failed to load sessions:', err)
   }
 }
 
