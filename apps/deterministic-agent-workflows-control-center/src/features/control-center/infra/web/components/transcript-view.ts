@@ -8,37 +8,37 @@ function formatTime(iso: string): string {
 
 function renderToolUseBlock(name: string, input: Record<string, unknown>): string {
   const key = Object.keys(input)[0] ?? ''
-  const val = key ? String(Object.values(input)[0] ?? '').slice(0, 80) : ''
+  const val = key ? String(Object.values(input)[0] ?? '').slice(0, 60) : ''
   const preview = key ? `${key}: ${val}` : ''
   const fullJson = esc(JSON.stringify(input, null, 2))
   const id = `tool-${Math.random().toString(36).slice(2)}`
-  return `<div class="tr-tool" style="margin:4px 0">` +
-    `<div class="tr-tool-head" data-toggle="${id}" style="cursor:pointer;display:inline-flex;align-items:center;gap:6px;background:#f0f4f8;border:1px solid #dde3eb;border-radius:4px;padding:3px 8px;font-size:11px;font-family:monospace">` +
-    `<span style="color:#3498db">⚙ ${esc(name)}</span>` +
-    (preview ? `<span style="color:#888">${esc(preview)}</span>` : '') +
-    `<span style="color:#aaa;font-size:10px">▶</span>` +
+  return `<div class="tr-tool" style="margin:8px 0;border-left:3px solid #3498db">` +
+    `<div class="tr-tool-head" data-toggle="${id}" style="cursor:pointer;display:flex;align-items:center;gap:8px;background:#ecf0f7;padding:8px 12px;font-size:12px;user-select:none">` +
+    `<span style="color:#3498db;font-weight:600">⚙ ${esc(name)}</span>` +
+    (preview ? `<span style="color:#888;font-family:monospace;font-size:11px">${esc(preview)}</span>` : '') +
+    `<span style="color:#aaa;margin-left:auto;font-size:11px">▶</span>` +
     `</div>` +
-    `<pre id="${id}" style="display:none;margin:4px 0 0 0;background:#f9f9f9;border:1px solid #eee;border-radius:4px;padding:8px;font-size:11px;overflow-x:auto;white-space:pre-wrap">${fullJson}</pre>` +
+    `<pre id="${id}" style="display:none;margin:0;background:#f9f9f9;border-bottom:3px solid #3498db;padding:12px;font-size:11px;overflow-x:auto;white-space:pre-wrap;max-height:200px;overflow-y:auto">${fullJson}</pre>` +
     `</div>`
 }
 
 function renderToolResultBlock(toolName: string, text: string): string {
-  const preview = text.slice(0, 100).replace(/\n/g, ' ')
+  const preview = text.slice(0, 80).replace(/\n/g, ' ')
   const id = `result-${Math.random().toString(36).slice(2)}`
   const escaped = esc(text)
-  return `<div class="tr-result" style="margin:4px 0">` +
-    `<div class="tr-result-head" data-toggle="${id}" style="cursor:pointer;display:inline-flex;align-items:center;gap:6px;background:#f9f9f9;border:1px solid #eee;border-radius:4px;padding:3px 8px;font-size:11px;font-family:monospace">` +
-    `<span style="color:#27ae60">↩ ${esc(toolName)}</span>` +
-    `<span style="color:#aaa">${esc(preview)}${text.length > 100 ? '…' : ''}</span>` +
-    `<span style="color:#aaa;font-size:10px">▶</span>` +
+  return `<div class="tr-result" style="margin:8px 0;border-left:3px solid #27ae60">` +
+    `<div class="tr-result-head" data-toggle="${id}" style="cursor:pointer;display:flex;align-items:center;gap:8px;background:#ecf7f0;padding:8px 12px;font-size:12px;user-select:none">` +
+    `<span style="color:#27ae60;font-weight:600">↩ ${esc(toolName)}</span>` +
+    `<span style="color:#888;font-size:11px">${esc(preview)}${text.length > 80 ? '…' : ''}</span>` +
+    `<span style="color:#aaa;margin-left:auto;font-size:11px">▶</span>` +
     `</div>` +
-    `<pre id="${id}" style="display:none;margin:4px 0 0 0;background:#f9f9f9;border:1px solid #eee;border-radius:4px;padding:8px;font-size:11px;overflow-x:auto;white-space:pre-wrap">${escaped}</pre>` +
+    `<pre id="${id}" style="display:none;margin:0;background:#f9f9f9;border-bottom:3px solid #27ae60;padding:12px;font-size:11px;overflow-x:auto;white-space:pre-wrap;max-height:200px;overflow-y:auto">${escaped}</pre>` +
     `</div>`
 }
 
 function renderContentBlock(block: TranscriptContentBlock): string {
   if (block.kind === 'text') {
-    return `<div class="tr-text" style="white-space:pre-wrap;word-break:break-word;font-size:13px;line-height:1.6;color:#222">${esc(block.text)}</div>`
+    return `<div class="tr-text" style="white-space:pre-wrap;word-break:break-word;font-size:13px;line-height:1.6;color:#333;font-style:normal;font-weight:normal">${esc(block.text)}</div>`
   }
   if (block.kind === 'tool_use') {
     return renderToolUseBlock(block.name, block.input)
@@ -54,28 +54,25 @@ function renderEntry(entry: TranscriptEntry, idx: number): string {
   const contentHtml = entry.content.map(renderContentBlock).join('')
 
   if (entry.type === 'assistant') {
-    return `<div class="tr-entry tr-assistant" data-idx="${idx}" style="display:flex;gap:12px;padding:12px 0;border-bottom:1px solid #f0f0f0">` +
-      `<div style="min-width:60px;color:#aaa;font-size:11px;font-family:monospace;padding-top:2px">${time}</div>` +
-      `<div style="flex:1">` +
-      `<div style="font-size:11px;font-weight:600;color:#3498db;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px">Agent</div>` +
+    return `<div class="tr-entry tr-assistant" data-idx="${idx}" style="display:grid;grid-template-columns:80px 1fr;gap:16px;padding:16px 0;border-bottom:1px solid #e8e8e8">` +
+      `<div style="display:flex;flex-direction:column;align-items:flex-start">` +
+      `<div style="color:#3498db;font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:0.5px">Agent</div>` +
+      `<div style="color:#bbb;font-size:10px;font-family:monospace;margin-top:4px">${time}</div>` +
+      `</div>` +
+      `<div style="min-width:0">` +
       contentHtml +
       `</div>` +
       `</div>`
   }
 
   if (entry.type === 'user') {
-    // User entries are mostly tool results and hook context — render compactly
     const hasOnlyToolResults = entry.content.every(b => b.kind === 'tool_result')
-    if (hasOnlyToolResults) {
-      return `<div class="tr-entry tr-tool-results" data-idx="${idx}" style="display:flex;gap:12px;padding:6px 0;border-bottom:1px solid #f8f8f8">` +
-        `<div style="min-width:60px;color:#ccc;font-size:11px;font-family:monospace;padding-top:2px">${time}</div>` +
-        `<div style="flex:1">${contentHtml}</div>` +
-        `</div>`
-    }
-    return `<div class="tr-entry tr-user" data-idx="${idx}" style="display:flex;gap:12px;padding:8px 0;border-bottom:1px solid #f5f5f5">` +
-      `<div style="min-width:60px;color:#aaa;font-size:11px;font-family:monospace;padding-top:2px">${time}</div>` +
-      `<div style="flex:1">` +
-      `<div style="font-size:11px;font-weight:600;color:#95a5a6;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px">Context</div>` +
+    return `<div class="tr-entry tr-user" data-idx="${idx}" style="display:grid;grid-template-columns:80px 1fr;gap:16px;padding:${hasOnlyToolResults ? 8 : 12}px 0;border-bottom:1px solid #f2f2f2">` +
+      `<div style="display:flex;flex-direction:column;align-items:flex-start">` +
+      `<div style="color:#999;font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:0.5px">Context</div>` +
+      `<div style="color:#ddd;font-size:10px;font-family:monospace;margin-top:4px">${time}</div>` +
+      `</div>` +
+      `<div style="min-width:0;${hasOnlyToolResults ? 'background:#fafafa;padding:8px;border-radius:3px' : ''}">` +
       contentHtml +
       `</div>` +
       `</div>`
@@ -91,15 +88,15 @@ export function renderTranscript(entries: ReadonlyArray<TranscriptEntry>, total:
 
   const rows = entries.map((e, i) => renderEntry(e, i)).filter(Boolean).join('')
 
-  return `<div style="padding:16px">` +
-    `<div style="display:flex;gap:12px;align-items:center;margin-bottom:16px">` +
-    `<input id="transcript-search" type="text" placeholder="Search transcript..." style="flex:1;padding:6px 10px;border:1px solid #ddd;border-radius:4px;font-size:13px" />` +
-    `<label style="font-size:12px;color:#888;display:flex;align-items:center;gap:4px;cursor:pointer">` +
-    `<input id="transcript-agent-only" type="checkbox" /> Agent messages only` +
+  return `<div style="padding:20px;max-width:100%">` +
+    `<div style="display:flex;gap:12px;align-items:center;margin-bottom:20px;flex-wrap:wrap">` +
+    `<input id="transcript-search" type="text" placeholder="Search conversation..." style="flex:1;min-width:200px;padding:8px 12px;border:1px solid #ddd;border-radius:4px;font-size:13px;font-style:normal" />` +
+    `<label style="font-size:12px;color:#888;display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none">` +
+    `<input id="transcript-agent-only" type="checkbox" style="cursor:pointer" /> Agent only` +
     `</label>` +
-    `<span id="transcript-count" style="color:#aaa;font-size:13px">${total} entries</span>` +
+    `<span id="transcript-count" style="color:#aaa;font-size:12px;font-family:monospace">${total} msgs</span>` +
     `</div>` +
-    `<div id="transcript-rows">${rows}</div>` +
+    `<div id="transcript-rows" style="font-family:system-ui,-apple-system,sans-serif">${rows}</div>` +
     `</div>`
 }
 
@@ -109,7 +106,6 @@ export function attachTranscriptListeners(): void {
   const rowsContainer = document.getElementById('transcript-rows')
   if (!rowsContainer) return
 
-  // Toggle collapsible tool blocks
   rowsContainer.addEventListener('click', (e) => {
     const head = (e.target as HTMLElement).closest('[data-toggle]')
     if (!(head instanceof HTMLElement)) return
@@ -140,7 +136,7 @@ export function attachTranscriptListeners(): void {
     })
     const countEl = document.getElementById('transcript-count')
     const total = rowsContainer?.querySelectorAll('.tr-entry').length ?? 0
-    if (countEl) countEl.textContent = `${visible} of ${total} entries`
+    if (countEl) countEl.textContent = `${visible} of ${total} msgs`
   }
 
   searchInput?.addEventListener('input', applyFilters)

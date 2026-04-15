@@ -183,12 +183,15 @@ export function handleGetTranscript(
       return
     }
 
+    console.log(`[transcript] sessionId=${sessionId}`)
     const transcriptPath = getTranscriptPath(deps.queryDeps, sessionId)
+    console.log(`[transcript] path=${transcriptPath}`)
     if (!transcriptPath) {
       sendError(res, 404, 'No transcript path for this session')
       return
     }
     if (!existsSync(transcriptPath)) {
+      console.log(`[transcript] file not found: ${transcriptPath}`)
       sendError(res, 404, `Transcript file not found: ${transcriptPath}`)
       return
     }
