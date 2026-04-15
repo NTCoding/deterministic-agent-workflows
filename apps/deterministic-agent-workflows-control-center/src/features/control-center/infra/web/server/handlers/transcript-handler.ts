@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { readFileSync, existsSync } from 'node:fs'
+import { readFileSync, existsSync, statSync } from 'node:fs'
 import type { SessionQueryDeps } from '../../../../domain/query/session-queries'
 import { getTranscriptPath } from '../../../../domain/query/session-queries'
 import type { RouteParams } from '../router'
@@ -10,37 +10,83 @@ export type TranscriptHandlerDeps = {
   readonly queryDeps: SessionQueryDeps
 }
 
+export type TranscriptUsage = {
+  readonly inputTokens: number
+  readonly outputTokens: number
+  readonly cacheReadInputTokens: number
+  readonly cacheCreationInputTokens: number
+}
+
 export type TranscriptEntry = {
   readonly type: 'assistant' | 'user' | 'system' | 'other'
   readonly timestamp: string
   readonly content: ReadonlyArray<TranscriptContentBlock>
+  readonly messageId?: string
+  readonly parentUuid?: string | null
+  readonly isSidechain?: boolean
+  readonly model?: string
+  readonly stopReason?: string
+  readonly usage?: TranscriptUsage
 }
 
 export type TranscriptContentBlock =
   | { readonly kind: 'text'; readonly text: string }
-  | { readonly kind: 'tool_use'; readonly name: string; readonly input: Record<string, unknown> }
-  | { readonly kind: 'tool_result'; readonly toolName: string; readonly text: string }
+  | { readonly kind: 'thinking'; readonly text: string }
+  | { readonly kind: 'tool_use'; readonly id: string; readonly name: string; readonly input: Record<string, unknown> }
+  | { readonly kind: 'tool_result'; readonly toolUseId: string; readonly toolName: string; readonly text: string; readonly isError: boolean }
+
+export type TranscriptTotals = {
+  readonly inputTokens: number
+  readonly outputTokens: number
+  readonly cacheReadInputTokens: number
+  readonly cacheCreationInputTokens: number
+  readonly assistantMessages: number
+}
+
+export type TranscriptResponseBody = {
+  readonly entries: ReadonlyArray<TranscriptEntry>
+  readonly total: number
+  readonly transcriptPath: string
+  readonly fileSize?: number
+  readonly fileModified?: string
+  readonly totals: TranscriptTotals
+  readonly toolCounts: Record<string, number>
+  readonly modelsUsed: ReadonlyArray<string>
+}
 
 function parseContentBlock(block: unknown, toolNames: Map<string, string>): TranscriptContentBlock | null {
   if (typeof block !== 'object' || block === null) return null
   const b = block as Record<string, unknown>
-  if (b['type'] === 'text' && typeof b['text'] === 'string') {
+  const type = b['type']
+
+  if (type === 'text' && typeof b['text'] === 'string') {
     const text = b['text'].trim()
     if (!text) return null
     return { kind: 'text', text }
   }
-  if (b['type'] === 'tool_use' && typeof b['name'] === 'string') {
+
+  if (type === 'thinking' && typeof b['thinking'] === 'string') {
+    const text = b['thinking'].trim()
+    if (!text) return null
+    return { kind: 'thinking', text }
+  }
+
+  if (type === 'tool_use' && typeof b['name'] === 'string') {
+    const id = typeof b['id'] === 'string' ? b['id'] : ''
     const name = b['name'] as string
-    if (typeof b['id'] === 'string') toolNames.set(b['id'] as string, name)
+    if (id) toolNames.set(id, name)
     return {
       kind: 'tool_use',
+      id,
       name,
       input: (typeof b['input'] === 'object' && b['input'] !== null ? b['input'] : {}) as Record<string, unknown>,
     }
   }
-  if (b['type'] === 'tool_result') {
-    const id = typeof b['tool_use_id'] === 'string' ? b['tool_use_id'] as string : ''
+
+  if (type === 'tool_result') {
+    const id = typeof b['tool_use_id'] === 'string' ? b['tool_use_id'] : ''
     const toolName = toolNames.get(id) ?? 'tool'
+    const isError = b['is_error'] === true
     const content = b['content']
     let text = ''
     if (Array.isArray(content)) {
@@ -53,9 +99,22 @@ function parseContentBlock(block: unknown, toolNames: Map<string, string>): Tran
     } else if (typeof content === 'string') {
       text = content
     }
-    return { kind: 'tool_result', toolName, text: text.slice(0, 2000) }
+    return { kind: 'tool_result', toolUseId: id, toolName, text: text.slice(0, 4000), isError }
   }
+
   return null
+}
+
+function parseUsage(raw: unknown): TranscriptUsage | undefined {
+  if (typeof raw !== 'object' || raw === null) return undefined
+  const u = raw as Record<string, unknown>
+  const num = (k: string): number => (typeof u[k] === 'number' ? u[k] as number : 0)
+  return {
+    inputTokens: num('input_tokens'),
+    outputTokens: num('output_tokens'),
+    cacheReadInputTokens: num('cache_read_input_tokens'),
+    cacheCreationInputTokens: num('cache_creation_input_tokens'),
+  }
 }
 
 function parseEntry(line: string, toolNames: Map<string, string>): TranscriptEntry | null {
@@ -65,6 +124,8 @@ function parseEntry(line: string, toolNames: Map<string, string>): TranscriptEnt
   const entry = obj as Record<string, unknown>
 
   const timestamp = typeof entry['timestamp'] === 'string' ? entry['timestamp'] : new Date().toISOString()
+  const parentUuid = typeof entry['parentUuid'] === 'string' ? entry['parentUuid'] : null
+  const isSidechain = entry['isSidechain'] === true
 
   if (entry['type'] === 'assistant' || entry['type'] === 'user') {
     const msg = entry['message'] as Record<string, unknown> | undefined
@@ -75,12 +136,23 @@ function parseEntry(line: string, toolNames: Map<string, string>): TranscriptEnt
       return parsed ? [parsed] : []
     })
     if (content.length === 0) return null
-    return { type: entry['type'] as 'assistant' | 'user', timestamp, content }
+    const result: TranscriptEntry = {
+      type: entry['type'] as 'assistant' | 'user',
+      timestamp,
+      content,
+      parentUuid,
+      isSidechain,
+      ...(typeof msg['id'] === 'string' ? { messageId: msg['id'] as string } : {}),
+      ...(typeof msg['model'] === 'string' ? { model: msg['model'] as string } : {}),
+      ...(typeof msg['stop_reason'] === 'string' ? { stopReason: msg['stop_reason'] as string } : {}),
+      ...(parseUsage(msg['usage']) ? { usage: parseUsage(msg['usage'])! } : {}),
+    }
+    return result
   }
 
   if (entry['type'] === 'system') {
     const text = typeof entry['text'] === 'string' ? entry['text'] : JSON.stringify(entry)
-    return { type: 'system', timestamp, content: [{ kind: 'text', text: text.slice(0, 500) }] }
+    return { type: 'system', timestamp, content: [{ kind: 'text', text: text.slice(0, 500) }], parentUuid, isSidechain }
   }
 
   return null
@@ -124,9 +196,10 @@ function readOpencodeTranscript(dbPath: string, sessionId: string): TranscriptEn
       }
 
       const entries: TranscriptEntry[] = []
-      for (const [, partRows] of entriesByMessage) {
+      for (const [msgId, partRows] of entriesByMessage) {
         if (partRows.length === 0) continue
         const first = partRows[0]
+        if (!first) continue
         const role = first.role
         const timestamp = new Date(first.time_created).toISOString()
         const type: 'assistant' | 'user' | 'system' | 'other' = (
@@ -148,19 +221,20 @@ function readOpencodeTranscript(dbPath: string, sessionId: string): TranscriptEn
             if (text) content.push({ kind: 'text', text })
           } else if (partType === 'tool') {
             const toolName = typeof p['tool'] === 'string' ? p['tool'] : 'tool'
+            const toolId = typeof p['id'] === 'string' ? p['id'] : ''
             const state = typeof p['state'] === 'object' && p['state'] !== null ? p['state'] as Record<string, unknown> : {}
-            const input = typeof state['input'] === 'object' && state['input'] !== null ? state['input'] : {}
+            const input = (typeof state['input'] === 'object' && state['input'] !== null ? state['input'] : {}) as Record<string, unknown>
             const output = state['output']
-            content.push({ kind: 'tool_use', name: toolName, input })
+            content.push({ kind: 'tool_use', id: toolId, name: toolName, input })
             if (output !== undefined) {
               const outputText = typeof output === 'string' ? output : JSON.stringify(output)
-              content.push({ kind: 'tool_result', toolName, text: outputText.slice(0, 2000) })
+              content.push({ kind: 'tool_result', toolUseId: toolId, toolName, text: outputText.slice(0, 4000), isError: false })
             }
           }
         }
 
         if (content.length > 0) {
-          entries.push({ type, timestamp, content })
+          entries.push({ type, timestamp, content, messageId: msgId })
         }
       }
 
@@ -171,6 +245,37 @@ function readOpencodeTranscript(dbPath: string, sessionId: string): TranscriptEn
   } catch {
     return []
   }
+}
+
+function computeTotals(entries: ReadonlyArray<TranscriptEntry>): TranscriptTotals {
+  const t = { inputTokens: 0, outputTokens: 0, cacheReadInputTokens: 0, cacheCreationInputTokens: 0, assistantMessages: 0 }
+  for (const e of entries) {
+    if (e.type === 'assistant') t.assistantMessages++
+    if (!e.usage) continue
+    t.inputTokens += e.usage.inputTokens
+    t.outputTokens += e.usage.outputTokens
+    t.cacheReadInputTokens += e.usage.cacheReadInputTokens
+    t.cacheCreationInputTokens += e.usage.cacheCreationInputTokens
+  }
+  return t
+}
+
+function computeToolCounts(entries: ReadonlyArray<TranscriptEntry>): Record<string, number> {
+  const counts: Record<string, number> = {}
+  for (const e of entries) {
+    for (const b of e.content) {
+      if (b.kind === 'tool_use') counts[b.name] = (counts[b.name] ?? 0) + 1
+    }
+  }
+  return counts
+}
+
+function computeModelsUsed(entries: ReadonlyArray<TranscriptEntry>): string[] {
+  const set = new Set<string>()
+  for (const e of entries) {
+    if (typeof e.model === 'string' && e.model.length > 0) set.add(e.model)
+  }
+  return [...set]
 }
 
 export function handleGetTranscript(
@@ -213,6 +318,24 @@ export function handleGetTranscript(
       return
     }
 
-    sendJson(res, 200, { entries, total: entries.length, transcriptPath })
+    let fileSize: number | undefined
+    let fileModified: string | undefined
+    try {
+      const s = statSync(transcriptPath)
+      fileSize = s.size
+      fileModified = s.mtime.toISOString()
+    } catch { /* ignore */ }
+
+    const body: TranscriptResponseBody = {
+      entries,
+      total: entries.length,
+      transcriptPath,
+      ...(fileSize !== undefined ? { fileSize } : {}),
+      ...(fileModified !== undefined ? { fileModified } : {}),
+      totals: computeTotals(entries),
+      toolCounts: computeToolCounts(entries),
+      modelsUsed: computeModelsUsed(entries),
+    }
+    sendJson(res, 200, body)
   }
 }

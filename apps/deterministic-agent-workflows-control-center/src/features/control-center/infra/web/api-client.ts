@@ -93,14 +93,38 @@ export type EventDto = {
 /** @riviere-role web-tbc */
 export type TranscriptContentBlock =
   | { readonly kind: 'text'; readonly text: string }
-  | { readonly kind: 'tool_use'; readonly name: string; readonly input: Record<string, unknown> }
-  | { readonly kind: 'tool_result'; readonly toolName: string; readonly text: string }
+  | { readonly kind: 'thinking'; readonly text: string }
+  | { readonly kind: 'tool_use'; readonly id: string; readonly name: string; readonly input: Record<string, unknown> }
+  | { readonly kind: 'tool_result'; readonly toolUseId: string; readonly toolName: string; readonly text: string; readonly isError: boolean }
+
+/** @riviere-role web-tbc */
+export type TranscriptUsage = {
+  readonly inputTokens: number
+  readonly outputTokens: number
+  readonly cacheReadInputTokens: number
+  readonly cacheCreationInputTokens: number
+}
 
 /** @riviere-role web-tbc */
 export type TranscriptEntry = {
   readonly type: 'assistant' | 'user' | 'system' | 'other'
   readonly timestamp: string
   readonly content: ReadonlyArray<TranscriptContentBlock>
+  readonly messageId?: string | undefined
+  readonly parentUuid?: string | null | undefined
+  readonly isSidechain?: boolean | undefined
+  readonly model?: string | undefined
+  readonly stopReason?: string | undefined
+  readonly usage?: TranscriptUsage | undefined
+}
+
+/** @riviere-role web-tbc */
+export type TranscriptTotals = {
+  readonly inputTokens: number
+  readonly outputTokens: number
+  readonly cacheReadInputTokens: number
+  readonly cacheCreationInputTokens: number
+  readonly assistantMessages: number
 }
 
 /** @riviere-role web-tbc */
@@ -108,6 +132,11 @@ export type TranscriptResponse = {
   readonly entries: ReadonlyArray<TranscriptEntry>
   readonly total: number
   readonly transcriptPath: string
+  readonly fileSize?: number | undefined
+  readonly fileModified?: string | undefined
+  readonly totals: TranscriptTotals
+  readonly toolCounts: Record<string, number>
+  readonly modelsUsed: ReadonlyArray<string>
 }
 
 /** @riviere-role web-tbc */
@@ -284,20 +313,47 @@ async function fetchParsedJson<T>(path: string, schema: z.ZodType<T>): Promise<T
 
 const transcriptContentBlockSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('text'), text: z.string() }),
-  z.object({ kind: z.literal('tool_use'), name: z.string(), input: z.record(z.unknown()) }),
-  z.object({ kind: z.literal('tool_result'), toolName: z.string(), text: z.string() }),
+  z.object({ kind: z.literal('thinking'), text: z.string() }),
+  z.object({ kind: z.literal('tool_use'), id: z.string(), name: z.string(), input: z.record(z.unknown()) }),
+  z.object({ kind: z.literal('tool_result'), toolUseId: z.string(), toolName: z.string(), text: z.string(), isError: z.boolean() }),
 ])
+
+const transcriptUsageSchema = z.object({
+  inputTokens: z.number(),
+  outputTokens: z.number(),
+  cacheReadInputTokens: z.number(),
+  cacheCreationInputTokens: z.number(),
+})
 
 const transcriptEntrySchema = z.object({
   type: z.enum(['assistant', 'user', 'system', 'other']),
   timestamp: z.string(),
   content: z.array(transcriptContentBlockSchema),
+  messageId: z.string().optional(),
+  parentUuid: z.string().nullable().optional(),
+  isSidechain: z.boolean().optional(),
+  model: z.string().optional(),
+  stopReason: z.string().optional(),
+  usage: transcriptUsageSchema.optional(),
+})
+
+const transcriptTotalsSchema = z.object({
+  inputTokens: z.number(),
+  outputTokens: z.number(),
+  cacheReadInputTokens: z.number(),
+  cacheCreationInputTokens: z.number(),
+  assistantMessages: z.number(),
 })
 
 const transcriptResponseSchema = z.object({
   entries: z.array(transcriptEntrySchema),
   total: z.number(),
   transcriptPath: z.string(),
+  fileSize: z.number().optional(),
+  fileModified: z.string().optional(),
+  totals: transcriptTotalsSchema,
+  toolCounts: z.record(z.number()),
+  modelsUsed: z.array(z.string()),
 })
 
 /** @riviere-role web-tbc */

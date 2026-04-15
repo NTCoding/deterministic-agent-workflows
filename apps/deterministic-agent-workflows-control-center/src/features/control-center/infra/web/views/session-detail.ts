@@ -57,6 +57,21 @@ export async function renderSessionDetail(container: HTMLElement, sessionId: str
       drillFilter: null,
     }
 
+    // Cross-tab deep-link: transcript "events →" link switches to events tab.
+    // Remove any previous listener (from an earlier session view) to avoid stacking.
+    const w = window as unknown as Record<string, unknown>
+    const prev = w['__trGotoEventsHandler']
+    if (typeof prev === 'function') {
+      window.removeEventListener('tr:goto-events', prev as EventListener)
+    }
+    const handler: EventListener = () => {
+      state.activeTab = 'events'
+      state.eventsCache = null
+      void renderContent()
+    }
+    window.addEventListener('tr:goto-events', handler)
+    w['__trGotoEventsHandler'] = handler
+
     async function renderContent(): Promise<void> {
       container.innerHTML = renderSessionPage(session, state.activeTab, state.eventsCache, state.eventsTotal, state.transcriptRendered)
       attachTabListeners(container, (tab: TabName) => {
@@ -107,9 +122,10 @@ export async function renderSessionDetail(container: HTMLElement, sessionId: str
         const transcriptEl = container.querySelector('#transcript-tab-content')
         try {
           const data = await api.getTranscript(sessionId)
-          const rendered = renderTranscript(data.entries, data.total)
+          const rendered = renderTranscript(data, { session })
           state.transcriptRendered = rendered
           if (transcriptEl) {
+            transcriptEl.classList.remove('loading')
             transcriptEl.innerHTML = rendered
             attachTranscriptListeners()
           }
@@ -225,8 +241,7 @@ function renderSessionPage(session: SessionDetailDto, activeTab: TabName, events
     },
     {
       name: 'transcript' as const,
-      label: 'Transcript',
-      count: session.totalEvents
+      label: 'Transcript'
     },
     {
       name: 'journal',
