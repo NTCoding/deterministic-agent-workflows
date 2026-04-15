@@ -128,7 +128,9 @@ function renderSessionPage(session: SessionDetailDto, activeTab: TabName, events
 
   headerParts.push(html`<span><span class="ml">Started</span> ${esc(formatTimestamp(session.firstEventAt))}</span>`)
   headerParts.push(html`<span>→</span>`)
-  headerParts.push(html`<span><span class="ml">Ended</span> ${esc(formatTimeOnly(session.lastEventAt))}</span>`)
+  const endLabel = session.status === 'active' ? 'In Progress' : 'Ended'
+  const endTime = session.status === 'active' ? '' : esc(formatTimeOnly(session.lastEventAt))
+  headerParts.push(html`<span><span class="ml">${endLabel}</span> ${endTime}</span>`)
   headerParts.push(html`<span>(${formatDuration(session.durationMs)})</span>`)
 
   headerParts.push(html`<span class="sep">│</span>`)
