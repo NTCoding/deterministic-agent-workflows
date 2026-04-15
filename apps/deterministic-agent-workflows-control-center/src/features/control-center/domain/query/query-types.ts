@@ -5,6 +5,7 @@ export const eventRowSchema = z.object({
   session_id: z.string(),
   type: z.string(),
   at: z.string(),
+  state: z.string().nullable(),
   payload: z.string(),
 })
 
@@ -17,6 +18,7 @@ export type ParsedEvent = {
   readonly sessionId: string
   readonly type: string
   readonly at: string
+  readonly state?: string
   readonly payload: Record<string, unknown>
 }
 

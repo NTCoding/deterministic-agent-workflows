@@ -1,5 +1,6 @@
 import type { ZodType } from 'zod'
 import type { BaseEvent } from './base-event'
+import type { StoredEvent } from './stored-event'
 import type { PreconditionResult } from './precondition-result'
 import type { TranscriptReader } from '../infra/external-clients/transcript/transcript-reader'
 import type { BaseWorkflowState } from './workflow-state'
@@ -54,8 +55,8 @@ export interface WorkflowDefinition<
 
 /** @riviere-role value-object */
 export interface WorkflowEventStore {
-  readEvents(sessionId: string): readonly BaseEvent[]
-  appendEvents(sessionId: string, events: readonly BaseEvent[]): void
+  readEvents(sessionId: string): readonly StoredEvent[]
+  appendEvents(sessionId: string, events: readonly StoredEvent[]): void
   sessionExists(sessionId: string): boolean
   hasSessionStarted(sessionId: string): boolean
 }

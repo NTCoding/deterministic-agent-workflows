@@ -1,17 +1,14 @@
 import { z } from 'zod'
-import { WorkflowStateError } from '@nt-ai-lab/deterministic-agent-workflow-engine'
+import type { StoredEvent } from '@nt-ai-lab/deterministic-agent-workflow-engine'
+import {
+  stripEnvelopeKeys,
+  WorkflowStateError,
+} from '@nt-ai-lab/deterministic-agent-workflow-engine'
 import {
   enableWalMode,
   openSqliteDatabase,
   type SqliteDatabase,
 } from '../infra/external-clients/sqlite/sqlite-runtime'
-
-const passthroughEventSchema = z.object({
-  type: z.string(),
-  at: z.string(),
-}).passthrough()
-
-type BaseEvent = z.infer<typeof passthroughEventSchema>
 
 const createTableSql = `
   CREATE TABLE IF NOT EXISTS events (
@@ -19,19 +16,26 @@ const createTableSql = `
     session_id TEXT NOT NULL,
     type TEXT NOT NULL,
     at TEXT NOT NULL,
+    state TEXT,
     payload TEXT NOT NULL
   )
 `
 
-const rowWithPayloadSchema = z.array(z.object({ payload: z.string() }))
+const eventRowSchema = z.array(z.object({
+  type: z.string(),
+  at: z.string(),
+  state: z.string().nullable(),
+  payload: z.string(),
+}))
 const rowWithSessionIdSchema = z.array(z.object({ session_id: z.string() }))
 const countFieldSchema = z.union([z.number(), z.bigint(), z.string()])
 const countRowSchema = z.object({ count: countFieldSchema })
+const tableInfoRowSchema = z.array(z.object({ name: z.string() }))
 
 /** @riviere-role value-object */
 export type SqliteEventStore = {
-  readonly readEvents: (sessionId: string) => readonly BaseEvent[]
-  readonly appendEvents: (sessionId: string, events: readonly BaseEvent[]) => void
+  readonly readEvents: (sessionId: string) => readonly StoredEvent[]
+  readonly appendEvents: (sessionId: string, events: readonly StoredEvent[]) => void
   readonly sessionExists: (sessionId: string) => boolean
   readonly hasSessionStarted: (sessionId: string) => boolean
   readonly listSessions: () => readonly string[]
@@ -43,31 +47,29 @@ export function createStore(dbPath: string): SqliteEventStore {
   const db = openSqliteDatabase(dbPath)
   enableWalMode(db)
   db.exec(createTableSql)
+  ensureStateColumn(db)
 
   return {
     db,
-    readEvents(sessionId: string): readonly BaseEvent[] {
-      const rawRows = db.prepare('SELECT payload FROM events WHERE session_id = ? ORDER BY seq').all(sessionId)
-      const rows = rowWithPayloadSchema.parse(rawRows)
-      return rows.map((row, index) => {
-        const parsedPayload = tryParsePayload(row.payload, index)
-        const parsedEvent = passthroughEventSchema.safeParse(parsedPayload)
-        if (!parsedEvent.success) {
-          throw new WorkflowStateError(
-            `Invalid event at index ${index} for session ${sessionId}: ${parsedEvent.error.message}`,
-          )
-        }
-        return parsedEvent.data
-      })
+    readEvents(sessionId: string): readonly StoredEvent[] {
+      const rawRows = db.prepare('SELECT type, at, state, payload FROM events WHERE session_id = ? ORDER BY seq').all(sessionId)
+      const rows = eventRowSchema.parse(rawRows)
+      return rows.map((row, index) => buildStoredEvent(row, sessionId, index))
     },
-    appendEvents(sessionId: string, events: readonly BaseEvent[]): void {
+    appendEvents(sessionId: string, events: readonly StoredEvent[]): void {
       if (events.length === 0) return
 
-      const insert = db.prepare('INSERT INTO events (session_id, type, at, payload) VALUES (?, ?, ?, ?)')
+      const insert = db.prepare('INSERT INTO events (session_id, type, at, state, payload) VALUES (?, ?, ?, ?, ?)')
       db.exec('BEGIN IMMEDIATE')
       try {
         for (const event of events) {
-          insert.run(sessionId, event.type, event.at, JSON.stringify(event))
+          insert.run(
+            sessionId,
+            event.envelope.type,
+            event.envelope.at,
+            event.envelope.state ?? null,
+            JSON.stringify(event.payload),
+          )
         }
         db.exec('COMMIT')
       } catch (error) {
@@ -132,4 +134,45 @@ function tryParsePayload(payload: string, index: number): unknown {
   } catch (cause) {
     throw new WorkflowStateError(`Cannot parse event payload at index ${index}: ${String(cause)}`)
   }
+}
+
+function ensureStateColumn(db: SqliteDatabase): void {
+  const rawColumns = db.prepare('PRAGMA table_info(events)').all()
+  const columns = tableInfoRowSchema.parse(rawColumns)
+  if (columns.some((column) => column.name === 'state')) return
+  db.exec('ALTER TABLE events ADD COLUMN state TEXT')
+}
+
+type EventRow = {
+  readonly type: string
+  readonly at: string
+  readonly state: string | null
+  readonly payload: string
+}
+
+/**
+ * Dual-read adapter. Modern rows carry only domain fields in `payload` JSON
+ * (envelope in columns). Legacy rows have `type`/`at` duplicated inside the
+ * payload JSON and no `state` column value. Either way, normalize to
+ * `StoredEvent` with undefined state for legacy rows.
+ */
+function buildStoredEvent(row: EventRow, sessionId: string, index: number): StoredEvent {
+  const parsedPayload = tryParsePayload(row.payload, index)
+  if (!isRecord(parsedPayload)) {
+    throw new WorkflowStateError(
+      `Invalid event payload at index ${index} for session ${sessionId}: expected object`,
+    )
+  }
+  return {
+    envelope: {
+      type: row.type,
+      at: row.at,
+      state: row.state ?? undefined,
+    },
+    payload: stripEnvelopeKeys(parsedPayload),
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
 }

@@ -23,6 +23,11 @@ import type {
   WorkflowDefinition,
   WorkflowEngineDeps,
 } from './workflow-engine-types'
+import type { BaseEvent } from './base-event'
+import type { StoredEvent } from './stored-event'
+import {
+  flattenStoredEvent, toPayload
+} from './stored-event'
 import type { BaseWorkflowState } from './workflow-state'
 import { WorkflowStateError } from './workflow-state'
 
@@ -64,7 +69,7 @@ export class WorkflowEngine<
       stateNames,
     )
 
-    this.engineDeps.store.appendEvents(sessionId, pendingEvents)
+    this.engineDeps.store.appendEvents(sessionId, this.wrapEvents(pendingEvents, initialState))
 
     const procedureContent = this.engineDeps.readFile(
       buildProcedurePath(this.engineDeps, initialState.currentStateMachineState),
@@ -369,7 +374,8 @@ export class WorkflowEngine<
   }
 
   private rehydrateFromEvents(sessionId: string): TWorkflow {
-    const events = this.engineDeps.store.readEvents(sessionId)
+    const stored = this.engineDeps.store.readEvents(sessionId)
+    const events = stored.map(flattenStoredEvent)
     const state = events.reduce<TState>(
       (accumulator, event) => this.factory.fold(accumulator, event),
       this.factory.initialState(),
@@ -379,9 +385,32 @@ export class WorkflowEngine<
 
   private persistEvents(sessionId: string, workflow: TWorkflow): void {
     const pending = workflow.getPendingEvents()
-    if (pending.length > 0) {
-      this.engineDeps.store.appendEvents(sessionId, pending)
-    }
+    if (pending.length === 0) return
+    this.engineDeps.store.appendEvents(sessionId, this.wrapEvents(pending, workflow.getState()))
+  }
+
+  private wrapEvents(events: readonly BaseEvent[], startState: TState): readonly StoredEvent[] {
+    const { stored } = events.reduce<{
+      state: TState;
+      stored: readonly StoredEvent[];
+    }>(
+      (accumulator, event) => ({
+        state: this.factory.fold(accumulator.state, event),
+        stored: [...accumulator.stored, {
+          envelope: {
+            type: event.type,
+            at: event.at,
+            state: accumulator.state.currentStateMachineState,
+          },
+          payload: toPayload(event),
+        }],
+      }),
+      {
+        state: startState,
+        stored: [],
+      },
+    )
+    return stored
   }
 
   private verifyIdentity(sessionId: string, workflow: TWorkflow): string | undefined {
@@ -393,12 +422,12 @@ export class WorkflowEngine<
     const messages = this.engineDeps.transcriptReader.readMessages(transcriptPath)
     const result = checkIdentity(messages, pattern)
 
-    this.engineDeps.store.appendEvents(sessionId, [{
+    this.engineDeps.store.appendEvents(sessionId, this.wrapEvents([{
       type: 'identity-verified',
       at: this.engineDeps.now(),
       status: result.status,
       transcriptPath,
-    }])
+    }], workflow.getState()))
 
     if (result.status === 'lost') {
       return `You forgot. Next message MUST begin with: ${expectedPrefix}`
