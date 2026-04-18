@@ -14,6 +14,24 @@ export {
   toPayload,
 } from './platform/domain/stored-event'
 
+export {
+  reflectionCategorySchema,
+  reflectionConfidenceSchema,
+  reflectionEvidenceSchema,
+  reflectionFindingSchema,
+  reflectionPayloadSchema,
+  recordReflectionInputSchema,
+  storedReflectionSchema,
+} from './platform/domain/reflection-types'
+export type {
+  ReflectionCategory,
+  ReflectionEvidence,
+  ReflectionFinding,
+  ReflectionPayload,
+  RecordReflectionInput,
+  StoredReflection,
+} from './platform/domain/reflection-types'
+
 export { engineEventSchema } from './platform/domain/engine-events'
 export type {
   EngineEvent,

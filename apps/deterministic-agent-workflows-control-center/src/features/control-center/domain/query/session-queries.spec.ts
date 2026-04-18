@@ -8,6 +8,7 @@ import {
   getMaxSeq,
   getEventsSinceSeq,
   getSessionCount,
+  getSessionReflections,
   getTotalEventCount,
   getTranscriptPath,
   getInitialState,
@@ -16,10 +17,12 @@ import {
   createTestDb,
   createTestQueryDeps,
   insertEvent,
+  insertReflection,
   seedSessionEvents,
   seedMultipleSessions,
 } from './session-queries-test-fixtures'
 import type { SqliteDatabase } from './sqlite-runtime'
+import { openSqliteDatabase } from './sqlite-runtime'
 import { createSafeTempDir } from '../../infra/web/server/http-test-fixtures'
 
 function createBrokenDeps(getValue: unknown): { readonly db: SqliteDatabase } {
@@ -42,6 +45,20 @@ function createCustomDeps(rows: ReadonlyArray<unknown>): { readonly db: SqliteDa
       prepare: () => ({
         all: () => rows,
         get: () => rows[0],
+        run: () => undefined,
+      }),
+      exec: () => undefined,
+      close: () => undefined,
+    },
+  }
+}
+
+function createReflectionDeps(reflectionRows: ReadonlyArray<unknown>): { readonly db: SqliteDatabase } {
+  return {
+    db: {
+      prepare: (sql: string) => ({
+        all: () => sql.includes('sqlite_master') ? [{ name: 'reflections' }] : reflectionRows,
+        get: () => undefined,
         run: () => undefined,
       }),
       exec: () => undefined,
@@ -93,6 +110,36 @@ describe('session-queries', () => {
       const events = getSessionEvents(createTestQueryDeps(state.db), 'test-1')
       const started = events[0]
       expect(started?.payload['repository']).toBe('test/repo')
+    })
+
+    it('throws when event payload is not an object', () => {
+      state.db.prepare('INSERT INTO events (session_id, type, at, payload) VALUES (?, ?, ?, ?)')
+        .run('test-1', 'session-started', '2026-01-01T00:00:00Z', JSON.stringify('bad-payload'))
+      expect(() => getSessionEvents(createTestQueryDeps(state.db), 'test-1')).toThrow('Event payload must be an object.')
+    })
+
+    it('includes state when the events table has a state column', () => {
+      const db = openSqliteDatabase(':memory:')
+      db.exec(`
+        CREATE TABLE events (
+          seq INTEGER PRIMARY KEY AUTOINCREMENT,
+          session_id TEXT NOT NULL,
+          type TEXT NOT NULL,
+          at TEXT NOT NULL,
+          state TEXT,
+          payload TEXT NOT NULL
+        )
+      `)
+      db.prepare('INSERT INTO events (session_id, type, at, state, payload) VALUES (?, ?, ?, ?, ?)')
+        .run('test-1', 'transitioned', '2026-01-01T00:00:00Z', 'PLANNING', JSON.stringify({
+          type: 'transitioned',
+          at: '2026-01-01T00:00:00Z',
+          from: 'SPAWN',
+          to: 'PLANNING',
+        }))
+      const events = getSessionEvents(createTestQueryDeps(db), 'test-1')
+      expect(events[0]).toMatchObject({ state: 'PLANNING' })
+      db.close()
     })
   })
 
@@ -170,6 +217,76 @@ describe('session-queries', () => {
     it('returns total event count', () => {
       seedSessionEvents(state.db, 'test-1')
       expect(getTotalEventCount(createTestQueryDeps(state.db))).toBe(7)
+    })
+  })
+
+  describe('getSessionReflections', () => {
+    it('returns empty array when reflections table is absent', () => {
+      const db = openSqliteDatabase(':memory:')
+      db.exec(`
+        CREATE TABLE events (
+          seq INTEGER PRIMARY KEY AUTOINCREMENT,
+          session_id TEXT NOT NULL,
+          type TEXT NOT NULL,
+          at TEXT NOT NULL,
+          payload TEXT NOT NULL
+        )
+      `)
+      expect(getSessionReflections(createTestQueryDeps(db), 'test-1')).toStrictEqual([])
+      db.close()
+    })
+
+    it('returns reflections newest first', () => {
+      insertReflection(state.db, 'test-1', '2026-01-01T00:20:00Z', {
+        findings: [{
+          title: 'Later',
+          category: 'tooling',
+          opportunity: 'Use more structure',
+          likelyCause: 'Tooling gap',
+          suggestedChange: 'Use subagents',
+          expectedImpact: 'Less churn',
+          evidence: [{
+            kind: 'event',
+            seq: 3 
+          }],
+        }],
+      })
+      insertReflection(state.db, 'test-1', '2026-01-01T00:10:00Z', {
+        findings: [{
+          title: 'Earlier',
+          category: 'workflow-design',
+          opportunity: 'Add checkpoint',
+          likelyCause: 'Late review',
+          suggestedChange: 'Review sooner',
+          expectedImpact: 'Less rework',
+          evidence: [{
+            kind: 'event-range',
+            startSeq: 1,
+            endSeq: 2 
+          }],
+        }],
+      })
+
+      const reflections = getSessionReflections(createTestQueryDeps(state.db), 'test-1')
+      expect(reflections).toHaveLength(2)
+      expect(reflections[0]?.createdAt).toBe('2026-01-01T00:20:00Z')
+      expect(reflections[1]?.createdAt).toBe('2026-01-01T00:10:00Z')
+    })
+
+    it('throws for malformed reflection row', () => {
+      expect(() => getSessionReflections(createReflectionDeps(['bad-row']), 'test-1')).toThrow('Expected reflection row.')
+    })
+
+    it('throws for non-string reflection payload_json', () => {
+      expect(() => getSessionReflections(createReflectionDeps([{
+        id: 1,
+        session_id: 'test-1',
+        created_at: '2026-01-01T00:00:00Z',
+        label: null,
+        agent_name: null,
+        source_state: null,
+        payload_json: 42,
+      }]), 'test-1')).toThrow('Expected reflection payload_json string.')
     })
   })
 

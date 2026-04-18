@@ -5,7 +5,6 @@ import type {
   WorkflowEngineDeps,
 } from '@nt-ai-lab/deterministic-agent-workflow-engine'
 import {
-  recordReflectionInputSchema,
   pass,
   WorkflowEngine,
 } from '@nt-ai-lab/deterministic-agent-workflow-engine'
@@ -34,9 +33,9 @@ import type {
   WorkflowRunnerConfig,
 } from '../../../platform/domain/workflow-runner-types'
 import {
-  buildReflectionProcess,
-  resolveRepository,
-} from '../domain/reflection-process'
+  handleGetReflectionProcessRoute,
+  handleRecordReflectionRoute,
+} from './reflection-routes'
 
 export type { PreToolUseHandlerFn } from '../../../platform/domain/pre-tool-use-handler'
 
@@ -91,36 +90,6 @@ function engineResultToRunnerResult(result: EngineResult): RunnerResult {
       exitCode: EXIT_ERROR 
     }
   }
-}
-
-function jsonResult(value: unknown): RunnerResult {
-  return {
-    output: JSON.stringify(value, null, 2),
-    exitCode: EXIT_ALLOW,
-  }
-}
-
-function errorResult(output: string): RunnerResult {
-  return {
-    output,
-    exitCode: EXIT_ERROR,
-  }
-}
-
-function parseFlagArgs(args: readonly string[]): Map<string, string> | string {
-  const flags = new Map<string, string>()
-  for (let index = 0; index < args.length; index += 2) {
-    const key = args[index]
-    const value = args[index + 1]
-    if (typeof key !== 'string' || !key.startsWith('--')) {
-      return `Invalid flag: ${String(key)}`
-    }
-    if (typeof value !== 'string' || value.length === 0) {
-      return `Missing value for flag: ${key}`
-    }
-    flags.set(key, value)
-  }
-  return flags
 }
 
 function parseArgs(argParsers: readonly ArgParser<unknown>[] | undefined, args: readonly string[], routeName: string): {
@@ -238,88 +207,6 @@ function handleGetStateRoute<
   return engineResultToRunnerResult(engine.getState(sessionId))
 }
 
-function handleGetReflectionProcessRoute<
-  TWorkflow extends RehydratableWorkflow<TState>,
-  TState extends BaseWorkflowState<TStateName>,
-  TDeps,
-  TStateName extends string,
-  TOperation extends string,
->(engine: WorkflowEngine<TWorkflow, TState, TDeps, TStateName, TOperation>, config: WorkflowRunnerConfig<TWorkflow, TState, TDeps, TStateName, TOperation>, args: readonly string[], getSessionId?: () => string, getSessionTranscriptPath?: () => string, getSessionRepository?: () => string | undefined, getRepositoryRoot?: () => string, getWorkflowEventsDbPath?: () => string): RunnerResult {
-  if (args.length > 1) {
-    return errorResult('get-reflection-process does not accept arguments')
-  }
-  if (getSessionId === undefined) {
-    return errorResult('get-reflection-process requires an active workflow session')
-  }
-  const sessionId = getSessionId()
-  if (!engine.hasSessionStarted(sessionId)) {
-    return errorResult(`Session ${sessionId} has not been started`)
-  }
-  const events = engine.readEvents(sessionId)
-  return jsonResult(buildReflectionProcess({
-    sessionId,
-    repository: getSessionRepository?.() ?? resolveRepository(events),
-    repositoryRoot: getRepositoryRoot?.(),
-    transcriptPath: getSessionTranscriptPath?.(),
-    eventStorePath: getWorkflowEventsDbPath?.(),
-    workflowDefinition: config.workflowDefinition,
-    events,
-  }))
-}
-
-function handleRecordReflectionRoute<
-  TWorkflow extends RehydratableWorkflow<TState>,
-  TState extends BaseWorkflowState<TStateName>,
-  TDeps,
-  TStateName extends string,
-  TOperation extends string,
->(engine: WorkflowEngine<TWorkflow, TState, TDeps, TStateName, TOperation>, engineDeps: WorkflowEngineDeps, args: readonly string[], readStdin: (() => string) | undefined, getSessionId?: () => string): RunnerResult {
-  if (getSessionId === undefined) {
-    return errorResult('record-reflection requires an active workflow session')
-  }
-  if (readStdin === undefined) {
-    return errorResult('record-reflection requires JSON on stdin')
-  }
-  const flags = parseFlagArgs(args.slice(1))
-  if (typeof flags === 'string') {
-    return errorResult(flags)
-  }
-  for (const key of flags.keys()) {
-    if (key !== '--label' && key !== '--agent-name' && key !== '--source-state') {
-      return errorResult(`Unknown flag: ${key}`)
-    }
-  }
-  const sessionId = getSessionId()
-  if (!engine.hasSessionStarted(sessionId)) {
-    return errorResult(`Session ${sessionId} has not been started`)
-  }
-
-  let reflectionPayload: unknown
-  try {
-    reflectionPayload = JSON.parse(readStdin())
-  } catch (error) {
-    return errorResult(`Invalid reflection JSON: ${String(error)}`)
-  }
-
-  const parsed = recordReflectionInputSchema.safeParse({
-    label: flags.get('--label'),
-    agentName: flags.get('--agent-name'),
-    sourceState: flags.get('--source-state'),
-    reflection: reflectionPayload,
-  })
-  if (!parsed.success) {
-    return errorResult(`Invalid reflection payload: ${parsed.error.message}`)
-  }
-
-  const stored = engineDeps.store.recordReflection(sessionId, engineDeps.now(), parsed.data)
-  return jsonResult({
-    ok: true,
-    id: stored.id,
-    sessionId: stored.sessionId,
-    createdAt: stored.createdAt,
-  })
-}
-
 function handleRoute<
   TWorkflow extends RehydratableWorkflow<TState>,
   TState extends BaseWorkflowState<TStateName>,
@@ -327,18 +214,20 @@ function handleRoute<
   TStateName extends string,
   TOperation extends string,
 >(engine: WorkflowEngine<TWorkflow, TState, TDeps, TStateName, TOperation>, engineDeps: WorkflowEngineDeps, config: WorkflowRunnerConfig<TWorkflow, TState, TDeps, TStateName, TOperation>, args: readonly string[], routeName: string, readStdin?: () => string, getSessionId?: () => string, getSessionTranscriptPath?: () => string, getSessionRepository?: () => string | undefined, getRepositoryRoot?: () => string, getWorkflowEventsDbPath?: () => string): RunnerResult {
-  if (routeName === 'get-state') {
-    return handleGetStateRoute(engine, args, getSessionId)
-  }
-  if (routeName === 'get-reflection-process') {
-    return handleGetReflectionProcessRoute(engine, config, args, getSessionId, getSessionTranscriptPath, getSessionRepository, getRepositoryRoot, getWorkflowEventsDbPath)
-  }
-  if (routeName === 'record-reflection') {
-    return handleRecordReflectionRoute(engine, engineDeps, args, readStdin, getSessionId)
-  }
-  if (routeName === 'write-journal') {
-    return handleWriteJournalRoute(engine, engineDeps, args, getSessionId)
-  }
+  const builtin = resolveBuiltinRoute(
+    engine,
+    engineDeps,
+    config,
+    args,
+    routeName,
+    readStdin,
+    getSessionId,
+    getSessionTranscriptPath,
+    getSessionRepository,
+    getRepositoryRoot,
+    getWorkflowEventsDbPath,
+  )
+  if (builtin !== undefined) return builtin
   const routeDef = Object.hasOwn(config.routes, routeName) ? config.routes[routeName] : undefined
   if (routeDef === undefined) return {
     output: `Unknown command: ${routeName}`,
@@ -369,6 +258,27 @@ function handleRoute<
       return engineResultToRunnerResult(engine.transition(resolveSessionId(), config.workflowDefinition.stateSchema.parse(resolveTarget())))
     case 'transaction':
       return engineResultToRunnerResult(engine.transaction(resolveSessionId(), routeName, (workflow) => routeDef.handler(workflow, ...argsAfterSessionId())))
+  }
+}
+
+function resolveBuiltinRoute<
+  TWorkflow extends RehydratableWorkflow<TState>,
+  TState extends BaseWorkflowState<TStateName>,
+  TDeps,
+  TStateName extends string,
+  TOperation extends string,
+>(engine: WorkflowEngine<TWorkflow, TState, TDeps, TStateName, TOperation>, engineDeps: WorkflowEngineDeps, config: WorkflowRunnerConfig<TWorkflow, TState, TDeps, TStateName, TOperation>, args: readonly string[], routeName: string, readStdin?: () => string, getSessionId?: () => string, getSessionTranscriptPath?: () => string, getSessionRepository?: () => string | undefined, getRepositoryRoot?: () => string, getWorkflowEventsDbPath?: () => string): RunnerResult | undefined {
+  switch (routeName) {
+    case 'get-state':
+      return handleGetStateRoute(engine, args, getSessionId)
+    case 'get-reflection-process':
+      return handleGetReflectionProcessRoute(engine, engineDeps, config, args, getSessionId, getSessionTranscriptPath, getSessionRepository, getRepositoryRoot, getWorkflowEventsDbPath)
+    case 'record-reflection':
+      return handleRecordReflectionRoute(engine, engineDeps, args, readStdin, getSessionId)
+    case 'write-journal':
+      return handleWriteJournalRoute(engine, engineDeps, args, getSessionId)
+    default:
+      return undefined
   }
 }
 

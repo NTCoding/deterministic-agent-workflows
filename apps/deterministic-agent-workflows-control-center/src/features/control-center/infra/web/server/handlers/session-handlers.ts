@@ -6,6 +6,7 @@ import {
   getDistinctSessionIds,
   getSessionEvents,
   getSessionEventsPaginated,
+  getSessionReflections,
 } from '../../../../domain/query/session-queries'
 import {
   projectSession,
@@ -236,5 +237,26 @@ export function handleGetSessionInsights(
     const insights = computeInsights(projection, now)
 
     sendJson(res, 200, { insights })
+  }
+}
+
+/** @riviere-role web-tbc */
+export function handleGetSessionReflections(
+  deps: SessionHandlerDeps,
+): (_req: IncomingMessage, res: ServerResponse, route: RouteParams) => void {
+  return (_req, res, route) => {
+    const sessionId = route.params['id']
+    if (!sessionId) {
+      sendError(res, 400, 'Missing session ID')
+      return
+    }
+
+    const events = getSessionEvents(deps.queryDeps, sessionId)
+    if (events.length === 0) {
+      sendError(res, 404, `Session ${sessionId} not found`)
+      return
+    }
+
+    sendJson(res, 200, {reflections: getSessionReflections(deps.queryDeps, sessionId),})
   }
 }

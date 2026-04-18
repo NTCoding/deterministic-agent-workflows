@@ -83,6 +83,9 @@ export function createWorkflowCli<
     const result = runner(args, engineDeps, workflowDeps, {
       readStdin,
       getSessionId,
+      getSessionRepository: () => getRepositoryName(process.cwd()),
+      getRepositoryRoot: () => process.cwd(),
+      getWorkflowEventsDbPath: () => workflowEventsDbPath,
     })
 
     if (result.output) {

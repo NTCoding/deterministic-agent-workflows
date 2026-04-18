@@ -1,5 +1,9 @@
 import type { ZodType } from 'zod'
 import type { BaseEvent } from './base-event'
+import type {
+  RecordReflectionInput,
+  StoredReflection,
+} from './reflection-types'
 import type { StoredEvent } from './stored-event'
 import type { PreconditionResult } from './precondition-result'
 import type { TranscriptReader } from '../infra/external-clients/transcript/transcript-reader'
@@ -59,6 +63,8 @@ export interface WorkflowEventStore {
   appendEvents(sessionId: string, events: readonly StoredEvent[]): void
   sessionExists(sessionId: string): boolean
   hasSessionStarted(sessionId: string): boolean
+  recordReflection(sessionId: string, createdAt: string, input: RecordReflectionInput): StoredReflection
+  listReflections(sessionId: string): readonly StoredReflection[]
 }
 
 /** @riviere-role value-object */
@@ -72,4 +78,3 @@ export type WorkflowEngineDeps = {
   readonly now: () => string
   readonly transcriptReader: TranscriptReader
 }
-

@@ -1,6 +1,12 @@
 import { z } from 'zod'
-import type { StoredEvent } from '@nt-ai-lab/deterministic-agent-workflow-engine'
+import type {
+  RecordReflectionInput,
+  StoredEvent,
+  StoredReflection,
+} from '@nt-ai-lab/deterministic-agent-workflow-engine'
 import {
+  recordReflectionInputSchema,
+  storedReflectionSchema,
   stripEnvelopeKeys,
   WorkflowStateError,
 } from '@nt-ai-lab/deterministic-agent-workflow-engine'
@@ -21,6 +27,23 @@ const createTableSql = `
   )
 `
 
+const createReflectionsTableSql = `
+  CREATE TABLE IF NOT EXISTS reflections (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    label TEXT,
+    agent_name TEXT,
+    source_state TEXT,
+    payload_json TEXT NOT NULL
+  )
+`
+
+const createReflectionsIndexSql = `
+  CREATE INDEX IF NOT EXISTS idx_reflections_session_created_at
+  ON reflections (session_id, created_at DESC, id DESC)
+`
+
 const eventRowSchema = z.array(z.object({
   type: z.string(),
   at: z.string(),
@@ -31,6 +54,16 @@ const rowWithSessionIdSchema = z.array(z.object({ session_id: z.string() }))
 const countFieldSchema = z.union([z.number(), z.bigint(), z.string()])
 const countRowSchema = z.object({ count: countFieldSchema })
 const tableInfoRowSchema = z.array(z.object({ name: z.string() }))
+const reflectionIdRowSchema = z.object({ id: countFieldSchema })
+const reflectionRowsSchema = z.array(z.object({
+  id: z.number(),
+  session_id: z.string(),
+  created_at: z.string(),
+  label: z.string().nullable(),
+  agent_name: z.string().nullable(),
+  source_state: z.string().nullable(),
+  payload_json: z.string(),
+}))
 
 /** @riviere-role value-object */
 export type SqliteEventStore = {
@@ -38,6 +71,8 @@ export type SqliteEventStore = {
   readonly appendEvents: (sessionId: string, events: readonly StoredEvent[]) => void
   readonly sessionExists: (sessionId: string) => boolean
   readonly hasSessionStarted: (sessionId: string) => boolean
+  readonly recordReflection: (sessionId: string, createdAt: string, input: RecordReflectionInput) => StoredReflection
+  readonly listReflections: (sessionId: string) => readonly StoredReflection[]
   readonly listSessions: () => readonly string[]
   readonly db: SqliteDatabase
 }
@@ -47,6 +82,8 @@ export function createStore(dbPath: string): SqliteEventStore {
   const db = openSqliteDatabase(dbPath)
   enableWalMode(db)
   db.exec(createTableSql)
+  db.exec(createReflectionsTableSql)
+  db.exec(createReflectionsIndexSql)
   ensureStateColumn(db)
 
   return {
@@ -86,6 +123,53 @@ export function createStore(dbPath: string): SqliteEventStore {
         "SELECT COUNT(1) AS count FROM events WHERE session_id = ? AND type = 'session-started'",
         sessionId,
       ) > 0
+    },
+    recordReflection(sessionId: string, createdAt: string, input: RecordReflectionInput): StoredReflection {
+      const parsedInput = recordReflectionInputSchema.parse(input)
+      const insert = db.prepare('INSERT INTO reflections (session_id, created_at, label, agent_name, source_state, payload_json) VALUES (?, ?, ?, ?, ?, ?)')
+      db.exec('BEGIN IMMEDIATE')
+      try {
+        insert.run(
+          sessionId,
+          createdAt,
+          parsedInput.label ?? null,
+          parsedInput.agentName ?? null,
+          parsedInput.sourceState ?? null,
+          JSON.stringify(parsedInput.reflection),
+        )
+        const rawId = db.prepare('SELECT last_insert_rowid() AS id').get()
+        const parsedId = reflectionIdRowSchema.parse(rawId)
+        const id = Number(parsedId.id)
+        db.exec('COMMIT')
+        return storedReflectionSchema.parse({
+          id,
+          sessionId,
+          createdAt,
+          ...(parsedInput.label === undefined ? {} : { label: parsedInput.label }),
+          ...(parsedInput.agentName === undefined ? {} : { agentName: parsedInput.agentName }),
+          ...(parsedInput.sourceState === undefined ? {} : { sourceState: parsedInput.sourceState }),
+          reflection: parsedInput.reflection,
+        })
+      } catch (error) {
+        db.exec('ROLLBACK')
+        throw error
+      }
+    },
+    listReflections(sessionId: string): readonly StoredReflection[] {
+      const rawRows = db.prepare('SELECT id, session_id, created_at, label, agent_name, source_state, payload_json FROM reflections WHERE session_id = ? ORDER BY created_at DESC, id DESC').all(sessionId)
+      const rows = reflectionRowsSchema.parse(rawRows)
+      return rows.map((row) => {
+        const reflectionPayload: unknown = JSON.parse(row.payload_json)
+        return storedReflectionSchema.parse({
+          id: row.id,
+          sessionId: row.session_id,
+          createdAt: row.created_at,
+          ...(row.label === null ? {} : { label: row.label }),
+          ...(row.agent_name === null ? {} : { agentName: row.agent_name }),
+          ...(row.source_state === null ? {} : { sourceState: row.source_state }),
+          reflection: reflectionPayload,
+        })
+      })
     },
     listSessions(): readonly string[] {
       const rawRows = db.prepare('SELECT session_id FROM events GROUP BY session_id ORDER BY MIN(seq)').all()

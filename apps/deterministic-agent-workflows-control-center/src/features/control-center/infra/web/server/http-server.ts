@@ -9,6 +9,7 @@ import {
   handleGetSessionEvents,
   handleGetSessionJournal,
   handleGetSessionInsights,
+  handleGetSessionReflections,
 } from './handlers/session-handlers'
 import type { SessionHandlerDeps } from './handlers/session-handlers'
 import { handleGetTranscript } from './handlers/transcript-handler'
@@ -73,6 +74,7 @@ export function createHttpServer(deps: HttpServerDeps): HttpServerInstance {
   router.get('/api/sessions/:id/events', handleGetSessionEvents(sessionDeps))
   router.get('/api/sessions/:id/journal', handleGetSessionJournal(sessionDeps))
   router.get('/api/sessions/:id/insights', handleGetSessionInsights(sessionDeps))
+  router.get('/api/sessions/:id/reflections', handleGetSessionReflections(sessionDeps))
   router.get('/api/sessions/:id/transcript', handleGetTranscript(transcriptDeps))
   router.get('/api/sessions/:id/activity', handleGetSessionActivity(activityDeps))
   router.get('/api/analytics/overview', handleAnalyticsOverview(analyticsDeps))

@@ -1,11 +1,16 @@
 import type { ParsedEvent } from './query-types'
 import { eventRowSchema } from './query-types'
+import {
+  storedReflectionSchema,
+  type StoredReflection,
+} from '@nt-ai-lab/deterministic-agent-workflow-engine'
 import type { SqliteDatabase } from './sqlite-runtime'
 
 /** @riviere-role query-model */
 export type SessionQueryDeps = {readonly db: SqliteDatabase}
 
 const stateColumnCache = new WeakMap<SqliteDatabase, boolean>()
+const reflectionsTableCache = new WeakMap<SqliteDatabase, boolean>()
 
 function hasStateColumn(db: SqliteDatabase): boolean {
   const cached = stateColumnCache.get(db)
@@ -13,6 +18,15 @@ function hasStateColumn(db: SqliteDatabase): boolean {
   const rows = db.prepare('PRAGMA table_info(events)').all()
   const has = rows.some((row) => isRecord(row) && row['name'] === 'state')
   stateColumnCache.set(db, has)
+  return has
+}
+
+function hasReflectionsTable(db: SqliteDatabase): boolean {
+  const cached = reflectionsTableCache.get(db)
+  if (cached !== undefined) return cached
+  const rows = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'reflections'").all()
+  const has = rows.some((row) => isRecord(row) && row['name'] === 'reflections')
+  reflectionsTableCache.set(db, has)
   return has
 }
 
@@ -98,6 +112,26 @@ function parseTranscriptPayloadRow(row: unknown): { readonly payload: string } {
     throw new TypeError('Expected transcript payload row.')
   }
   return {payload: row['payload'],}
+}
+
+function parseReflectionRow(row: unknown): StoredReflection {
+  if (!isRecord(row)) {
+    throw new TypeError('Expected reflection row.')
+  }
+  const payload = row['payload_json']
+  if (typeof payload !== 'string') {
+    throw new TypeError('Expected reflection payload_json string.')
+  }
+  const parsedPayload: unknown = JSON.parse(payload)
+  return storedReflectionSchema.parse({
+    id: row['id'],
+    sessionId: row['session_id'],
+    createdAt: row['created_at'],
+    ...(typeof row['label'] === 'string' ? { label: row['label'] } : {}),
+    ...(typeof row['agent_name'] === 'string' ? { agentName: row['agent_name'] } : {}),
+    ...(typeof row['source_state'] === 'string' ? { sourceState: row['source_state'] } : {}),
+    reflection: parsedPayload,
+  })
 }
 
 /** @riviere-role query-model */
@@ -195,6 +229,18 @@ export function getSessionCount(deps: SessionQueryDeps): number {
     parseCountRow,
   )
   return row.count
+}
+
+/** @riviere-role query-model */
+export function getSessionReflections(
+  deps: SessionQueryDeps,
+  sessionId: string,
+): ReadonlyArray<StoredReflection> {
+  if (!hasReflectionsTable(deps.db)) return []
+  const rows = deps.db
+    .prepare('SELECT id, session_id, created_at, label, agent_name, source_state, payload_json FROM reflections WHERE session_id = ? ORDER BY created_at DESC, id DESC')
+    .all(sessionId)
+  return getRows(rows, parseReflectionRow)
 }
 
 /** @riviere-role query-model */
