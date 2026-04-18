@@ -7,9 +7,7 @@ module.exports = {
       comment:
         'workflow-control-center is a generic analytics package — it must never depend on workflow-definition',
       from: { path: '^src/' },
-      to: {
-        path: 'workflow-definition',
-      },
+      to: {path: 'workflow-definition',},
     },
   ],
 
@@ -26,16 +24,10 @@ module.exports = {
       ],
     },
 
-    tsConfig: {
-      fileName: 'tsconfig.json',
-    },
+    tsConfig: {fileName: 'tsconfig.json',},
 
     externalModuleResolutionStrategy: 'node_modules',
 
-    reporterOptions: {
-      text: {
-        highlightFocused: true,
-      },
-    },
+    reporterOptions: {text: {highlightFocused: true,},},
   },
 }

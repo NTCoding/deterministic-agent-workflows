@@ -1,0 +1,19 @@
+@import 'tailwindcss';
+
+@theme {
+  --font-sans: system-ui, sans-serif;
+  --font-mono: ui-monospace, monospace;
+
+  --color-state-spawn: #9b59b6;
+  --color-state-planning: #95a5a6;
+  --color-state-respawn: #1abc9c;
+  --color-state-developing: #3498db;
+  --color-state-reviewing: #e67e22;
+  --color-state-committing: #2ecc71;
+  --color-state-cr-review: #e91e63;
+  --color-state-pr-creation: #f39c12;
+  --color-state-complete: #27ae60;
+  --color-state-blocked: #c0392b;
+  --color-state-feedback: #1abc9c;
+  --color-state-idle: #95a5a6;
+}

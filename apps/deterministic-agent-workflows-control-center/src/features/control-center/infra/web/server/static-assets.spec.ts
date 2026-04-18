@@ -68,6 +68,14 @@ describe('createStaticFileServer', () => {
     expect(served).toBe(true)
   })
 
+  it('falls back to index.html for extensionless paths (SPA deep links)', () => {
+    const server = createStaticFileServer(testDir)
+    const response = createMockResponse()
+    const served = server.serve('/session/abc-123', response.res)
+    expect(served).toBe(true)
+    expect(response.written.headers['Content-Type']).toBe('text/html')
+  })
+
   it('uses application/octet-stream for unknown extensions', () => {
     const server = createStaticFileServer(testDir)
     const response = createMockResponse()

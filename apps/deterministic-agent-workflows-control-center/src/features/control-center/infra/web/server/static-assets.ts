@@ -43,12 +43,17 @@ export function createStaticFileServer(
           ? join(distDir, 'index.html')
           : join(distDir, safePath)
 
-      if (!deps.fileExists(filePath)) {
+      const traversalAttempt = safePath !== urlPath
+      const isExtensionless = extname(safePath) === ''
+      const shouldSpaFallback = !traversalAttempt && isExtensionless && !deps.fileExists(filePath)
+      const resolvedPath = shouldSpaFallback ? join(distDir, 'index.html') : filePath
+
+      if (!deps.fileExists(resolvedPath)) {
         return false
       }
 
-      const content = deps.readFile(filePath)
-      const ext = extname(filePath)
+      const content = deps.readFile(resolvedPath)
+      const ext = extname(resolvedPath)
       const contentType = MIME_TYPES[ext] ?? 'application/octet-stream'
 
       res.writeHead(200, {
