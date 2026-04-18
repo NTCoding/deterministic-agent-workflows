@@ -17,7 +17,8 @@ describe('createStaticFileServer', () => {
     mkdirSync(testDir, { recursive: true })
     writeFileSync(join(testDir, 'index.html'), '<html>test</html>')
     writeFileSync(join(testDir, 'styles.css'), 'body {}')
-    writeFileSync(join(testDir, 'app'), 'console.log("hi")')
+    writeFileSync(join(testDir, 'app.js'), 'console.log("hi")')
+    writeFileSync(join(testDir, 'app.js.map'), '{"version":3}')
     writeFileSync(join(testDir, 'data.bin'), Buffer.from([0x00, 0x01]))
   })
 
@@ -44,11 +45,18 @@ describe('createStaticFileServer', () => {
     expect(response.written.headers['Content-Type']).toBe('text/css')
   })
 
-  it('serves JS files', () => {
+  it('serves JS files with application/javascript content type', () => {
     const server = createStaticFileServer(testDir)
     const response = createMockResponse()
-    server.serve('/app', response.res)
+    server.serve('/app.js', response.res)
     expect(response.written.headers['Content-Type']).toBe('application/javascript')
+  })
+
+  it('serves JS source maps with application/json content type', () => {
+    const server = createStaticFileServer(testDir)
+    const response = createMockResponse()
+    server.serve('/app.js.map', response.res)
+    expect(response.written.headers['Content-Type']).toBe('application/json')
   })
 
   it('returns false for non-existent files', () => {

@@ -9,7 +9,9 @@ import {
 const MIME_TYPES: Record<string, string> = {
   '.html': 'text/html',
   '.css': 'text/css',
-  '': 'application/javascript',
+  '.js': 'application/javascript',
+  '.mjs': 'application/javascript',
+  '.map': 'application/json',
   '.json': 'application/json',
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
