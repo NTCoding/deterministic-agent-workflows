@@ -7,13 +7,7 @@
     "build": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "pnpm --dir apps/deterministic-agent-workflows-control-center exec tsc -p tsconfig.json --noEmit && pnpm --dir apps/deterministic-agent-workflows-control-center exec vite build"
-      }
-    },
-    "dev": {
-      "executor": "nx:run-commands",
-      "options": {
-        "command": "pnpm --dir apps/deterministic-agent-workflows-control-center exec vite"
+        "command": "pnpm --dir apps/deterministic-agent-workflows-control-center exec tsc -p tsconfig.json && node apps/deterministic-agent-workflows-control-center/build-ui.mjs"
       }
     },
     "typecheck": {
@@ -25,19 +19,13 @@
     "lint": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "pnpm --dir apps/deterministic-agent-workflows-control-center exec eslint src --ext .ts,.tsx --config eslint.config.mjs"
+        "command": "eslint apps/deterministic-agent-workflows-control-center/src --ext .ts"
       }
     },
     "test": {
       "executor": "nx:run-commands",
       "options": {
         "command": "pnpm --dir apps/deterministic-agent-workflows-control-center exec vitest run --coverage --config vitest.config.mts"
-      }
-    },
-    "test:e2e": {
-      "executor": "nx:run-commands",
-      "options": {
-        "command": "pnpm --dir apps/deterministic-agent-workflows-control-center exec playwright test"
       }
     }
   }

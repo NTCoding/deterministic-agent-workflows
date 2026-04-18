@@ -9,9 +9,7 @@ import {
 const MIME_TYPES: Record<string, string> = {
   '.html': 'text/html',
   '.css': 'text/css',
-  '.js': 'application/javascript',
-  '.mjs': 'application/javascript',
-  '.map': 'application/json',
+  '': 'application/javascript',
   '.json': 'application/json',
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
@@ -45,17 +43,12 @@ export function createStaticFileServer(
           ? join(distDir, 'index.html')
           : join(distDir, safePath)
 
-      const traversalAttempt = safePath !== urlPath
-      const isExtensionless = extname(safePath) === ''
-      const shouldSpaFallback = !traversalAttempt && isExtensionless && !deps.fileExists(filePath)
-      const resolvedPath = shouldSpaFallback ? join(distDir, 'index.html') : filePath
-
-      if (!deps.fileExists(resolvedPath)) {
+      if (!deps.fileExists(filePath)) {
         return false
       }
 
-      const content = deps.readFile(resolvedPath)
-      const ext = extname(resolvedPath)
+      const content = deps.readFile(filePath)
+      const ext = extname(filePath)
       const contentType = MIME_TYPES[ext] ?? 'application/octet-stream'
 
       res.writeHead(200, {

@@ -114,19 +114,10 @@ describe('createHttpServer', () => {
     expect(body).toContain('<html>')
   })
 
-  it('returns 404 for unknown asset paths', async () => {
+  it('returns 404 for unknown paths', async () => {
     await state.server.start(0)
-    const { statusCode } = await httpGet(getPort(), '/nonexistent.css')
+    const { statusCode } = await httpGet(getPort(), '/nonexistent/path')
     expect(statusCode).toBe(404)
-  })
-
-  it('falls back to index.html for extensionless paths (SPA deep links)', async () => {
-    await state.server.start(0)
-    const {
-      statusCode, body
-    } = await httpGet(getPort(), '/session/anything')
-    expect(statusCode).toBe(200)
-    expect(body).toContain('<html>')
   })
 
   it('serves analytics overview', async () => {

@@ -33,8 +33,8 @@ if [[ ! -d node_modules ]]; then
 fi
 
 if [[ "$SKIP_BUILD" -eq 0 ]]; then
-  echo "==> Building UI (vite build)"
-  pnpm --dir "$APP_DIR" exec vite build
+  echo "==> Building UI (esbuild)"
+  (cd "$APP_DIR" && node build-ui.mjs)
 else
   echo "==> Skipping UI build (--skip-build)"
   if [[ ! -f "$APP_DIR/dist/ui/index.html" ]]; then
@@ -44,4 +44,4 @@ else
 fi
 
 echo "==> Starting server"
-exec pnpm --dir "$APP_DIR" exec tsx src/shell/main.ts ${SERVER_ARGS[@]+"${SERVER_ARGS[@]}"}
+exec pnpm --dir "$APP_DIR" exec tsx "$APP_DIR/src/shell/main.ts" ${SERVER_ARGS[@]+"${SERVER_ARGS[@]}"}

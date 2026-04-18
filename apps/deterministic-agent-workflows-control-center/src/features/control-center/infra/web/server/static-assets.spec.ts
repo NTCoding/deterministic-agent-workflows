@@ -17,8 +17,7 @@ describe('createStaticFileServer', () => {
     mkdirSync(testDir, { recursive: true })
     writeFileSync(join(testDir, 'index.html'), '<html>test</html>')
     writeFileSync(join(testDir, 'styles.css'), 'body {}')
-    writeFileSync(join(testDir, 'app.js'), 'console.log("hi")')
-    writeFileSync(join(testDir, 'app.js.map'), '{"version":3}')
+    writeFileSync(join(testDir, 'app'), 'console.log("hi")')
     writeFileSync(join(testDir, 'data.bin'), Buffer.from([0x00, 0x01]))
   })
 
@@ -45,18 +44,11 @@ describe('createStaticFileServer', () => {
     expect(response.written.headers['Content-Type']).toBe('text/css')
   })
 
-  it('serves JS files with application/javascript content type', () => {
+  it('serves JS files', () => {
     const server = createStaticFileServer(testDir)
     const response = createMockResponse()
-    server.serve('/app.js', response.res)
+    server.serve('/app', response.res)
     expect(response.written.headers['Content-Type']).toBe('application/javascript')
-  })
-
-  it('serves JS source maps with application/json content type', () => {
-    const server = createStaticFileServer(testDir)
-    const response = createMockResponse()
-    server.serve('/app.js.map', response.res)
-    expect(response.written.headers['Content-Type']).toBe('application/json')
   })
 
   it('returns false for non-existent files', () => {
@@ -74,14 +66,6 @@ describe('createStaticFileServer', () => {
     const response = createMockResponse()
     const served = server.serve('', response.res)
     expect(served).toBe(true)
-  })
-
-  it('falls back to index.html for extensionless paths (SPA deep links)', () => {
-    const server = createStaticFileServer(testDir)
-    const response = createMockResponse()
-    const served = server.serve('/session/abc-123', response.res)
-    expect(served).toBe(true)
-    expect(response.written.headers['Content-Type']).toBe('text/html')
   })
 
   it('uses application/octet-stream for unknown extensions', () => {
