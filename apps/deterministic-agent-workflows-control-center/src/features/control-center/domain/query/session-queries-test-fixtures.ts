@@ -16,6 +16,17 @@ export function createTestDb(): SqliteDatabase {
       payload TEXT NOT NULL
     )
   `)
+  db.exec(`
+    CREATE TABLE reflections (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      session_id TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      label TEXT,
+      agent_name TEXT,
+      source_state TEXT,
+      payload_json TEXT NOT NULL
+    )
+  `)
   return db
 }
 
@@ -37,6 +48,29 @@ export function insertEvent(
     at,
     ...payload 
   }))
+}
+
+export function insertReflection(
+  db: SqliteDatabase,
+  sessionId: string,
+  createdAt: string,
+  payload: Record<string, unknown>,
+  meta?: {
+    readonly label?: string
+    readonly agentName?: string
+    readonly sourceState?: string
+  },
+): void {
+  db.prepare(
+    'INSERT INTO reflections (session_id, created_at, label, agent_name, source_state, payload_json) VALUES (?, ?, ?, ?, ?, ?)',
+  ).run(
+    sessionId,
+    createdAt,
+    meta?.label ?? null,
+    meta?.agentName ?? null,
+    meta?.sourceState ?? null,
+    JSON.stringify(payload),
+  )
 }
 
 export function seedSessionEvents(db: SqliteDatabase, sessionId: string): void {

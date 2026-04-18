@@ -3,6 +3,7 @@ declare module '@nt-ai-lab/deterministic-agent-workflow-engine' {
 
   export const engineEventSchema: z.ZodType<EngineEvent>
   export const repositoryMetadataEventSchema: z.ZodType<DomainMetadataEvent>
+  export const storedReflectionSchema: z.ZodType<StoredReflection>
 
   export type EngineEvent =
     | {
@@ -58,6 +59,46 @@ declare module '@nt-ai-lab/deterministic-agent-workflow-engine' {
     | { type: 'issue-recorded'; at: string; issueNumber: number }
     | { type: 'branch-recorded'; at: string; branch: string }
     | { type: 'pr-recorded'; at: string; prNumber: number }
+
+  export type ReflectionEvidence =
+    | {
+      kind: 'state-period'
+      label?: string
+      state: string
+      startedAt?: string
+      endedAt?: string
+    }
+    | { kind: 'event'; label?: string; seq: number }
+    | { kind: 'event-range'; label?: string; startSeq: number; endSeq: number }
+    | { kind: 'journal-entry'; label?: string; at: string; agentName?: string }
+    | { kind: 'transcript-range'; label?: string; startIndex: number; endIndex: number }
+    | { kind: 'tool-activity'; label?: string; state?: string; toolName?: string; metric?: string }
+
+  export type ReflectionFinding = {
+    title: string
+    category: 'state-efficiency' | 'review-rework' | 'quality-gates' | 'tooling' | 'workflow-design'
+    opportunity: string
+    likelyCause: string
+    suggestedChange: string
+    expectedImpact: string
+    confidence?: 'low' | 'medium' | 'high'
+    evidence: Array<ReflectionEvidence>
+  }
+
+  export type ReflectionPayload = {
+    summary?: string
+    findings: Array<ReflectionFinding>
+  }
+
+  export type StoredReflection = {
+    id: number
+    sessionId: string
+    createdAt: string
+    label?: string
+    agentName?: string
+    sourceState?: string
+    reflection: ReflectionPayload
+  }
 }
 
 declare module '@nt-ai-lab/deterministic-agent-workflow-event-store' {

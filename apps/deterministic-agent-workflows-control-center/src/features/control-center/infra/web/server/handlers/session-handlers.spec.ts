@@ -4,6 +4,7 @@ import type { SqliteDatabase } from '../../../../domain/query/sqlite-runtime'
 import {
   createTestDb,
   insertEvent,
+  insertReflection,
   seedSessionEvents,
   seedMultipleSessions,
 } from '../../../../domain/query/session-queries-test-fixtures'
@@ -13,6 +14,7 @@ import {
   handleGetSessionEvents,
   handleGetSessionJournal,
   handleGetSessionInsights,
+  handleGetSessionReflections,
 } from './session-handlers'
 import type { SessionHandlerDeps } from './session-handlers'
 import {
@@ -70,6 +72,13 @@ describe('session-handlers', () => {
   })
   const journalBodySchema = z.object({ entries: z.array(z.unknown()) })
   const insightsBodySchema = z.object({ insights: z.array(z.unknown()) })
+  const reflectionsBodySchema = z.object({
+    reflections: z.array(z.object({
+      id: z.number(),
+      createdAt: z.string(),
+      reflection: z.object({ findings: z.array(z.unknown()) }),
+    }).passthrough()) 
+  })
 
   beforeEach(() => {
     state.db = createTestDb()
@@ -285,6 +294,55 @@ describe('session-handlers', () => {
       const response = createMockResponse()
       handler(mockReq(), response.res, makeRoute({}))
       expect(response.written.statusCode).toBe(400)
+    })
+  })
+
+  describe('handleGetSessionReflections', () => {
+    it('returns reflections newest first', () => {
+      seedSessionEvents(state.db, 'test-1')
+      insertReflection(state.db, 'test-1', '2026-01-01T00:20:00Z', {
+        findings: [{
+          title: 'Later',
+          category: 'tooling',
+          opportunity: 'Use subagents',
+          likelyCause: 'Manual repetition',
+          suggestedChange: 'Delegate',
+          expectedImpact: 'Less repeated work',
+          evidence: [{
+            kind: 'event',
+            seq: 2 
+          }],
+        }],
+      })
+      insertReflection(state.db, 'test-1', '2026-01-01T00:10:00Z', {
+        findings: [{
+          title: 'Earlier',
+          category: 'review-rework',
+          opportunity: 'Review sooner',
+          likelyCause: 'Late detection',
+          suggestedChange: 'Add checkpoint',
+          expectedImpact: 'Less rework',
+          evidence: [{
+            kind: 'event-range',
+            startSeq: 1,
+            endSeq: 3 
+          }],
+        }],
+      })
+      const handler = handleGetSessionReflections(state.deps)
+      const response = createMockResponse()
+      handler(mockReq(), response.res, makeRoute({ id: 'test-1' }))
+      const body = parseJsonBody(response.written.body, reflectionsBodySchema)
+      expect(response.written.statusCode).toBe(200)
+      expect(body.reflections).toHaveLength(2)
+      expect(body.reflections[0]?.createdAt).toBe('2026-01-01T00:20:00Z')
+    })
+
+    it('returns 404 for unknown session', () => {
+      const handler = handleGetSessionReflections(state.deps)
+      const response = createMockResponse()
+      handler(mockReq(), response.res, makeRoute({ id: 'nonexistent' }))
+      expect(response.written.statusCode).toBe(404)
     })
   })
 })

@@ -237,6 +237,8 @@ export function createOpenCodeWorkflowPlugin<
           getSessionId: () => ctx.sessionID,
           getSessionTranscriptPath: () => dbPath,
           getSessionRepository: () => getRepositoryName(ctx.worktree),
+          getRepositoryRoot: () => ctx.worktree,
+          getWorkflowEventsDbPath: () => resolveWorkflowEventsDatabasePath(),
         }).output
       },
     })

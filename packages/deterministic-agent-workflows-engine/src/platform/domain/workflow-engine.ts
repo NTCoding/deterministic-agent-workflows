@@ -24,12 +24,16 @@ import type {
   WorkflowEngineDeps,
 } from './workflow-engine-types'
 import type { BaseEvent } from './base-event'
-import type { StoredEvent } from './stored-event'
 import {
-  flattenStoredEvent, toPayload
+  flattenStoredEvent,
+  toPayload,
+  type StoredEvent,
 } from './stored-event'
-import type { BaseWorkflowState } from './workflow-state'
-import { WorkflowStateError } from './workflow-state'
+import {
+  WorkflowStateError,
+  type BaseWorkflowState,
+} from './workflow-state'
+import { serializeWorkflowState } from './workflow-state-serialization'
 
 /** @riviere-role domain-service */
 export class WorkflowEngine<
@@ -89,15 +93,8 @@ export class WorkflowEngine<
     this.requireSession(sessionId)
     const workflow = this.rehydrateFromEvents(sessionId)
     const registry = this.factory.getRegistry()
-    const identityResult = this.verifyIdentity(sessionId, workflow)
-    if (identityResult !== undefined) {
-      this.persistEvents(sessionId, workflow)
-      const currentPrefix = getExpectedPrefix(workflow.getState().currentStateMachineState, registry)
-      return {
-        type: 'blocked',
-        output: formatOperationGateError(op, identityResult, currentPrefix) 
-      }
-    }
+    const gate = this.applyIdentityGate(sessionId, workflow, op)
+    if (gate !== undefined) return gate
 
     const result = fn(workflow)
     this.persistEvents(sessionId, workflow)
@@ -123,15 +120,8 @@ export class WorkflowEngine<
     const currentStateName = state.currentStateMachineState
     const registry = this.factory.getRegistry()
 
-    const identityResult = this.verifyIdentity(sessionId, workflow)
-    if (identityResult !== undefined) {
-      this.persistEvents(sessionId, workflow)
-      const currentPrefix = getExpectedPrefix(currentStateName, registry)
-      return {
-        type: 'blocked',
-        output: formatOperationGateError('transition', identityResult, currentPrefix) 
-      }
-    }
+    const gate = this.applyIdentityGate(sessionId, workflow, 'transition')
+    if (gate !== undefined) return gate
 
     const currentDef = registry[currentStateName]
     if (!currentDef.canTransitionTo.includes(target)) {
@@ -199,14 +189,8 @@ export class WorkflowEngine<
     const currentStateName = workflow.getState().currentStateMachineState
     const currentPrefix = getExpectedPrefix(currentStateName, registry)
 
-    const identityResult = this.verifyIdentity(sessionId, workflow)
-    if (identityResult !== undefined) {
-      this.persistEvents(sessionId, workflow)
-      return {
-        type: 'blocked',
-        output: formatOperationGateError('bash-check', identityResult, currentPrefix) 
-      }
-    }
+    const gate = this.applyIdentityGate(sessionId, workflow, 'bash-check')
+    if (gate !== undefined) return gate
 
     if (toolName !== 'Bash') {
       workflow.appendEvent({
@@ -268,14 +252,8 @@ export class WorkflowEngine<
     const currentStateName = workflow.getState().currentStateMachineState
     const currentPrefix = getExpectedPrefix(currentStateName, registry)
 
-    const identityResult = this.verifyIdentity(sessionId, workflow)
-    if (identityResult !== undefined) {
-      this.persistEvents(sessionId, workflow)
-      return {
-        type: 'blocked',
-        output: formatOperationGateError('write-check', identityResult, currentPrefix) 
-      }
-    }
+    const gate = this.applyIdentityGate(sessionId, workflow, 'write-check')
+    if (gate !== undefined) return gate
 
     const writeTools = new Set(['Write', 'Edit', 'NotebookEdit'])
     if (!writeTools.has(toolName)) {
@@ -355,6 +333,11 @@ export class WorkflowEngine<
     }
   }
 
+  getState(sessionId: string): EngineResult {
+    this.requireSession(sessionId)
+    return serializeWorkflowState(this.rehydrateFromEvents(sessionId).getState())
+  }
+
   persistSessionId(sessionId: string): void {
     this.engineDeps.appendToFile(this.engineDeps.getEnvFilePath(), `export CLAUDE_SESSION_ID='${sessionId}'\n`)
   }
@@ -412,6 +395,17 @@ export class WorkflowEngine<
       },
     )
     return stored
+  }
+
+  private applyIdentityGate(sessionId: string, workflow: TWorkflow, op: string): EngineResult | undefined {
+    const identityResult = this.verifyIdentity(sessionId, workflow)
+    if (identityResult === undefined) return undefined
+    this.persistEvents(sessionId, workflow)
+    const currentPrefix = getExpectedPrefix(workflow.getState().currentStateMachineState, this.factory.getRegistry())
+    return {
+      type: 'blocked',
+      output: formatOperationGateError(op, identityResult, currentPrefix),
+    }
   }
 
   private verifyIdentity(sessionId: string, workflow: TWorkflow): string | undefined {

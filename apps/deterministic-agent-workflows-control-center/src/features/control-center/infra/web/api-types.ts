@@ -236,3 +236,72 @@ export type ActivityResponse = {
   readonly overall: ActivityReport
   readonly byState: ReadonlyArray<PerStateActivity>
 }
+
+/** @riviere-role web-tbc */
+export type ReflectionEvidenceDto =
+  | {
+    readonly kind: 'state-period'
+    readonly label?: string | undefined
+    readonly state: string
+    readonly startedAt?: string | undefined
+    readonly endedAt?: string | undefined
+  }
+  | {
+    readonly kind: 'event'
+    readonly label?: string | undefined
+    readonly seq: number
+  }
+  | {
+    readonly kind: 'event-range'
+    readonly label?: string | undefined
+    readonly startSeq: number
+    readonly endSeq: number
+  }
+  | {
+    readonly kind: 'journal-entry'
+    readonly label?: string | undefined
+    readonly at: string
+    readonly agentName?: string | undefined
+  }
+  | {
+    readonly kind: 'transcript-range'
+    readonly label?: string | undefined
+    readonly startIndex: number
+    readonly endIndex: number
+  }
+  | {
+    readonly kind: 'tool-activity'
+    readonly label?: string | undefined
+    readonly state?: string | undefined
+    readonly toolName?: string | undefined
+    readonly metric?: string | undefined
+  }
+
+/** @riviere-role web-tbc */
+export type ReflectionFindingDto = {
+  readonly title: string
+  readonly category: string
+  readonly opportunity: string
+  readonly likelyCause: string
+  readonly suggestedChange: string
+  readonly expectedImpact: string
+  readonly confidence?: string | undefined
+  readonly evidence: ReadonlyArray<ReflectionEvidenceDto>
+}
+
+/** @riviere-role web-tbc */
+export type ReflectionPayloadDto = {
+  readonly summary?: string | undefined
+  readonly findings: ReadonlyArray<ReflectionFindingDto>
+}
+
+/** @riviere-role web-tbc */
+export type ReflectionDto = {
+  readonly id: number
+  readonly sessionId: string
+  readonly createdAt: string
+  readonly label?: string | undefined
+  readonly agentName?: string | undefined
+  readonly sourceState?: string | undefined
+  readonly reflection: ReflectionPayloadDto
+}

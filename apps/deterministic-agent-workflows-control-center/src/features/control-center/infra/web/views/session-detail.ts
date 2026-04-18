@@ -1,5 +1,6 @@
 import type {
   EventDto,
+  ReflectionDto,
   SessionDetailDto,
 } from '../api-client'
 import { api } from '../api-client'
@@ -25,6 +26,7 @@ import {
   attachSuggestionListeners,
   renderSuggestions,
 } from '../components/suggestion-cards'
+import { renderReflectionPanel } from '../components/reflection-panel'
 import {
   attachTimelineListeners,
   computeTimelineSegments,
@@ -47,13 +49,14 @@ import {
   truncateId,
 } from '../render'
 
-type TabName = 'overview' | 'events' | 'journal' | 'insights' | 'continue' | 'transcript'
+type TabName = 'overview' | 'events' | 'journal' | 'insights' | 'continue' | 'transcript' | 'reflection'
 
 type RenderState = {
   activeTab: TabName
   events: Array<EventDto> | null
   eventsTotal: number
   transcript: string | null
+  reflections: Array<ReflectionDto> | null
 }
 
 function hasContinue(session: SessionDetailDto): boolean {
@@ -118,6 +121,10 @@ function renderTabBar(session: SessionDetailDto, activeTab: TabName): string {
     {
       name: 'insights',
       label: `Insights (${session.insights.length})` 
+    },
+    {
+      name: 'reflection',
+      label: 'Reflection'
     },
   ]
   if (hasContinue(session)) {
@@ -188,11 +195,16 @@ function renderTabContent(session: SessionDetailDto, state: RenderState): string
   if (state.activeTab === 'insights') {
     return renderInsights(session.insights)
   }
+  if (state.activeTab === 'reflection') {
+    return state.reflections === null
+      ? '<div id="reflection-tab-content" class="loading">Loading reflections...</div>'
+      : renderReflectionPanel(state.reflections)
+  }
   return renderContinueTab(session.insights, session.suggestions)
 }
 
 function parseTabName(value: string | undefined): TabName | null {
-  if (value === 'overview' || value === 'events' || value === 'journal' || value === 'insights' || value === 'continue' || value === 'transcript') {
+  if (value === 'overview' || value === 'events' || value === 'journal' || value === 'insights' || value === 'continue' || value === 'transcript' || value === 'reflection') {
     return value
   }
   return null
@@ -223,6 +235,25 @@ async function loadEvents(sessionId: string, state: RenderState): Promise<void> 
 async function loadTranscript(sessionId: string, session: SessionDetailDto, state: RenderState): Promise<void> {
   const transcript = await api.getTranscript(sessionId)
   state.transcript = renderTranscript(transcript, { session })
+}
+
+async function loadReflections(sessionId: string, state: RenderState): Promise<void> {
+  const result = await api.getSessionReflections(sessionId)
+  state.reflections = result.reflections
+}
+
+async function loadActiveTabData(sessionId: string, session: SessionDetailDto, state: RenderState): Promise<void> {
+  if (state.activeTab === 'events' && state.events === null) {
+    await loadEvents(sessionId, state)
+    return
+  }
+  if (state.activeTab === 'transcript' && state.transcript === null) {
+    await loadTranscript(sessionId, session, state)
+    return
+  }
+  if (state.activeTab === 'reflection' && state.reflections === null) {
+    await loadReflections(sessionId, state)
+  }
 }
 
 function attachDetailListeners(container: HTMLElement): void {
@@ -260,19 +291,14 @@ export async function renderSessionDetail(container: HTMLElement, sessionId: str
       events: null,
       eventsTotal: 0,
       transcript: null,
+      reflections: null,
     }
 
     const renderSeq = { current: 0 }
     const render = async (): Promise<void> => {
       renderSeq.current += 1
       const thisSeq = renderSeq.current
-      if (state.activeTab === 'events' && state.events === null) {
-        await loadEvents(sessionId, state)
-      }
-      if (thisSeq !== renderSeq.current) return
-      if (state.activeTab === 'transcript' && state.transcript === null) {
-        await loadTranscript(sessionId, session, state)
-      }
+      await loadActiveTabData(sessionId, session, state)
       if (thisSeq !== renderSeq.current) return
 
       container.innerHTML = renderPage(session, state)

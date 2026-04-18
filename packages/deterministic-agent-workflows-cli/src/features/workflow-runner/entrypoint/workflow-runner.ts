@@ -1,8 +1,12 @@
 import type {
-  BaseWorkflowState, EngineResult, RehydratableWorkflow, WorkflowEngineDeps
+  BaseWorkflowState,
+  EngineResult,
+  RehydratableWorkflow,
+  WorkflowEngineDeps,
 } from '@nt-ai-lab/deterministic-agent-workflow-engine'
 import {
-  pass, WorkflowEngine 
+  pass,
+  WorkflowEngine,
 } from '@nt-ai-lab/deterministic-agent-workflow-engine'
 import {
   EXIT_ALLOW, EXIT_BLOCK, EXIT_ERROR 
@@ -28,6 +32,10 @@ import type {
   RunnerResult,
   WorkflowRunnerConfig,
 } from '../../../platform/domain/workflow-runner-types'
+import {
+  handleGetReflectionProcessRoute,
+  handleRecordReflectionRoute,
+} from './reflection-routes'
 
 export type { PreToolUseHandlerFn } from '../../../platform/domain/pre-tool-use-handler'
 
@@ -130,7 +138,19 @@ export function createWorkflowRunner<
   return (args, engineDeps, workflowDeps, options) => {
     const engine = new WorkflowEngine(config.workflowDefinition, engineDeps, workflowDeps)
     if (args.length > 0) {
-      return handleRoute(engine, engineDeps, config, args, args[0], options?.getSessionId, options?.getSessionTranscriptPath, options?.getSessionRepository)
+      return handleRoute(
+        engine,
+        engineDeps,
+        config,
+        args,
+        args[0],
+        options?.readStdin,
+        options?.getSessionId,
+        options?.getSessionTranscriptPath,
+        options?.getSessionRepository,
+        options?.getRepositoryRoot,
+        options?.getWorkflowEventsDbPath,
+      )
     }
     if (options?.readStdin === undefined) return {
       output: 'No command and no stdin available',
@@ -170,16 +190,44 @@ function handleWriteJournalRoute<
   }))
 }
 
+function handleGetStateRoute<
+  TWorkflow extends RehydratableWorkflow<TState>,
+  TState extends BaseWorkflowState<TStateName>,
+  TDeps,
+  TStateName extends string,
+  TOperation extends string,
+>(engine: WorkflowEngine<TWorkflow, TState, TDeps, TStateName, TOperation>, args: readonly string[], getSessionId?: () => string): RunnerResult {
+  const sessionId = getSessionId === undefined ? args[1] : getSessionId()
+  if (typeof sessionId !== 'string' || sessionId.length === 0) {
+    return {
+      output: 'get-state requires <session-id> argument',
+      exitCode: EXIT_ERROR,
+    }
+  }
+  return engineResultToRunnerResult(engine.getState(sessionId))
+}
+
 function handleRoute<
   TWorkflow extends RehydratableWorkflow<TState>,
   TState extends BaseWorkflowState<TStateName>,
   TDeps,
   TStateName extends string,
   TOperation extends string,
->(engine: WorkflowEngine<TWorkflow, TState, TDeps, TStateName, TOperation>, engineDeps: WorkflowEngineDeps, config: WorkflowRunnerConfig<TWorkflow, TState, TDeps, TStateName, TOperation>, args: readonly string[], routeName: string, getSessionId?: () => string, getSessionTranscriptPath?: () => string, getSessionRepository?: () => string | undefined): RunnerResult {
-  if (routeName === 'write-journal') {
-    return handleWriteJournalRoute(engine, engineDeps, args, getSessionId)
-  }
+>(engine: WorkflowEngine<TWorkflow, TState, TDeps, TStateName, TOperation>, engineDeps: WorkflowEngineDeps, config: WorkflowRunnerConfig<TWorkflow, TState, TDeps, TStateName, TOperation>, args: readonly string[], routeName: string, readStdin?: () => string, getSessionId?: () => string, getSessionTranscriptPath?: () => string, getSessionRepository?: () => string | undefined, getRepositoryRoot?: () => string, getWorkflowEventsDbPath?: () => string): RunnerResult {
+  const builtin = resolveBuiltinRoute(
+    engine,
+    engineDeps,
+    config,
+    args,
+    routeName,
+    readStdin,
+    getSessionId,
+    getSessionTranscriptPath,
+    getSessionRepository,
+    getRepositoryRoot,
+    getWorkflowEventsDbPath,
+  )
+  if (builtin !== undefined) return builtin
   const routeDef = Object.hasOwn(config.routes, routeName) ? config.routes[routeName] : undefined
   if (routeDef === undefined) return {
     output: `Unknown command: ${routeName}`,
@@ -210,6 +258,27 @@ function handleRoute<
       return engineResultToRunnerResult(engine.transition(resolveSessionId(), config.workflowDefinition.stateSchema.parse(resolveTarget())))
     case 'transaction':
       return engineResultToRunnerResult(engine.transaction(resolveSessionId(), routeName, (workflow) => routeDef.handler(workflow, ...argsAfterSessionId())))
+  }
+}
+
+function resolveBuiltinRoute<
+  TWorkflow extends RehydratableWorkflow<TState>,
+  TState extends BaseWorkflowState<TStateName>,
+  TDeps,
+  TStateName extends string,
+  TOperation extends string,
+>(engine: WorkflowEngine<TWorkflow, TState, TDeps, TStateName, TOperation>, engineDeps: WorkflowEngineDeps, config: WorkflowRunnerConfig<TWorkflow, TState, TDeps, TStateName, TOperation>, args: readonly string[], routeName: string, readStdin?: () => string, getSessionId?: () => string, getSessionTranscriptPath?: () => string, getSessionRepository?: () => string | undefined, getRepositoryRoot?: () => string, getWorkflowEventsDbPath?: () => string): RunnerResult | undefined {
+  switch (routeName) {
+    case 'get-state':
+      return handleGetStateRoute(engine, args, getSessionId)
+    case 'get-reflection-process':
+      return handleGetReflectionProcessRoute(engine, engineDeps, config, args, getSessionId, getSessionTranscriptPath, getSessionRepository, getRepositoryRoot, getWorkflowEventsDbPath)
+    case 'record-reflection':
+      return handleRecordReflectionRoute(engine, engineDeps, args, readStdin, getSessionId)
+    case 'write-journal':
+      return handleWriteJournalRoute(engine, engineDeps, args, getSessionId)
+    default:
+      return undefined
   }
 }
 
