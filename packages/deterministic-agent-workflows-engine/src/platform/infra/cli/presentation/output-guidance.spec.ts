@@ -224,7 +224,7 @@ it('reinserts the current procedure when identity verification fails', () => {
   const expectedOutput = [
     'Cannot write-check',
     SEPARATOR,
-    'You forgot. Next message MUST begin with: 🧭 PLANNING',
+    'You forgot. Current procedure:',
     '',
     procedureContent,
     '',
