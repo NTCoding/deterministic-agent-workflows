@@ -54,6 +54,7 @@ declare module '@nt-ai-lab/deterministic-agent-workflow-engine' {
     | { type: 'idle-checked'; at: string; agentName: string; allowed: boolean; reason?: string }
     | { type: 'identity-verified'; at: string; status: string; transcriptPath: string }
     | { type: 'context-requested'; at: string; agentName: string }
+    | { type: 'review-recorded'; at: string; reviewId: number; reviewType: string; verdict: 'PASS' | 'FAIL' }
 
   export type DomainMetadataEvent =
     | { type: 'issue-recorded'; at: string; issueNumber: number }
@@ -98,6 +99,47 @@ declare module '@nt-ai-lab/deterministic-agent-workflow-engine' {
     agentName?: string
     sourceState?: string
     reflection: ReflectionPayload
+  }
+
+  export type ReviewType = string
+
+  export type ReviewVerdict = 'PASS' | 'FAIL'
+
+  export type ReviewFinding = {
+    title?: string
+    severity?: 'minor' | 'major' | 'critical'
+    status?: 'blocking' | 'non-blocking' | 'accepted-risk'
+    rule?: string
+    file?: string
+    startLine?: number
+    endLine?: number
+    details?: string
+    recommendation?: string
+  }
+
+  export type StoredReview = {
+    id: number
+    sessionId: string
+    createdAt: string
+    reviewType: ReviewType
+    verdict: ReviewVerdict
+    branch?: string
+    pullRequestNumber?: number
+    sourceState?: string
+    summary?: string
+    findings: Array<ReviewFinding>
+  }
+
+  export type ListedReview = StoredReview & {
+    repository?: string
+  }
+
+  export type ReviewFilters = {
+    repository?: string
+    branch?: string
+    pullRequestNumber?: number
+    reviewType?: ReviewType
+    verdict?: ReviewVerdict
   }
 }
 

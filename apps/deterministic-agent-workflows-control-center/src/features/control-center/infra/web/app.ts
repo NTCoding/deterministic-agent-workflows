@@ -3,6 +3,7 @@ import {
 } from './router'
 import type { Route } from './router'
 import { renderDashboard } from './views/dashboard'
+import { renderReviews } from './views/reviews'
 import { renderSessionDetail } from './views/session-detail'
 import { renderAnalytics } from './views/analytics'
 import { renderSessionCompare } from './views/session-compare'
@@ -61,6 +62,9 @@ async function renderRoute(route: Route): Promise<void> {
       break
     case 'session':
       await renderSessionDetail(container, route.id)
+      break
+    case 'reviews':
+      await renderReviews(container)
       break
     case 'analytics':
       await renderAnalytics(container)

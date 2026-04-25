@@ -9,6 +9,7 @@ import {
 } from 'vitest'
 import {
   createTestDb,
+  seedReviewSimulation,
   seedSessionEvents,
   seedMultipleSessions,
 } from '../../../domain/query/session-queries-test-fixtures'
@@ -129,6 +130,23 @@ describe('createHttpServer', () => {
     expect(statusCode).toBe(200)
     const parsed = parseJsonBody(body, overviewSchema)
     expect(parsed.totalSessions).toBe(2)
+  })
+
+  it('serves reviews endpoint', async () => {
+    seedReviewSimulation(state.db, 'test-1')
+    await state.server.start(0)
+    const {
+      statusCode, body
+    } = await httpGet(getPort(), '/api/reviews?reviewType=code-review&verdict=FAIL')
+    expect(statusCode).toBe(200)
+    const parsed = parseJsonBody(body, z.object({
+      reviews: z.array(z.object({
+        reviewType: z.string(),
+        verdict: z.string(),
+      })),
+    }))
+    expect(parsed.reviews).toHaveLength(1)
+    expect(parsed.reviews[0]?.reviewType).toBe('code-review')
   })
 
   it('returns 500 for server errors', async () => {

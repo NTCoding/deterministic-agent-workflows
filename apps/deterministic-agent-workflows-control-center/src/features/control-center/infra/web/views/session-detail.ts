@@ -1,6 +1,7 @@
 import type {
   EventDto,
   ReflectionDto,
+  ReviewDto,
   SessionDetailDto,
 } from '../api-client'
 import { api } from '../api-client'
@@ -27,6 +28,7 @@ import {
   renderSuggestions,
 } from '../components/suggestion-cards'
 import { renderReflectionPanel } from '../components/reflection-panel'
+import { renderReviewPanel } from '../components/review-panel'
 import {
   attachTimelineListeners,
   computeTimelineSegments,
@@ -49,13 +51,14 @@ import {
   truncateId,
 } from '../render'
 
-type TabName = 'overview' | 'events' | 'journal' | 'insights' | 'continue' | 'transcript' | 'reflection'
+type TabName = 'overview' | 'events' | 'journal' | 'insights' | 'continue' | 'transcript' | 'reviews' | 'reflection'
 
 type RenderState = {
   activeTab: TabName
   events: Array<EventDto> | null
   eventsTotal: number
   transcript: string | null
+  reviews: Array<ReviewDto> | null
   reflections: Array<ReflectionDto> | null
 }
 
@@ -121,6 +124,10 @@ function renderTabBar(session: SessionDetailDto, activeTab: TabName): string {
     {
       name: 'insights',
       label: `Insights (${session.insights.length})` 
+    },
+    {
+      name: 'reviews',
+      label: 'Reviews'
     },
     {
       name: 'reflection',
@@ -195,6 +202,11 @@ function renderTabContent(session: SessionDetailDto, state: RenderState): string
   if (state.activeTab === 'insights') {
     return renderInsights(session.insights)
   }
+  if (state.activeTab === 'reviews') {
+    return state.reviews === null
+      ? '<div id="reviews-tab-content" class="loading">Loading reviews...</div>'
+      : renderReviewPanel(state.reviews)
+  }
   if (state.activeTab === 'reflection') {
     return state.reflections === null
       ? '<div id="reflection-tab-content" class="loading">Loading reflections...</div>'
@@ -204,7 +216,7 @@ function renderTabContent(session: SessionDetailDto, state: RenderState): string
 }
 
 function parseTabName(value: string | undefined): TabName | null {
-  if (value === 'overview' || value === 'events' || value === 'journal' || value === 'insights' || value === 'continue' || value === 'transcript' || value === 'reflection') {
+  if (value === 'overview' || value === 'events' || value === 'journal' || value === 'insights' || value === 'continue' || value === 'transcript' || value === 'reviews' || value === 'reflection') {
     return value
   }
   return null
@@ -242,6 +254,11 @@ async function loadReflections(sessionId: string, state: RenderState): Promise<v
   state.reflections = result.reflections
 }
 
+async function loadReviews(sessionId: string, state: RenderState): Promise<void> {
+  const result = await api.getSessionReviews(sessionId)
+  state.reviews = result.reviews
+}
+
 async function loadActiveTabData(sessionId: string, session: SessionDetailDto, state: RenderState): Promise<void> {
   if (state.activeTab === 'events' && state.events === null) {
     await loadEvents(sessionId, state)
@@ -249,6 +266,10 @@ async function loadActiveTabData(sessionId: string, session: SessionDetailDto, s
   }
   if (state.activeTab === 'transcript' && state.transcript === null) {
     await loadTranscript(sessionId, session, state)
+    return
+  }
+  if (state.activeTab === 'reviews' && state.reviews === null) {
+    await loadReviews(sessionId, state)
     return
   }
   if (state.activeTab === 'reflection' && state.reflections === null) {
@@ -291,6 +312,7 @@ export async function renderSessionDetail(container: HTMLElement, sessionId: str
       events: null,
       eventsTotal: 0,
       transcript: null,
+      reviews: null,
       reflections: null,
     }
 

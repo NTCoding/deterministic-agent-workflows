@@ -9,6 +9,10 @@ import {
   getSessionReflections,
 } from '../../../../domain/query/session-queries'
 import {
+  getSessionReviews,
+  listReviews,
+} from '../../../../domain/query/review-queries'
+import {
   projectSession,
   projectSessionSummary,
 } from '../../../../domain/analytics/session-projector'
@@ -31,6 +35,23 @@ import {
 export type SessionHandlerDeps = {
   readonly queryDeps: SessionQueryDeps
   readonly now: () => Date
+}
+
+function parsePullRequestNumber(value: string | null): number | undefined {
+  if (value === null || value.length === 0) return undefined
+  const parsed = Number.parseInt(value, 10)
+  return Number.isNaN(parsed) ? undefined : parsed
+}
+
+function parseReviewType(value: string | null): string | undefined {
+  if (value === null || value.length === 0) return undefined
+  return value
+}
+
+function parseReviewVerdict(value: string | null): 'PASS' | 'FAIL' | undefined {
+  if (value === null || value.length === 0) return undefined
+  if (value === 'PASS' || value === 'FAIL') return value
+  return undefined
 }
 
 function parseEventCategory(value: string | undefined): EventCategory | undefined {
@@ -258,5 +279,48 @@ export function handleGetSessionReflections(
     }
 
     sendJson(res, 200, {reflections: getSessionReflections(deps.queryDeps, sessionId),})
+  }
+}
+
+/** @riviere-role web-tbc */
+export function handleGetSessionReviews(
+  deps: SessionHandlerDeps,
+): (_req: IncomingMessage, res: ServerResponse, route: RouteParams) => void {
+  return (_req, res, route) => {
+    const sessionId = route.params['id']
+    if (!sessionId) {
+      sendError(res, 400, 'Missing session ID')
+      return
+    }
+
+    const events = getSessionEvents(deps.queryDeps, sessionId)
+    if (events.length === 0) {
+      sendError(res, 404, `Session ${sessionId} not found`)
+      return
+    }
+
+    sendJson(res, 200, { reviews: getSessionReviews(deps.queryDeps, sessionId) })
+  }
+}
+
+/** @riviere-role web-tbc */
+export function handleListReviews(
+  deps: SessionHandlerDeps,
+): (_req: IncomingMessage, res: ServerResponse, route: RouteParams) => void {
+  return (_req, res, route) => {
+    const repository = route.query.get('repository') ?? undefined
+    const branch = route.query.get('branch') ?? undefined
+    const pullRequestNumber = parsePullRequestNumber(route.query.get('pullRequestNumber'))
+    const reviewType = parseReviewType(route.query.get('reviewType'))
+    const verdict = parseReviewVerdict(route.query.get('verdict'))
+    sendJson(res, 200, {
+      reviews: listReviews(deps.queryDeps, {
+        ...(repository === undefined ? {} : { repository }),
+        ...(branch === undefined ? {} : { branch }),
+        ...(pullRequestNumber === undefined ? {} : { pullRequestNumber }),
+        ...(reviewType === undefined ? {} : { reviewType }),
+        ...(verdict === undefined ? {} : { verdict }),
+      }),
+    })
   }
 }

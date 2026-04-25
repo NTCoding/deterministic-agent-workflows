@@ -1,4 +1,6 @@
 import { z } from 'zod'
+import { reflectionsResponseSchema } from './reflection-api-schemas'
+import { reviewsResponseSchema } from './review-api-schemas'
 export type {
   ActivityReport,
   ActivityResponse,
@@ -7,6 +9,7 @@ export type {
   EventDto,
   PerStateActivity,
   ReflectionDto,
+  ReviewDto,
   SessionDetailDto,
   SessionListResponse,
   SessionSummaryDto,
@@ -277,74 +280,6 @@ const activityResponseSchema = z.object({
   byState: z.array(perStateActivitySchema),
 })
 
-const reflectionEvidenceSchema = z.discriminatedUnion('kind', [
-  z.object({
-    kind: z.literal('state-period'),
-    label: z.string().optional(),
-    state: z.string(),
-    startedAt: z.string().optional(),
-    endedAt: z.string().optional(),
-  }),
-  z.object({
-    kind: z.literal('event'),
-    label: z.string().optional(),
-    seq: z.number(),
-  }),
-  z.object({
-    kind: z.literal('event-range'),
-    label: z.string().optional(),
-    startSeq: z.number(),
-    endSeq: z.number(),
-  }),
-  z.object({
-    kind: z.literal('journal-entry'),
-    label: z.string().optional(),
-    at: z.string(),
-    agentName: z.string().optional(),
-  }),
-  z.object({
-    kind: z.literal('transcript-range'),
-    label: z.string().optional(),
-    startIndex: z.number(),
-    endIndex: z.number(),
-  }),
-  z.object({
-    kind: z.literal('tool-activity'),
-    label: z.string().optional(),
-    state: z.string().optional(),
-    toolName: z.string().optional(),
-    metric: z.string().optional(),
-  }),
-])
-
-const reflectionFindingSchema = z.object({
-  title: z.string(),
-  category: z.string(),
-  opportunity: z.string(),
-  likelyCause: z.string(),
-  suggestedChange: z.string(),
-  expectedImpact: z.string(),
-  confidence: z.string().optional(),
-  evidence: z.array(reflectionEvidenceSchema),
-})
-
-const reflectionPayloadSchema = z.object({
-  summary: z.string().optional(),
-  findings: z.array(reflectionFindingSchema),
-})
-
-const reflectionSchema = z.object({
-  id: z.number(),
-  sessionId: z.string(),
-  createdAt: z.string(),
-  label: z.string().optional(),
-  agentName: z.string().optional(),
-  sourceState: z.string().optional(),
-  reflection: reflectionPayloadSchema,
-})
-
-const reflectionsResponseSchema = z.object({reflections: z.array(reflectionSchema),})
-
 const transcriptResponseSchema = z.object({
   entries: z.array(transcriptEntrySchema),
   total: z.number(),
@@ -382,6 +317,28 @@ export const api = {
 
   getSessionReflections(id: string) {
     return fetchParsedJson(`/api/sessions/${id}/reflections`, reflectionsResponseSchema)
+  },
+
+  getSessionReviews(id: string) {
+    return fetchParsedJson(`/api/sessions/${id}/reviews`, reviewsResponseSchema)
+  },
+
+  getReviews(params?: {
+    repository?: string
+    branch?: string
+    pullRequestNumber?: number
+    reviewType?: string
+    verdict?: string
+  }) {
+    const q = new URLSearchParams()
+    if (params?.repository) q.set('repository', params.repository)
+    if (params?.branch) q.set('branch', params.branch)
+    if (params?.pullRequestNumber !== undefined) q.set('pullRequestNumber', String(params.pullRequestNumber))
+    if (params?.reviewType) q.set('reviewType', params.reviewType)
+    if (params?.verdict) q.set('verdict', params.verdict)
+    const qs = q.toString()
+    const path = qs === '' ? '/api/reviews' : `/api/reviews?${qs}`
+    return fetchParsedJson(path, reviewsResponseSchema)
   },
 
   getSessionEvents(id: string, params?: {

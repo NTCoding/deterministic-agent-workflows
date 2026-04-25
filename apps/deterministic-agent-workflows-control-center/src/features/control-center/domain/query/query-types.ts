@@ -229,6 +229,7 @@ export function extractEventDetail(event: ParsedEvent): string {
     'identity-verified': () => getPayloadStringOrEmpty(payload, 'status'),
     'context-requested': () => getPayloadStringOrEmpty(payload, 'agentName'),
     'session-started': () => getPayloadStringOrEmpty(payload, 'repository'),
+    'review-recorded': () => `${getPayloadStringOrEmpty(payload, 'reviewType')} ${getPayloadStringOrEmpty(payload, 'verdict')}`.trim(),
   }
 
   const detailFactory = detailByType[event.type]
