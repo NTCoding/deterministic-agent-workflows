@@ -18,7 +18,29 @@ export const reviewFindingSchema = z.object({
   endLine: z.number().int().positive().optional(),
   details: z.string().min(1).optional(),
   recommendation: z.string().min(1).optional(),
-}).strict()
+}).strict().superRefine((finding, context) => {
+  if (finding.title === undefined && finding.details === undefined && finding.rule === undefined) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Expected review finding to include at least one of title, details, or rule.',
+      path: ['title'],
+    })
+  }
+  if (finding.endLine !== undefined && finding.startLine === undefined) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Expected startLine when endLine is provided.',
+      path: ['startLine'],
+    })
+  }
+  if (finding.startLine !== undefined && finding.endLine !== undefined && finding.endLine < finding.startLine) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Expected endLine to be greater than or equal to startLine.',
+      path: ['endLine'],
+    })
+  }
+})
 
 export const reviewPayloadSchema = z.object({
   verdict: reviewVerdictSchema,

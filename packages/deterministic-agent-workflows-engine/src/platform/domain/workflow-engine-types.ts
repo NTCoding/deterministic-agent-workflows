@@ -72,6 +72,7 @@ export interface WorkflowEventStore {
   recordReflection(sessionId: string, createdAt: string, input: RecordReflectionInput): StoredReflection
   listReflections(sessionId: string): readonly StoredReflection[]
   recordReview(sessionId: string, createdAt: string, input: RecordReviewInput): StoredReview
+  recordReviewWithEvent(sessionId: string, createdAt: string, input: RecordReviewInput, eventState: string): StoredReview
   listSessionReviews(sessionId: string): readonly StoredReview[]
   listReviews(filters: ReviewFilters): readonly ListedReview[]
 }

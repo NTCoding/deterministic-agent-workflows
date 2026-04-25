@@ -144,6 +144,8 @@ declare module '@nt-ai-lab/deterministic-agent-workflow-engine' {
 }
 
 declare module '@nt-ai-lab/deterministic-agent-workflow-event-store' {
+  import type { ReviewFilters } from '@nt-ai-lab/deterministic-agent-workflow-engine'
+
   export type SqliteStatement = {
     readonly all: (...params: readonly unknown[]) => readonly unknown[]
     readonly get: (...params: readonly unknown[]) => unknown | undefined
@@ -158,4 +160,8 @@ declare module '@nt-ai-lab/deterministic-agent-workflow-event-store' {
 
   export function openSqliteDatabase(path: string, options?: { readonly?: boolean }): SqliteDatabase
   export function enableWalMode(database: SqliteDatabase): void
+  export function buildReviewFilters(filters: ReviewFilters): {
+    readonly conditions: ReadonlyArray<string>
+    readonly parameters: ReadonlyArray<string | number>
+  }
 }

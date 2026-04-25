@@ -73,6 +73,8 @@ export const listedReviewRowsSchema = z.array(z.object({
   repository: z.string().nullable(),
 }))
 
+const persistedReviewPayloadSchema = recordReviewInputSchema.passthrough()
+
 /** @riviere-role value-object */
 export type ReviewRow = z.infer<typeof reviewRowsSchema>[number]
 
@@ -129,6 +131,7 @@ export function buildReviewFilters(filters: ReviewFilters): {
 export function parseStoredReviewRow(row: ReviewRow): StoredReview {
   const parsedPayload: unknown = JSON.parse(row.payload_json)
   return storedReviewSchema.parse({
+    ...parseReviewPayload(parsedPayload),
     id: row.id,
     sessionId: row.session_id,
     createdAt: row.created_at,
@@ -137,7 +140,6 @@ export function parseStoredReviewRow(row: ReviewRow): StoredReview {
     ...(row.branch === null ? {} : { branch: row.branch }),
     ...(row.pull_request_number === null ? {} : { pullRequestNumber: row.pull_request_number }),
     ...(row.source_state === null ? {} : { sourceState: row.source_state }),
-    ...parseReviewPayload(parsedPayload),
   })
 }
 
@@ -145,6 +147,7 @@ export function parseStoredReviewRow(row: ReviewRow): StoredReview {
 export function parseListedReviewRow(row: ListedReviewRow): ListedReview {
   const parsedPayload: unknown = JSON.parse(row.payload_json)
   return listedReviewSchema.parse({
+    ...parseReviewPayload(parsedPayload),
     id: row.id,
     sessionId: row.session_id,
     createdAt: row.created_at,
@@ -154,7 +157,6 @@ export function parseListedReviewRow(row: ListedReviewRow): ListedReview {
     ...(row.pull_request_number === null ? {} : { pullRequestNumber: row.pull_request_number }),
     ...(row.source_state === null ? {} : { sourceState: row.source_state }),
     ...(row.repository === null ? {} : { repository: row.repository }),
-    ...parseReviewPayload(parsedPayload),
   })
 }
 
@@ -164,7 +166,7 @@ function parseReviewPayload(payload: unknown): {
   readonly pullRequestNumber?: number
   readonly findings: RecordReviewInput['findings']
 } {
-  const parsed = recordReviewInputSchema.parse(payload)
+  const parsed = persistedReviewPayloadSchema.parse(payload)
   return {
     findings: parsed.findings,
     ...(parsed.summary === undefined ? {} : { summary: parsed.summary }),

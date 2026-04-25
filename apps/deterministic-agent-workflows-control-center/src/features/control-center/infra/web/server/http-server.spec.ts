@@ -147,6 +147,7 @@ describe('createHttpServer', () => {
     }))
     expect(parsed.reviews).toHaveLength(1)
     expect(parsed.reviews[0]?.reviewType).toBe('code-review')
+    expect(parsed.reviews[0]?.verdict).toBe('FAIL')
   })
 
   it('returns 500 for server errors', async () => {

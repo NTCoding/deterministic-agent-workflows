@@ -93,6 +93,7 @@ export type SqliteEventStore = {
   readonly recordReflection: (sessionId: string, createdAt: string, input: RecordReflectionInput) => StoredReflection
   readonly listReflections: (sessionId: string) => readonly StoredReflection[]
   readonly recordReview: (sessionId: string, createdAt: string, input: RecordReviewInput) => StoredReview
+  readonly recordReviewWithEvent: (sessionId: string, createdAt: string, input: RecordReviewInput, eventState: string) => StoredReview
   readonly listSessionReviews: (sessionId: string) => readonly StoredReview[]
   readonly listReviews: (filters: ReviewFilters) => readonly ListedReview[]
   readonly listSessions: () => readonly string[]
@@ -216,6 +217,48 @@ export function createStore(dbPath: string): SqliteEventStore {
         const rawId = db.prepare('SELECT last_insert_rowid() AS id').get()
         const parsedId = reviewIdRowSchema.parse(rawId)
         const id = Number(parsedId.id)
+        db.exec('COMMIT')
+        return storedReviewSchema.parse({
+          id,
+          sessionId,
+          createdAt,
+          ...parsedInput,
+        })
+      } catch (error) {
+        db.exec('ROLLBACK')
+        throw error
+      }
+    },
+    recordReviewWithEvent(sessionId: string, createdAt: string, input: RecordReviewInput, eventState: string): StoredReview {
+      const parsedInput = recordReviewInputSchema.parse(input)
+      const insertReview = db.prepare('INSERT INTO reviews (session_id, created_at, review_type, verdict, branch, pull_request_number, source_state, payload_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+      const insertEvent = db.prepare('INSERT INTO events (session_id, type, at, state, payload) VALUES (?, ?, ?, ?, ?)')
+      db.exec('BEGIN IMMEDIATE')
+      try {
+        insertReview.run(
+          sessionId,
+          createdAt,
+          parsedInput.reviewType,
+          parsedInput.verdict,
+          parsedInput.branch ?? null,
+          parsedInput.pullRequestNumber ?? null,
+          parsedInput.sourceState ?? null,
+          JSON.stringify(parsedInput),
+        )
+        const rawId = db.prepare('SELECT last_insert_rowid() AS id').get()
+        const parsedId = reviewIdRowSchema.parse(rawId)
+        const id = Number(parsedId.id)
+        insertEvent.run(
+          sessionId,
+          'review-recorded',
+          createdAt,
+          eventState,
+          JSON.stringify({
+            reviewId: id,
+            reviewType: parsedInput.reviewType,
+            verdict: parsedInput.verdict,
+          }),
+        )
         db.exec('COMMIT')
         return storedReviewSchema.parse({
           id,

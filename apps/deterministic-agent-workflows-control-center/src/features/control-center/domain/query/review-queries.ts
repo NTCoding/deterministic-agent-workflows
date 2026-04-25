@@ -4,17 +4,17 @@ import type {
   ReviewFilters,
   StoredReview,
 } from '@nt-ai-lab/deterministic-agent-workflow-engine'
+import { buildReviewFilters } from '@nt-ai-lab/deterministic-agent-workflow-event-store'
 import type { SessionQueryDeps } from './session-queries'
 import type { SqliteDatabase } from './sqlite-runtime'
 
 const reviewsTableCache = new WeakMap<SqliteDatabase, boolean>()
 
 function hasReviewsTable(db: SqliteDatabase): boolean {
-  const cached = reviewsTableCache.get(db)
-  if (cached !== undefined) return cached
+  if (reviewsTableCache.get(db) === true) return true
   const rows = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'reviews'").all()
   const has = rows.some((row) => isRecord(row) && row['name'] === 'reviews')
-  reviewsTableCache.set(db, has)
+  if (has) reviewsTableCache.set(db, true)
   return has
 }
 
@@ -40,12 +40,16 @@ function readRequiredString(record: Record<string, unknown>, key: string): strin
 
 function readOptionalString(record: Record<string, unknown>, key: string): string | undefined {
   const value = record[key]
-  return typeof value === 'string' && value.length > 0 ? value : undefined
+  if (value === undefined || value === null) return undefined
+  if (typeof value === 'string' && value.length > 0) return value
+  throw new TypeError(`Expected optional string ${key}.`)
 }
 
 function readOptionalNumber(record: Record<string, unknown>, key: string): number | undefined {
   const value = record[key]
-  return typeof value === 'number' ? value : undefined
+  if (value === undefined || value === null) return undefined
+  if (typeof value === 'number' && Number.isFinite(value) && Number.isInteger(value) && value > 0) return value
+  throw new TypeError(`Expected optional positive integer ${key}.`)
 }
 
 function parseReviewVerdict(value: string): StoredReview['verdict'] {
@@ -167,46 +171,6 @@ function parseListedReviewRow(row: unknown): ListedReview {
     ...(pullRequestNumber === undefined ? {} : { pullRequestNumber }),
     ...(sourceState === undefined ? {} : { sourceState }),
     ...parseReviewPayload(payload),
-  }
-}
-
-function buildReviewFilters(filters: ReviewFilters): {
-  readonly conditions: ReadonlyArray<string>
-  readonly parameters: ReadonlyArray<string | number>
-} {
-  const conditions: Array<string> = []
-  const parameters: Array<string | number> = []
-
-  if (filters.repository !== undefined) {
-    conditions.push(`(
-      SELECT json_extract(events.payload, '$.repository')
-      FROM events
-      WHERE events.session_id = reviews.session_id AND events.type = 'session-started'
-      ORDER BY events.seq ASC
-      LIMIT 1
-    ) = ?`)
-    parameters.push(filters.repository)
-  }
-  if (filters.branch !== undefined) {
-    conditions.push('reviews.branch = ?')
-    parameters.push(filters.branch)
-  }
-  if (filters.pullRequestNumber !== undefined) {
-    conditions.push('reviews.pull_request_number = ?')
-    parameters.push(filters.pullRequestNumber)
-  }
-  if (filters.reviewType !== undefined) {
-    conditions.push('reviews.review_type = ?')
-    parameters.push(filters.reviewType)
-  }
-  if (filters.verdict !== undefined) {
-    conditions.push('reviews.verdict = ?')
-    parameters.push(filters.verdict)
-  }
-
-  return {
-    conditions,
-    parameters,
   }
 }
 

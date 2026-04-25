@@ -335,7 +335,7 @@ export type ReviewDto = {
   readonly sessionId: string
   readonly createdAt: string
   readonly reviewType: string
-  readonly verdict: string
+  readonly verdict: 'PASS' | 'FAIL'
   readonly repository?: string | undefined
   readonly branch?: string | undefined
   readonly pullRequestNumber?: number | undefined

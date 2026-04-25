@@ -59,6 +59,7 @@ type RenderState = {
   eventsTotal: number
   transcript: string | null
   reviews: Array<ReviewDto> | null
+  reviewsFailed: boolean
   reflections: Array<ReflectionDto> | null
 }
 
@@ -146,9 +147,9 @@ function renderTabBar(session: SessionDetailDto, activeTab: TabName): string {
   return `<div class="tab-bar" style="margin:0 -24px;padding:0 24px">${buttons}</div>`
 }
 
-function countFailedReviews(reviews: ReadonlyArray<ReviewDto> | null): number {
-  if (reviews === null) return 0
-  return reviews.filter((review) => review.verdict === 'FAIL').length
+function countFailedReviews(state: RenderState): number {
+  if (state.reviews === null) return 0
+  return state.reviews.filter((review) => review.verdict === 'FAIL').length
 }
 
 function renderOverviewTab(session: SessionDetailDto, state: RenderState): string {
@@ -158,7 +159,8 @@ function renderOverviewTab(session: SessionDetailDto, state: RenderState): strin
     session.permissionDenials.pluginRead +
     session.permissionDenials.idle
   const segments = computeTimelineSegments(session.statePeriods)
-  const failedReviews = countFailedReviews(state.reviews)
+  const failedReviews = countFailedReviews(state)
+  const failedReviewMetric = state.reviewsFailed ? '—' : failedReviews
   const metrics = renderMetricCards([
     {
       label: 'Duration',
@@ -179,8 +181,8 @@ function renderOverviewTab(session: SessionDetailDto, state: RenderState): strin
     },
     {
       label: 'Failed Reviews',
-      value: failedReviews,
-      warn: failedReviews > 0,
+      value: failedReviewMetric,
+      warn: state.reviewsFailed || failedReviews > 0,
     },
     {
       label: 'Agents',
@@ -284,7 +286,12 @@ async function loadActiveTabData(sessionId: string, session: SessionDetailDto, s
     return
   }
   if (state.activeTab === 'overview' && state.reviews === null) {
-    await loadReviews(sessionId, state)
+    try {
+      await loadReviews(sessionId, state)
+      state.reviewsFailed = false
+    } catch {
+      state.reviewsFailed = true
+    }
     return
   }
   if (state.activeTab === 'reflection' && state.reflections === null) {
@@ -328,6 +335,7 @@ export async function renderSessionDetail(container: HTMLElement, sessionId: str
       eventsTotal: 0,
       transcript: null,
       reviews: null,
+      reviewsFailed: false,
       reflections: null,
     }
 

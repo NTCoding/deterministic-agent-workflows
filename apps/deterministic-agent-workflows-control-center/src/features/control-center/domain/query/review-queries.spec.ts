@@ -10,6 +10,7 @@ import {
 import {
   createTestDb,
   createTestQueryDeps,
+  insertEvent,
   insertReview,
   seedReviewSimulation,
 } from './session-queries-test-fixtures'
@@ -49,6 +50,57 @@ describe('review-queries', () => {
     `)
     expect(getSessionReviews(createTestQueryDeps(db), 'test-1')).toStrictEqual([])
     expect(listReviews(createTestQueryDeps(db), {})).toStrictEqual([])
+    db.close()
+  })
+
+  it('returns reviews when table is created after an empty lookup', () => {
+    const db = openSqliteDatabase(':memory:')
+    db.exec(`
+      CREATE TABLE events (
+        seq INTEGER PRIMARY KEY AUTOINCREMENT,
+        session_id TEXT NOT NULL,
+        type TEXT NOT NULL,
+        at TEXT NOT NULL,
+        payload TEXT NOT NULL
+      )
+    `)
+    const deps = createTestQueryDeps(db)
+    expect(listReviews(deps, {})).toStrictEqual([])
+    db.exec(`
+      CREATE TABLE reviews (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        session_id TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        review_type TEXT NOT NULL,
+        verdict TEXT NOT NULL,
+        branch TEXT,
+        pull_request_number INTEGER,
+        source_state TEXT,
+        payload_json TEXT NOT NULL
+      )
+    `)
+    insertEvent(db, 'test-1', 'session-started', '2026-01-01T00:00:00Z', { repository: 'test/repo' })
+    insertReview(db, 'test-1', '2026-01-01T00:01:00Z', {
+      reviewType: 'custom-review',
+      verdict: 'PASS',
+      branch: 'feature/review',
+      pullRequestNumber: 1,
+      sourceState: 'REVIEWING',
+      findings: [],
+    })
+
+    expect(listReviews(deps, {})).toStrictEqual([{
+      id: 1,
+      sessionId: 'test-1',
+      createdAt: '2026-01-01T00:01:00Z',
+      reviewType: 'custom-review',
+      verdict: 'PASS',
+      repository: 'test/repo',
+      branch: 'feature/review',
+      pullRequestNumber: 1,
+      sourceState: 'REVIEWING',
+      findings: [],
+    }])
     db.close()
   })
 
@@ -97,6 +149,12 @@ describe('review-queries', () => {
     seedReviewSimulation(db, 'session-a')
     const reviews = listReviews(createTestQueryDeps(db), {})
     expect(reviews).toHaveLength(4)
+    expect(reviews.map((review) => review.createdAt)).toStrictEqual([
+      '2026-01-01T00:22:00Z',
+      '2026-01-01T00:19:00Z',
+      '2026-01-01T00:16:00Z',
+      '2026-01-01T00:13:00Z',
+    ])
     db.close()
   })
 
@@ -177,6 +235,34 @@ describe('review-queries', () => {
       source_state: null,
       payload_json: JSON.stringify({ findings: [] }),
     }]), 'test-1')).toThrow('Expected review verdict.')
+  })
+
+  it('throws when optional review string is empty', () => {
+    expect(() => getSessionReviews(createReviewDeps([{
+      id: 1,
+      session_id: 'test-1',
+      created_at: '2026-01-01T00:00:00Z',
+      review_type: 'custom-review',
+      verdict: 'PASS',
+      branch: '',
+      pull_request_number: null,
+      source_state: null,
+      payload_json: JSON.stringify({ findings: [] }),
+    }]), 'test-1')).toThrow('Expected optional string branch.')
+  })
+
+  it('throws when optional review number is not positive integer', () => {
+    expect(() => getSessionReviews(createReviewDeps([{
+      id: 1,
+      session_id: 'test-1',
+      created_at: '2026-01-01T00:00:00Z',
+      review_type: 'custom-review',
+      verdict: 'PASS',
+      branch: null,
+      pull_request_number: 0,
+      source_state: null,
+      payload_json: JSON.stringify({ findings: [] }),
+    }]), 'test-1')).toThrow('Expected optional positive integer pull_request_number.')
   })
 
   it('throws when review payload is not an object', () => {
@@ -296,6 +382,30 @@ describe('review-queries', () => {
         details: 'details',
         recommendation: 'recommendation',
       }],
+    })
+  })
+
+  it('omits absent listed review metadata', () => {
+    const reviews = listReviews(createReviewDeps([{
+      id: 1,
+      session_id: 'test-1',
+      created_at: '2026-01-01T00:00:00Z',
+      review_type: 'custom-review',
+      verdict: 'PASS',
+      branch: null,
+      pull_request_number: null,
+      source_state: null,
+      repository: null,
+      payload_json: JSON.stringify({ findings: [] }),
+    }]), {})
+
+    expect(reviews[0]).toStrictEqual({
+      id: 1,
+      sessionId: 'test-1',
+      createdAt: '2026-01-01T00:00:00Z',
+      reviewType: 'custom-review',
+      verdict: 'PASS',
+      findings: [],
     })
   })
 

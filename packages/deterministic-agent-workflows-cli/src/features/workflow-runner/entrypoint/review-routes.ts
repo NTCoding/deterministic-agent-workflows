@@ -1,13 +1,13 @@
 import type {
   BaseWorkflowState,
   RehydratableWorkflow,
+  StoredEvent,
   WorkflowDefinition,
   WorkflowEngineDeps,
 } from '@nt-ai-lab/deterministic-agent-workflow-engine'
 import {
-  pass,
+  flattenStoredEvent,
   reviewPayloadSchema,
-  WorkflowEngine,
 } from '@nt-ai-lab/deterministic-agent-workflow-engine'
 import {
   EXIT_ALLOW,
@@ -97,7 +97,7 @@ export function handleRecordReviewRoute<
   TDeps,
   TStateName extends string,
   TOperation extends string,
->(engine: WorkflowEngine<TWorkflow, TState, TDeps, TStateName, TOperation>, engineDeps: WorkflowEngineDeps, workflowDefinition: WorkflowDefinition<TWorkflow, TState, TDeps, TStateName, TOperation>, args: readonly string[], readStdin: (() => string) | undefined, getSessionId: (() => string) | undefined): RunnerResult {
+>(engine: { readonly hasSessionStarted: (sessionId: string) => boolean }, engineDeps: WorkflowEngineDeps, workflowDefinition: WorkflowDefinition<TWorkflow, TState, TDeps, TStateName, TOperation>, args: readonly string[], readStdin: (() => string) | undefined, getSessionId: (() => string) | undefined): RunnerResult {
   if (getSessionId === undefined) {
     return errorResult('record-review requires an active workflow session')
   }
@@ -115,7 +115,7 @@ export function handleRecordReviewRoute<
   }
 
   const reviewType = parsedFlags.flags.get('--type')
-  if (typeof reviewType !== 'string' || reviewType.length === 0) {
+  if (reviewType === undefined) {
     return errorResult('record-review requires a non-empty --type value')
   }
 
@@ -134,57 +134,43 @@ export function handleRecordReviewRoute<
     return errorResult(`Invalid review payload: ${parsedReview.error.message}`)
   }
 
-  const reviewWriteResult = {
-    id: 0,
-    createdAt: '',
+  const currentStateName = computeCurrentState(workflowDefinition, engineDeps.store.readEvents(sessionId))
+  const allowedWorkflowOperations = workflowDefinition
+    .getRegistry()[currentStateName]
+    .allowedWorkflowOperations
+    .map((allowedWorkflowOperation) => String(allowedWorkflowOperation))
+  if (!isReviewAllowed(allowedWorkflowOperations)) {
+    return blockedResult(`record-review is not allowed in state ${currentStateName}.`)
   }
-  const transactionResult = engine.transaction(sessionId, 'record-review', (workflow) => {
-    const state = workflow.getState()
-    const currentStateName = state.currentStateMachineState
-    const allowedWorkflowOperations = workflowDefinition
-      .getRegistry()[currentStateName]
-      .allowedWorkflowOperations
-      .map((allowedWorkflowOperation) => String(allowedWorkflowOperation))
-    if (!isReviewAllowed(allowedWorkflowOperations)) {
-      return {
-        pass: false,
-        reason: `record-review is not allowed in state ${currentStateName}.`,
-      }
-    }
 
-    const createdAt = engineDeps.now()
-    const stored = engineDeps.store.recordReview(sessionId, createdAt, {
-      reviewType,
-      sourceState: currentStateName,
-      ...parsedReview.data,
-    })
-    reviewWriteResult.id = stored.id
-    reviewWriteResult.createdAt = stored.createdAt
-    workflow.appendEvent({
-      type: 'review-recorded',
-      at: createdAt,
-      reviewId: stored.id,
-      reviewType: stored.reviewType,
-      verdict: stored.verdict,
-    })
-    return pass()
-  })
-
-  if (transactionResult.type === 'blocked') {
-    return blockedResult(transactionResult.output)
-  }
-  if (transactionResult.type === 'error') {
-    return errorResult(transactionResult.output)
-  }
+  const createdAt = engineDeps.now()
+  const stored = engineDeps.store.recordReviewWithEvent(sessionId, createdAt, {
+    reviewType,
+    sourceState: currentStateName,
+    ...parsedReview.data,
+  }, currentStateName)
 
   return jsonResult({
     ok: true,
-    id: reviewWriteResult.id,
+    id: stored.id,
     sessionId,
-    createdAt: reviewWriteResult.createdAt,
+    createdAt: stored.createdAt,
     reviewType,
     verdict: parsedReview.data.verdict,
   })
+}
+
+function computeCurrentState<
+  TWorkflow extends RehydratableWorkflow<TState>,
+  TState extends BaseWorkflowState<TStateName>,
+  TDeps,
+  TStateName extends string,
+  TOperation extends string,
+>(workflowDefinition: WorkflowDefinition<TWorkflow, TState, TDeps, TStateName, TOperation>, storedEvents: readonly StoredEvent[]): TStateName {
+  const state = storedEvents
+    .map(flattenStoredEvent)
+    .reduce((currentState, event) => workflowDefinition.fold(currentState, event), workflowDefinition.initialState())
+  return state.currentStateMachineState
 }
 
 function parseReviewPayload(readStdin: () => string):

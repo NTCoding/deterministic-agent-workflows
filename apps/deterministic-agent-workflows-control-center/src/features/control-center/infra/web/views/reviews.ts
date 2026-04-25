@@ -67,7 +67,6 @@ function readPullRequestNumber(value: string): number | undefined {
 
 /** @riviere-role web-tbc */
 export async function renderReviews(container: HTMLElement): Promise<void> {
-  container.innerHTML = html`<div class="loading">Loading reviews...</div>`
   const filters: ReviewFiltersState = {
     repository: '',
     branch: '',
@@ -75,33 +74,52 @@ export async function renderReviews(container: HTMLElement): Promise<void> {
     reviewType: '',
     verdict: '',
   }
+  container.innerHTML = html`<div class="section"><h2 style="margin:0 0 12px">Reviews</h2><div data-controls></div><div data-rows><div class="loading">Loading reviews...</div></div></div>`
+  const controlsHost = requireElement(container, 'data-controls')
+  const rowsHost = requireElement(container, 'data-rows')
+  controlsHost.innerHTML = renderControls(filters)
+  const requestSequence = { current: 0 }
+  const debounceTimer: { current: ReturnType<typeof setTimeout> | null } = { current: null }
 
-  const render = async (): Promise<void> => {
+  const refreshRows = async (): Promise<void> => {
+    requestSequence.current += 1
+    const currentRequest = requestSequence.current
     const result = await api.getReviews(buildReviewParams(filters))
-
-    container.innerHTML = html`<div class="section"><h2 style="margin:0 0 12px">Reviews</h2>${renderControls(filters)}${renderRows(result.reviews)}</div>`
-    container.querySelectorAll('[data-filter]').forEach((element) => {
-      if (!(element instanceof HTMLInputElement || element instanceof HTMLSelectElement)) {
-        return
-      }
-      element.addEventListener('input', () => {
-        const filterName = element.getAttribute('data-filter')
-        if (filterName === 'repository' || filterName === 'branch' || filterName === 'pullRequestNumber' || filterName === 'reviewType' || filterName === 'verdict') {
-          filters[filterName] = element.value
-          void render()
-        }
-      })
-      element.addEventListener('change', () => {
-        const filterName = element.getAttribute('data-filter')
-        if (filterName === 'repository' || filterName === 'branch' || filterName === 'pullRequestNumber' || filterName === 'reviewType' || filterName === 'verdict') {
-          filters[filterName] = element.value
-          void render()
-        }
-      })
-    })
+    if (currentRequest !== requestSequence.current) return
+    rowsHost.innerHTML = renderRows(result.reviews)
   }
 
-  await render()
+  const scheduleRefresh = (delayMs: number): void => {
+    if (debounceTimer.current !== null) clearTimeout(debounceTimer.current)
+    debounceTimer.current = setTimeout(() => {
+      void refreshRows()
+    }, delayMs)
+  }
+
+  controlsHost.querySelectorAll('[data-filter]').forEach((element) => {
+    if (!(element instanceof HTMLInputElement || element instanceof HTMLSelectElement)) return
+    const filterName = element.getAttribute('data-filter')
+    if (!isReviewFilterName(filterName)) return
+    const updateFilter = (): void => {
+      filters[filterName] = element.value
+      scheduleRefresh(element instanceof HTMLSelectElement ? 0 : 200)
+    }
+    element.addEventListener(element instanceof HTMLSelectElement ? 'change' : 'input', updateFilter)
+  })
+
+  await refreshRows()
+}
+
+function requireElement(container: HTMLElement, marker: 'data-controls' | 'data-rows'): HTMLElement {
+  const element = container.querySelector(`[${marker}]`)
+  if (!(element instanceof HTMLElement)) {
+    throw new TypeError(`Expected element with ${marker}`)
+  }
+  return element
+}
+
+function isReviewFilterName(value: string | null): value is keyof ReviewFiltersState {
+  return value === 'repository' || value === 'branch' || value === 'pullRequestNumber' || value === 'reviewType' || value === 'verdict'
 }
 
 function buildReviewParams(filters: ReviewFiltersState): Parameters<typeof api.getReviews>[0] {

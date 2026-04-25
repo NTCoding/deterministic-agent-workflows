@@ -43,11 +43,6 @@ function parsePullRequestNumber(value: string | null): number | undefined {
   return Number.isNaN(parsed) ? undefined : parsed
 }
 
-function parseReviewType(value: string | null): string | undefined {
-  if (value === null || value.length === 0) return undefined
-  return value
-}
-
 function parseReviewVerdict(value: string | null): 'PASS' | 'FAIL' | undefined {
   if (value === null || value.length === 0) return undefined
   if (value === 'PASS' || value === 'FAIL') return value
@@ -311,7 +306,8 @@ export function handleListReviews(
     const repository = route.query.get('repository') ?? undefined
     const branch = route.query.get('branch') ?? undefined
     const pullRequestNumber = parsePullRequestNumber(route.query.get('pullRequestNumber'))
-    const reviewType = parseReviewType(route.query.get('reviewType'))
+    const reviewTypeParam = route.query.get('reviewType')
+    const reviewType = reviewTypeParam === null || reviewTypeParam.length === 0 ? undefined : reviewTypeParam
     const verdict = parseReviewVerdict(route.query.get('verdict'))
     sendJson(res, 200, {
       reviews: listReviews(deps.queryDeps, {

@@ -213,6 +213,8 @@ Event shape:
 
 Session detail must include a Reviews tab showing review attempts for that session.
 
+The session Overview metric row must include a `Failed Reviews` metric sourced from the review rows for that session.
+
 The tab must show:
 
 - review type
@@ -279,6 +281,7 @@ The `REVIEWING -> SUBMITTING_PR` and `REVIEWING -> IMPLEMENTING` guards must pre
 - `record-review` rejects missing active sessions.
 - `record-review` stores the review row in the database.
 - `record-review` appends a `review-recorded` workflow event.
+- `record-review` stores the review row and `review-recorded` event atomically.
 - Repeated review attempts are preserved.
 - Control Center session detail shows recorded review attempts from the database.
 - Control Center cross-session Reviews view filters database review rows.

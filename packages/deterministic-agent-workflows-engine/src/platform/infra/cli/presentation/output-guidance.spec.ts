@@ -146,7 +146,14 @@ class MemoryStore implements WorkflowEventStore {
   }
 
   recordReview(_sessionId: string, _createdAt: string, _input: RecordReviewInput): StoredReview {
-    void [_sessionId, _createdAt, _input]
+    return this.recordReviewWithEvent(_sessionId, _createdAt, _input, 'unconfigured')
+  }
+
+  recordReviewWithEvent(_sessionId: string, _createdAt: string, _input: RecordReviewInput, _eventState: string): StoredReview {
+    void _sessionId
+    void _createdAt
+    void _input
+    void _eventState
     return throwStoreNotConfigured()
   }
 

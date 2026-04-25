@@ -365,13 +365,15 @@ describe('session-handlers', () => {
       const response = createMockResponse()
       handler(mockReq(), response.res, makeRoute({ id: 'test-1' }))
       const body = parseJsonBody(response.written.body, reviewsBodySchema)
+      expect(response.written.statusCode).toBe(200)
+      expect(body.reviews).toHaveLength(4)
       expect(body.reviews[0]?.reviewType).toBe('architecture-review')
       expect(body.reviews[3]?.verdict).toBe('PASS')
     })
   })
 
   describe('handleListReviews', () => {
-    it('filters cross-session reviews', () => {
+    it('returns matching review type and verdict when filters are provided', () => {
       seedReviewSimulation(state.db, 'session-a')
       const handler = handleListReviews(state.deps)
       const response = createMockResponse()
@@ -380,6 +382,7 @@ describe('session-handlers', () => {
         verdict: 'PASS',
       }))
       const body = parseJsonBody(response.written.body, reviewsBodySchema)
+      expect(response.written.statusCode).toBe(200)
       expect(body.reviews).toHaveLength(1)
       expect(body.reviews[0]?.reviewType).toBe('task-check')
       expect(body.reviews[0]?.verdict).toBe('PASS')

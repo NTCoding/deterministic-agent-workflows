@@ -176,6 +176,10 @@ export function seedReviewSimulation(db: SqliteDatabase, sessionId = 'review-sim
   seedSessionEvents(db, sessionId)
   insertEvent(db, sessionId, 'branch-recorded', '2026-01-01T00:11:00Z', { branch: 'feature/record-review' })
   insertEvent(db, sessionId, 'pr-recorded', '2026-01-01T00:12:00Z', { prNumber: 337 })
+  insertEvent(db, sessionId, 'transitioned', '2026-01-01T00:12:30Z', {
+    from: 'DEVELOPING',
+    to: 'REVIEWING',
+  })
 
   insertReview(db, sessionId, '2026-01-01T00:13:00Z', {
     reviewType: 'architecture-review',

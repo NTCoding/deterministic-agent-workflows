@@ -11,3 +11,4 @@ export {
   enableWalMode,
   openSqliteDatabase,
 } from './platform/infra/external-clients/sqlite/sqlite-runtime'
+export { buildReviewFilters } from './platform/domain/sqlite-review-storage'
