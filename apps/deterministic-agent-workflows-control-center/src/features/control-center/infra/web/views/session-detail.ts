@@ -146,13 +146,19 @@ function renderTabBar(session: SessionDetailDto, activeTab: TabName): string {
   return `<div class="tab-bar" style="margin:0 -24px;padding:0 24px">${buttons}</div>`
 }
 
-function renderOverviewTab(session: SessionDetailDto): string {
+function countFailedReviews(reviews: ReadonlyArray<ReviewDto> | null): number {
+  if (reviews === null) return 0
+  return reviews.filter((review) => review.verdict === 'FAIL').length
+}
+
+function renderOverviewTab(session: SessionDetailDto, state: RenderState): string {
   const totalDenials =
     session.permissionDenials.write +
     session.permissionDenials.bash +
     session.permissionDenials.pluginRead +
     session.permissionDenials.idle
   const segments = computeTimelineSegments(session.statePeriods)
+  const failedReviews = countFailedReviews(state.reviews)
   const metrics = renderMetricCards([
     {
       label: 'Duration',
@@ -172,6 +178,11 @@ function renderOverviewTab(session: SessionDetailDto): string {
       warn: totalDenials > 0 
     },
     {
+      label: 'Failed Reviews',
+      value: failedReviews,
+      warn: failedReviews > 0,
+    },
+    {
       label: 'Agents',
       value: session.activeAgents.length 
     },
@@ -184,7 +195,7 @@ function renderOverviewTab(session: SessionDetailDto): string {
 
 function renderTabContent(session: SessionDetailDto, state: RenderState): string {
   if (state.activeTab === 'overview') {
-    return renderOverviewTab(session)
+    return renderOverviewTab(session, state)
   }
   if (state.activeTab === 'events') {
     return state.events === null
@@ -269,6 +280,10 @@ async function loadActiveTabData(sessionId: string, session: SessionDetailDto, s
     return
   }
   if (state.activeTab === 'reviews' && state.reviews === null) {
+    await loadReviews(sessionId, state)
+    return
+  }
+  if (state.activeTab === 'overview' && state.reviews === null) {
     await loadReviews(sessionId, state)
     return
   }
