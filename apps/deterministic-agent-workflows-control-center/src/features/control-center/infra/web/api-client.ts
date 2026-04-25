@@ -228,6 +228,12 @@ const bashCommandSchema = z.object({
   command: z.string(),
   count: z.number() 
 })
+const failedCommandSchema = z.object({
+  toolName: z.string(),
+  command: z.string(),
+  output: z.string(),
+  count: z.number() 
+})
 const searchQuerySchema = z.object({
   pattern: z.string(),
   count: z.number() 
@@ -246,6 +252,8 @@ const activityReportSchema = z.object({
   toolCounts: z.record(z.number()),
   bashCommands: z.array(bashCommandSchema),
   bashTotal: z.number(),
+  workflowCommands: z.array(bashCommandSchema),
+  failedCommands: z.array(failedCommandSchema),
   filesRead: z.array(fileActivitySchema),
   filesEdited: z.array(fileActivitySchema),
   filesWritten: z.array(fileActivitySchema),

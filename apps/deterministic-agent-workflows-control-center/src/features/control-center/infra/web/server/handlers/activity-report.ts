@@ -1,6 +1,7 @@
 import type {
   ActivityReport,
   BashCommand,
+  FailedCommand,
   FileActivity,
   SearchQuery,
   TaskDelegation,
@@ -8,7 +9,9 @@ import type {
   WebHit,
 } from './activity-types'
 import {
-  inc, str, topN 
+  inc,
+  str,
+  topN,
 } from './activity-types'
 
 const EDIT_TOOLS = new Set(['edit', 'multiedit', 'apply_patch'])
@@ -42,6 +45,8 @@ function extractFilePathsFromPatchInput(input: Record<string, unknown>): Readonl
 type Counters = {
   readonly toolCounts: Map<string, number>
   readonly bashCounts: Map<string, number>
+  readonly workflowCounts: Map<string, number>
+  readonly failedCounts: Map<string, FailedCommand>
   readonly filesRead: Map<string, number>
   readonly filesEdited: Map<string, number>
   readonly filesWritten: Map<string, number>
@@ -56,6 +61,8 @@ function newCounters(): Counters {
   return {
     toolCounts: new Map(),
     bashCounts: new Map(),
+    workflowCounts: new Map(),
+    failedCounts: new Map(),
     filesRead: new Map(),
     filesEdited: new Map(),
     filesWritten: new Map(),
@@ -70,6 +77,52 @@ function newCounters(): Counters {
 function applyBash(c: Counters, input: Record<string, unknown>): void {
   const cmd = normaliseBash(str(input['command']))
   if (cmd.length > 0) inc(c.bashCounts, cmd)
+}
+
+function workflowCommand(input: Record<string, unknown>): string {
+  const operation = str(input['operation']) || str(input['command'])
+  if (operation.length === 0) return ''
+  const args = Array.isArray(input['args'])
+    ? input['args'].map(str).filter(arg => arg.length > 0)
+    : []
+  return [operation, ...args].join(' ')
+}
+
+function applyWorkflow(c: Counters, input: Record<string, unknown>): void {
+  const command = workflowCommand(input)
+  if (command.length > 0) inc(c.workflowCounts, command)
+}
+
+function normalizeOutput(v: unknown): string {
+  return typeof v === 'string' ? v : ''
+}
+
+function hasFailureOutput(call: ToolCall): boolean {
+  if (call.isError === true) return true
+  const output = normalizeOutput(call.output)
+  return /command not found|exit code [1-9]|exited with non-zero|error:/iu.test(output)
+}
+
+function commandLabel(call: ToolCall): string {
+  const lower = call.name.toLowerCase()
+  if (lower === 'bash') return normaliseBash(str(call.input['command']))
+  if (lower === 'workflow') return workflowCommand(call.input)
+  return lower
+}
+
+function applyFailedCommand(c: Counters, call: ToolCall): void {
+  if (!hasFailureOutput(call)) return
+  const command = commandLabel(call)
+  if (command.length === 0) return
+  const output = normalizeOutput(call.output)
+  const key = `${call.name}\u0000${command}\u0000${output}`
+  const existing = c.failedCounts.get(key)
+  c.failedCounts.set(key, {
+    toolName: call.name,
+    command,
+    output,
+    count: (existing?.count ?? 0) + 1,
+  })
 }
 
 function applyPath(map: Map<string, number>, input: Record<string, unknown>): void {
@@ -105,6 +158,7 @@ function applyCall(c: Counters, call: ToolCall): void {
   const lower = call.name.toLowerCase()
   const input = call.input
   if (lower === 'bash') applyBash(c, input)
+  else if (lower === 'workflow') applyWorkflow(c, input)
   else if (lower === 'read') applyPath(c.filesRead, input)
   else if (EDIT_TOOLS.has(lower)) applyEdit(c, input)
   else if (lower === 'write') applyPath(c.filesWritten, input)
@@ -113,6 +167,7 @@ function applyCall(c: Counters, call: ToolCall): void {
   else if (TASK_TOOLS.has(lower)) applyTask(c, input)
   else if (lower === 'webfetch') applyUrl(c.webFetch, 'url', input)
   else if (lower === 'websearch') applyUrl(c.webSearch, 'query', input)
+  applyFailedCommand(c, call)
 }
 
 function toFileActivities(map: Map<string, number>, n: number): ReadonlyArray<FileActivity> {
@@ -143,6 +198,13 @@ function toBashCommands(map: Map<string, number>, n: number): ReadonlyArray<Bash
   }))
 }
 
+function toFailedCommands(
+  map: Map<string, FailedCommand>,
+  n: number,
+): ReadonlyArray<FailedCommand> {
+  return [...map.values()].sort((a, b) => b.count - a.count).slice(0, n)
+}
+
 /** @riviere-role web-tbc */
 export function buildActivityReport(calls: ReadonlyArray<ToolCall>): ActivityReport {
   const c = newCounters()
@@ -152,6 +214,8 @@ export function buildActivityReport(calls: ReadonlyArray<ToolCall>): ActivityRep
     toolCounts: Object.fromEntries(c.toolCounts.entries()),
     bashCommands: toBashCommands(c.bashCounts, 15),
     bashTotal: [...c.bashCounts.values()].reduce((a, b) => a + b, 0),
+    workflowCommands: toBashCommands(c.workflowCounts, 15),
+    failedCommands: toFailedCommands(c.failedCounts, 10),
     filesRead: toFileActivities(c.filesRead, 20),
     filesEdited: toFileActivities(c.filesEdited, 20),
     filesWritten: toFileActivities(c.filesWritten, 20),

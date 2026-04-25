@@ -137,6 +137,33 @@ function renderBashSection(r: ActivityReport, opts: CollapseOpts = {}): string {
   return collapseSub('Bash', r.bashTotal, rows + more, opts)
 }
 
+function renderWorkflowSection(r: ActivityReport): string {
+  if (r.workflowCommands.length === 0) return ''
+  const rows = r.workflowCommands.map(renderBashRow).join('')
+  return collapseSub('Workflow commands', r.workflowCommands.length, rows)
+}
+
+function renderFailedRow(cmd: {
+  readonly toolName: string;
+  readonly command: string;
+  readonly output: string;
+  readonly count: number;
+}): string {
+  const badge = renderCountBadge(cmd.count)
+  return `<div class="ac-row ac-row-failed" title="${esc(cmd.output)}">` +
+    `<span class="ac-row-n">${badge}</span>` +
+    `<span class="ac-failed-tool">${esc(cmd.toolName)}</span>` +
+    `<code class="ac-cmd">${esc(cmd.command)}</code>` +
+    `<span class="ac-failed-output">${esc(cmd.output.slice(0, 60))}${cmd.output.length > 60 ? '...' : ''}</span>` +
+    `</div>`
+}
+
+function renderFailedSection(r: ActivityReport): string {
+  if (r.failedCommands.length === 0) return ''
+  const rows = r.failedCommands.map(renderFailedRow).join('')
+  return collapseSub('Failed commands', r.failedCommands.length, rows)
+}
+
 function renderPatternRow(item: {
   readonly pattern: string;
   readonly count: number
@@ -212,6 +239,8 @@ function renderReportBody(r: ActivityReport): string {
     renderFileGroup('Files written', 'written', r.filesWritten) +
     renderFileGroup('Files read', 'read', r.filesRead) +
     renderBashSection(r) +
+    renderWorkflowSection(r) +
+    renderFailedSection(r) +
     renderSearchSection('Grep patterns', r.grepSearches) +
     renderSearchSection('Glob patterns', r.globSearches) +
     renderTasksSection(r) +
