@@ -189,6 +189,14 @@ export type BashCommand = {
 }
 
 /** @riviere-role web-tbc */
+export type FailedCommand = {
+  readonly toolName: string
+  readonly command: string
+  readonly output: string
+  readonly count: number
+}
+
+/** @riviere-role web-tbc */
 export type SearchQuery = {
   readonly pattern: string
   readonly count: number
@@ -212,6 +220,8 @@ export type ActivityReport = {
   readonly toolCounts: Record<string, number>
   readonly bashCommands: ReadonlyArray<BashCommand>
   readonly bashTotal: number
+  readonly workflowCommands: ReadonlyArray<BashCommand>
+  readonly failedCommands: ReadonlyArray<FailedCommand>
   readonly filesRead: ReadonlyArray<FileActivity>
   readonly filesEdited: ReadonlyArray<FileActivity>
   readonly filesWritten: ReadonlyArray<FileActivity>
