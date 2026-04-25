@@ -425,7 +425,16 @@ export class WorkflowEngine<
 
     if (identityCheckResult.status === 'lost') {
       const currentProcedure = readProcedure(this.engineDeps, state)
-      return `You forgot. Current procedure:\n\n${currentProcedure}`
+      return [
+        'You forgot. To unblock:',
+        '',
+        `- send a new message starting with: ${getExpectedPrefix(state, registry)}`,
+        '- then continue with the current procedure',
+        '',
+        'Current procedure:',
+        '',
+        currentProcedure,
+      ].join('\n')
     }
 
     return undefined

@@ -224,7 +224,12 @@ it('reinserts the current procedure when identity verification fails', () => {
   const expectedOutput = [
     'Cannot write-check',
     SEPARATOR,
-    'You forgot. Current procedure:',
+    'You forgot. To unblock:',
+    '',
+    '- send a new message starting with: 🧭 PLANNING',
+    '- then continue with the current procedure',
+    '',
+    'Current procedure:',
     '',
     procedureContent,
     '',
