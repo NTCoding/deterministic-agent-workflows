@@ -45,10 +45,15 @@ describe('renderActivityPanel', () => {
 
     it('does not render workflow section when no workflowCommands', () => {
       const report: ActivityReport = {
-        totalToolCalls: 0,
-        toolCounts: {},
-        bashCommands: [],
-        bashTotal: 0,
+        totalToolCalls: 1,
+        toolCounts: { Bash: 1 },
+        bashCommands: [
+          {
+            command: 'ls',
+            count: 1
+          },
+        ],
+        bashTotal: 1,
         workflowCommands: [],
         failedCommands: [],
         filesRead: [],
@@ -107,10 +112,15 @@ describe('renderActivityPanel', () => {
 
     it('does not render failed section when no failedCommands', () => {
       const report: ActivityReport = {
-        totalToolCalls: 0,
-        toolCounts: {},
-        bashCommands: [],
-        bashTotal: 0,
+        totalToolCalls: 1,
+        toolCounts: { Bash: 1 },
+        bashCommands: [
+          {
+            command: 'ls',
+            count: 1
+          },
+        ],
+        bashTotal: 1,
         workflowCommands: [],
         failedCommands: [],
         filesRead: [],
@@ -203,6 +213,8 @@ describe('renderActivityPanel', () => {
       const html = renderActivityPanel(response)
       expect(html).toContain('cmd_a')
       expect(html).toContain('cmd_b')
+      // Verify ordering: cmd_a (count:2) should appear before cmd_b (count:1)
+      expect(html.indexOf('cmd_a')).toBeLessThan(html.indexOf('cmd_b'))
     })
   })
 })

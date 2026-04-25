@@ -149,12 +149,15 @@ function renderFailedRow(cmd: {
   readonly output: string;
   readonly count: number;
 }): string {
+  const chars = Array.from(cmd.output)
+  const preview = chars.slice(0, 60).join('')
+  const truncated = chars.length > 60 ? preview + '…' : preview
   const badge = renderCountBadge(cmd.count)
   return `<div class="ac-row ac-row-failed" title="${esc(cmd.output)}">` +
     `<span class="ac-row-n">${badge}</span>` +
     `<span class="ac-failed-tool">${esc(cmd.toolName)}</span>` +
     `<code class="ac-cmd">${esc(cmd.command)}</code>` +
-    `<span class="ac-failed-output">${esc(cmd.output.slice(0, 60))}${cmd.output.length > 60 ? '...' : ''}</span>` +
+    `<span class="ac-failed-output">${esc(truncated)}</span>` +
     `</div>`
 }
 
