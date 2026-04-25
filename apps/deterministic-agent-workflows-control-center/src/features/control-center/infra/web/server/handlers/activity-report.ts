@@ -100,7 +100,7 @@ function normalizeOutput(v: unknown): string {
 function hasFailureOutput(call: ToolCall): boolean {
   if (call.isError === true) return true
   const output = normalizeOutput(call.output)
-  return /command not found|exit code [1-9]|exited with non-zero|error:/iu.test(output)
+  return /command not found|exit code [1-9]\d*|exited with non-zero|\berror:/iu.test(output)
 }
 
 function commandLabel(call: ToolCall): string {
