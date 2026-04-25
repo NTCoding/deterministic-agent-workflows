@@ -224,7 +224,7 @@ it('reinserts the current procedure when identity verification fails', () => {
   const expectedOutput = [
     'Cannot write-check',
     SEPARATOR,
-    'You forgot. To unblock:',
+    'Your last message is missing the required state prefix.',
     '',
     '- send a new message starting with: 🧭 PLANNING',
     '- then continue with the current procedure',

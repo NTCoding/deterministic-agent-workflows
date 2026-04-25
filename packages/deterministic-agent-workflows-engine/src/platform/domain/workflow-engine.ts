@@ -426,7 +426,7 @@ export class WorkflowEngine<
     if (identityCheckResult.status === 'lost') {
       const currentProcedure = readProcedure(this.engineDeps, state)
       return [
-        'You forgot. To unblock:',
+        'Your last message is missing the required state prefix.',
         '',
         `- send a new message starting with: ${getExpectedPrefix(state, registry)}`,
         '- then continue with the current procedure',
