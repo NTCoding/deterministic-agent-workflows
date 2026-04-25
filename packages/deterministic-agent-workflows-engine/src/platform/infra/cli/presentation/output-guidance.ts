@@ -9,6 +9,8 @@ export const JOURNAL_GUIDANCE = [
   'Record your progress and reasoning as you work by calling:',
   '  <workflow-command> write-journal <agent-name> "<detailed journal entry>"',
   '',
+  'Use the same workflow command prefix used for other workflow commands such as transition.',
+  '',
   'Use it for key decisions, progress milestones, and blockers.',
   'Every session should have a journal trail of the work performed.',
   PLATFORM_NOTIFICATION_FENCE,
