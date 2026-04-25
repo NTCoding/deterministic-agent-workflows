@@ -7,7 +7,7 @@ export const JOURNAL_GUIDANCE = [
   'PLATFORM NOTIFICATION',
   '',
   'Record your progress and reasoning as you work by calling:',
-  '  write-journal <agent-name> "<1\u20133 sentence note>"',
+  '  <workflow-command> write-journal <agent-name> "<detailed journal entry>"',
   '',
   'Use it for key decisions, progress milestones, and blockers.',
   'Every session should have a journal trail of the work performed.',
