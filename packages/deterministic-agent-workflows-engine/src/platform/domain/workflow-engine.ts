@@ -425,7 +425,8 @@ export class WorkflowEngine<
     }], workflow.getState()))
 
     if (identityCheckResult.status === 'lost') {
-      return `You forgot. Next message MUST begin with: ${expectedPrefix}`
+      const currentProcedure = readProcedure(this.engineDeps, state)
+      return `You forgot. Next message MUST begin with: ${expectedPrefix}\n\n${currentProcedure}`
     }
 
     return undefined
