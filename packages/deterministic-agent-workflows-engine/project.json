@@ -25,7 +25,7 @@
     "test": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "vitest run --config packages/deterministic-agent-workflows-engine/vitest.config.mts"
+        "command": "pnpm exec vitest run --config packages/deterministic-agent-workflows-engine/vitest.config.mts"
       }
     }
   }
