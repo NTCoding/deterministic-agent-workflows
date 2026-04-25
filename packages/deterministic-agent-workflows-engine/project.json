@@ -25,7 +25,7 @@
     "test": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "node -e \"process.exit(0)\""
+        "command": "pnpm --dir packages/deterministic-agent-workflows-engine exec vitest run --config vitest.config.mts"
       }
     }
   }

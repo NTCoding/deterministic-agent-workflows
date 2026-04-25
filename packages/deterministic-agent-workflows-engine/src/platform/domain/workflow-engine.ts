@@ -412,7 +412,6 @@ export class WorkflowEngine<
     const transcriptPath = workflow.getTranscriptPath()
     const state = workflow.getState().currentStateMachineState
     const registry = this.factory.getRegistry()
-    const expectedPrefix = getExpectedPrefix(state, registry)
     const pattern = buildPrefixPattern(registry)
     const messages = this.engineDeps.transcriptReader.readMessages(transcriptPath)
     const identityCheckResult = checkIdentity(messages, pattern)
@@ -425,7 +424,17 @@ export class WorkflowEngine<
     }], workflow.getState()))
 
     if (identityCheckResult.status === 'lost') {
-      return `You forgot. Next message MUST begin with: ${expectedPrefix}`
+      const currentProcedure = readProcedure(this.engineDeps, state)
+      return [
+        'Your last message is missing the required state prefix.',
+        '',
+        `- send a new message starting with: ${getExpectedPrefix(state, registry)}`,
+        '- then continue with the current procedure',
+        '',
+        'Current procedure:',
+        '',
+        currentProcedure,
+      ].join('\n')
     }
 
     return undefined
