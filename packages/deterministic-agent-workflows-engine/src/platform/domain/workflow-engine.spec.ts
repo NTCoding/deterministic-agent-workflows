@@ -19,6 +19,7 @@ import type {
   WorkflowRegistry,
 } from '../../index'
 import {
+  flattenStoredEvent,
   pass,
   reduceWorkflowStateFromStoredEvents,
   reviewRecordedEventSchema,
@@ -379,15 +380,9 @@ describe('WorkflowEngine platform-owned events', () => {
     )]
 
     const state = reduceWorkflowStateFromStoredEvents(reviewTrackingWorkflowDefinition, storedEvents)
-    const reviewRecordedEvent = reviewRecordedEventSchema.parse({
-      type: 'review-recorded',
-      at: '2026-01-01T00:01:00Z',
-      reviewId: 7,
-      reviewType: 'code-review',
-      verdict: 'PASS',
-    })
+    const flattenedEvent = flattenStoredEvent(storedEvents[0])
 
-    expect(reviewRecordedEvent).toStrictEqual({
+    expect(reviewRecordedEventSchema.parse(flattenedEvent)).toStrictEqual({
       type: 'review-recorded',
       at: '2026-01-01T00:01:00Z',
       reviewId: 7,
