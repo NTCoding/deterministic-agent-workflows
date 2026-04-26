@@ -195,6 +195,13 @@ function renderOverviewTab(session: SessionDetailDto, state: RenderState): strin
   return insights + suggestions + metrics + renderTimelineBar(segments, session.workflowStates) + activity
 }
 
+function renderReviewsTab(state: RenderState): string {
+  if (state.reviewsFailed) return '<div id="reviews-tab-content" class="loading" style="color:#c0392b">Failed to load reviews.</div>'
+  return state.reviews === null
+    ? '<div id="reviews-tab-content" class="loading">Loading reviews...</div>'
+    : renderReviewPanel(state.reviews)
+}
+
 function renderTabContent(session: SessionDetailDto, state: RenderState): string {
   if (state.activeTab === 'overview') {
     return renderOverviewTab(session, state)
@@ -216,9 +223,7 @@ function renderTabContent(session: SessionDetailDto, state: RenderState): string
     return renderInsights(session.insights)
   }
   if (state.activeTab === 'reviews') {
-    return state.reviews === null
-      ? '<div id="reviews-tab-content" class="loading">Loading reviews...</div>'
-      : renderReviewPanel(state.reviews)
+    return renderReviewsTab(state)
   }
   if (state.activeTab === 'reflection') {
     return state.reflections === null
@@ -272,6 +277,15 @@ async function loadReviews(sessionId: string, state: RenderState): Promise<void>
   state.reviews = result.reviews
 }
 
+async function loadReviewsWithoutBlockingPage(sessionId: string, state: RenderState): Promise<void> {
+  try {
+    await loadReviews(sessionId, state)
+    state.reviewsFailed = false
+  } catch {
+    state.reviewsFailed = true
+  }
+}
+
 async function loadActiveTabData(sessionId: string, session: SessionDetailDto, state: RenderState): Promise<void> {
   if (state.activeTab === 'events' && state.events === null) {
     await loadEvents(sessionId, state)
@@ -282,16 +296,11 @@ async function loadActiveTabData(sessionId: string, session: SessionDetailDto, s
     return
   }
   if (state.activeTab === 'reviews' && state.reviews === null) {
-    await loadReviews(sessionId, state)
+    await loadReviewsWithoutBlockingPage(sessionId, state)
     return
   }
   if (state.activeTab === 'overview' && state.reviews === null) {
-    try {
-      await loadReviews(sessionId, state)
-      state.reviewsFailed = false
-    } catch {
-      state.reviewsFailed = true
-    }
+    await loadReviewsWithoutBlockingPage(sessionId, state)
     return
   }
   if (state.activeTab === 'reflection' && state.reflections === null) {

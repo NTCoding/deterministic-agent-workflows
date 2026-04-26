@@ -39,8 +39,10 @@ export type SessionHandlerDeps = {
 
 function parsePullRequestNumber(value: string | null): number | undefined {
   if (value === null || value.length === 0) return undefined
-  const parsed = Number.parseInt(value, 10)
-  return Number.isNaN(parsed) ? undefined : parsed
+  if (!/^\d+$/.test(value)) return undefined
+  const parsed = Number(value)
+  if (!Number.isSafeInteger(parsed) || parsed <= 0) return undefined
+  return parsed
 }
 
 function parseReviewVerdict(value: string | null): 'PASS' | 'FAIL' | undefined {

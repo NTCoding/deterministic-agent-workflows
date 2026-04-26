@@ -158,6 +158,7 @@ The workflow database owns review persistence. The UI must read reviews from the
 Required store methods:
 
 - `recordReview(sessionId, createdAt, input)`
+- `recordReviewWithEvent(sessionId, createdAt, input, eventState)`
 - `listSessionReviews(sessionId)`
 - `listReviews(filters)`
 
