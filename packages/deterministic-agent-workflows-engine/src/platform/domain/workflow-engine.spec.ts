@@ -19,7 +19,10 @@ import type {
   WorkflowRegistry,
 } from '../../index'
 import {
+  flattenStoredEvent,
   pass,
+  reduceWorkflowStateFromStoredEvents,
+  reviewRecordedEventSchema,
   WorkflowEngine,
   WorkflowStateError,
 } from '../../index'
@@ -31,6 +34,11 @@ type PlanningState = {
 
 type WorkflowDeps = Record<string, never>
 
+type ReviewTrackingState = {
+  readonly currentStateMachineState: 'REVIEWING'
+  readonly codeReviewPassed: boolean
+}
+
 type SessionStartedEvent = BaseEvent & {
   readonly type: 'session-started'
   readonly transcriptPath: string
@@ -38,6 +46,17 @@ type SessionStartedEvent = BaseEvent & {
 
 function isSessionStartedEvent(event: BaseEvent): event is SessionStartedEvent {
   return event.type === 'session-started'
+}
+
+function allowAgentRegistration(agentType: string, agentId: string) {
+  void agentType
+  void agentId
+  return pass()
+}
+
+function allowIdleCheck(agentName: string) {
+  void agentName
+  return pass()
 }
 
 class StrictPlanningWorkflow {
@@ -85,14 +104,46 @@ class StrictPlanningWorkflow {
   }
 
   registerAgent(agentType: string, agentId: string) {
-    void agentType
-    void agentId
-    return pass()
+    return allowAgentRegistration(agentType, agentId)
   }
 
   handleTeammateIdle(agentName: string) {
-    void agentName
-    return pass()
+    return allowIdleCheck(agentName)
+  }
+}
+
+class ReviewTrackingWorkflow {
+  constructor(private readonly state: ReviewTrackingState) {}
+
+  getState(): ReviewTrackingState {
+    return this.state
+  }
+
+  appendEvent(event: BaseEvent): void {
+    void event
+    throw new WorkflowStateError('appendEvent is not used in this test')
+  }
+
+  getPendingEvents(): readonly BaseEvent[] {
+    return []
+  }
+
+  startSession(transcriptPath: string, repository: string | undefined): void {
+    void transcriptPath
+    void repository
+    throw new WorkflowStateError('startSession is not used in this test')
+  }
+
+  getTranscriptPath(): string {
+    return ''
+  }
+
+  registerAgent(agentType: string, agentId: string) {
+    return allowAgentRegistration(agentType, agentId)
+  }
+
+  handleTeammateIdle(agentName: string) {
+    return allowIdleCheck(agentName)
   }
 }
 
@@ -201,6 +252,64 @@ const workflowDefinition: WorkflowDefinition<StrictPlanningWorkflow, PlanningSta
   },
 }
 
+const reviewTrackingWorkflowDefinition: WorkflowDefinition<ReviewTrackingWorkflow, ReviewTrackingState, WorkflowDeps, 'REVIEWING', 'record-review'> = {
+  fold(state, event) {
+    const reviewRecordedEvent = reviewRecordedEventSchema.parse(event)
+    if (reviewRecordedEvent.reviewType !== 'code-review') {
+      return state
+    }
+    return {
+      ...state,
+      codeReviewPassed: reviewRecordedEvent.verdict === 'PASS',
+    }
+  },
+  buildWorkflow(state) {
+    return new ReviewTrackingWorkflow(state)
+  },
+  stateSchema: z.literal('REVIEWING'),
+  initialState() {
+    return {
+      currentStateMachineState: 'REVIEWING',
+      codeReviewPassed: false,
+    }
+  },
+  getRegistry() {
+    return {
+      REVIEWING: {
+        emoji: '🔎',
+        agentInstructions: 'states/reviewing.md',
+        canTransitionTo: [],
+        allowedWorkflowOperations: ['record-review'],
+      },
+    } satisfies WorkflowRegistry<ReviewTrackingState, 'REVIEWING', 'record-review'>
+  },
+  buildTransitionContext(state, from, to) {
+    return {
+      state,
+      from,
+      to,
+      gitInfo: {
+        currentBranch: 'main',
+        workingTreeClean: true,
+        headCommit: 'abc123',
+        changedFilesVsDefault: [],
+        hasCommitsVsDefault: false,
+      },
+    }
+  },
+}
+
+function buildStoredEvent(type: string, at: string, state: string, payload: Record<string, unknown>): StoredEvent {
+  return {
+    envelope: {
+      type,
+      at,
+      state,
+    },
+    payload,
+  }
+}
+
 function createEngine(): {
   readonly engine: WorkflowEngine<StrictPlanningWorkflow, PlanningState, WorkflowDeps, 'PLANNING', 'write'>
   readonly store: InMemoryWorkflowEventStore
@@ -256,5 +365,33 @@ describe('WorkflowEngine platform-owned events', () => {
       'identity-verified',
       'write-checked',
     ])
+  })
+
+  it('keeps review-recorded available to consumer workflow state reconstruction', () => {
+    const storedEvents: ReadonlyArray<StoredEvent> = [buildStoredEvent(
+      'review-recorded',
+      '2026-01-01T00:01:00Z',
+      'REVIEWING',
+      {
+        reviewId: 7,
+        reviewType: 'code-review',
+        verdict: 'PASS',
+      },
+    )]
+
+    const state = reduceWorkflowStateFromStoredEvents(reviewTrackingWorkflowDefinition, storedEvents)
+    const flattenedEvent = flattenStoredEvent(storedEvents[0])
+
+    expect(reviewRecordedEventSchema.parse(flattenedEvent)).toStrictEqual({
+      type: 'review-recorded',
+      at: '2026-01-01T00:01:00Z',
+      reviewId: 7,
+      reviewType: 'code-review',
+      verdict: 'PASS',
+    })
+    expect(state).toStrictEqual({
+      currentStateMachineState: 'REVIEWING',
+      codeReviewPassed: true,
+    })
   })
 })
