@@ -162,6 +162,7 @@ const workflowDefinition = {
     DEVELOPING: {
       emoji: '🛠️',
       agentInstructions: 'states/developing.md',
+      allowIdle: true,
       canTransitionTo: ['PLANNING'],
       allowedWorkflowOperations: [],
     },
@@ -198,6 +199,7 @@ process.env['WORKFLOW_EVENTS_DB'] = workflowEventsPath
 seedOpencodeTranscript(opencodeDatabasePath, 'session-1', '🧠 PLANNING proving OpenCode transcript parts are read')
 
 try {
+  const promptedTexts = []
   const plugin = createOpenCodeWorkflowPlugin({
     workflowDefinition,
     routes,
@@ -210,7 +212,15 @@ try {
     buildWorkflowDeps: () => ({}),
   })
 
-  const hooks = await plugin()
+  const hooks = await plugin({
+    client: {
+      session: {
+        promptAsync: async ({ body }) => {
+          promptedTexts.push(body.parts[0].text)
+        },
+      },
+    },
+  })
   const ctx = {
     sessionID: 'session-1',
     messageID: 'm1',
@@ -224,6 +234,12 @@ try {
 
   const initOutput = await hooks.tool.workflow.execute({ operation: 'init' }, ctx)
   const beforeHook = hooks['tool.execute.before']
+  await hooks.event({
+    event: {
+      type: 'session.idle',
+      properties: { sessionID: 'session-1' },
+    },
+  })
 
   let blocked = false
   try {
@@ -240,6 +256,12 @@ try {
     operation: 'transition',
     args: ['DEVELOPING'] 
   }, ctx)
+  await hooks.event({
+    event: {
+      type: 'session.idle',
+      properties: { sessionID: 'session-1' },
+    },
+  })
   const identityStatus = readLatestIdentityStatus(workflowEventsPath, 'session-1')
 
   let allowed = true
@@ -253,11 +275,12 @@ try {
     allowed = false
   }
 
-  if (!initOutput.includes('planning instructions') || !blocked || !allowed || identityStatus !== 'verified') {
+  if (!initOutput.includes('planning instructions') || !blocked || !allowed || identityStatus !== 'verified' || promptedTexts.length !== 1) {
     throw new Error(`Smoke test failed: ${JSON.stringify({
       blocked,
       allowed,
       identityStatus,
+      promptedTexts,
       initOutput 
     })}`)
   }

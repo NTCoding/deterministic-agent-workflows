@@ -18,9 +18,13 @@ import { tool } from '@opencode-ai/plugin/tool'
 import type {
   BaseWorkflowState,
   RehydratableWorkflow,
+  WorkflowDefinition,
   WorkflowEngineDeps,
 } from '@nt-ai-lab/deterministic-agent-workflow-engine'
-import { WorkflowEngine } from '@nt-ai-lab/deterministic-agent-workflow-engine'
+import {
+  flattenStoredEvent,
+  WorkflowEngine,
+} from '@nt-ai-lab/deterministic-agent-workflow-engine'
 import type { PlatformContext } from '@nt-ai-lab/deterministic-agent-workflow-cli'
 import {
   createPreToolUseHandler,
@@ -76,6 +80,26 @@ type SessionPromptClient = {
   }
 }
 
+function isIdleAllowedForSession<
+  TWorkflow extends RehydratableWorkflow<TState>,
+  TState extends BaseWorkflowState<TStateName>,
+  TDeps,
+  TStateName extends string = string,
+  TOperation extends string = string,
+>(
+  workflowDefinition: WorkflowDefinition<TWorkflow, TState, TDeps, TStateName, TOperation>,
+  engineDeps: WorkflowEngineDeps,
+  sessionID: string,
+): boolean {
+  const currentState = engineDeps.store.readEvents(sessionID)
+    .map(flattenStoredEvent)
+    .reduce(
+      (state, event) => workflowDefinition.fold(state, event),
+      workflowDefinition.initialState(),
+    )
+  return workflowDefinition.getRegistry()[currentState.currentStateMachineState].allowIdle === true
+}
+
 async function promptIdleRecovery(client: SessionPromptClient, sessionID: string): Promise<void> {
   await client.session.promptAsync({
     path: { id: sessionID },
@@ -95,6 +119,9 @@ export function createSessionIdleEventHook(deps: IdleEventHookDeps): OpenCodeEve
       return
     }
     if (!deps.hasSessionStarted(event.properties.sessionID)) {
+      return
+    }
+    if (deps.isIdleAllowed(event.properties.sessionID)) {
       return
     }
     await deps.sendIdleRecoveryPrompt(event.properties.sessionID)
@@ -167,6 +194,13 @@ export function createOpenCodeWorkflowPlugin<
         } = buildEngineContext(sessionID)
         const engine = new WorkflowEngine(config.workflowDefinition, engineDeps, workflowDeps)
         return engine.hasSessionStarted(sessionID)
+      },
+      isIdleAllowed: (sessionID) => {
+        const {
+          engineDeps, workflowDeps 
+        } = buildEngineContext(sessionID)
+        void workflowDeps
+        return isIdleAllowedForSession(config.workflowDefinition, engineDeps, sessionID)
       },
       sendIdleRecoveryPrompt: async (sessionID) => {
         if (input !== undefined && isSessionPromptClient(input.client)) {
