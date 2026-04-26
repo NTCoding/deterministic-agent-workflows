@@ -1,5 +1,9 @@
-import { checkBashCommand } from './bash-enforcement'
 import { checkIdentity } from './identity-verification'
+import {
+  checkBashWithPlatformEvents,
+  checkWriteWithPlatformEvents,
+  writeJournalWithPlatformEvents,
+} from './workflow-engine-platform-operations'
 import {
   buildPrefixPattern,
   buildProcedurePath,
@@ -25,14 +29,15 @@ import type {
 } from './workflow-engine-types'
 import type { BaseEvent } from './base-event'
 import {
-  flattenStoredEvent,
   toPayload,
   type StoredEvent,
 } from './stored-event'
+import { engineEventSchema } from './engine-events'
 import {
   WorkflowStateError,
   type BaseWorkflowState,
 } from './workflow-state'
+import { reduceWorkflowStateFromStoredEvents } from './workflow-state-reducer'
 import { serializeWorkflowState } from './workflow-state-serialization'
 
 /** @riviere-role domain-service */
@@ -113,6 +118,12 @@ export class WorkflowEngine<
     }
   }
 
+  writeJournal(sessionId: string, agentName: string, content: string): EngineResult {
+    this.requireSession(sessionId)
+    const workflow = this.rehydrateFromEvents(sessionId)
+    return writeJournalWithPlatformEvents(this.platformOperationContext(sessionId, workflow), agentName, content)
+  }
+
   transition(sessionId: string, target: TStateName): EngineResult {
     this.requireSession(sessionId)
     const workflow = this.rehydrateFromEvents(sessionId)
@@ -185,59 +196,7 @@ export class WorkflowEngine<
   ): EngineResult {
     this.requireSession(sessionId)
     const workflow = this.rehydrateFromEvents(sessionId)
-    const registry = this.factory.getRegistry()
-    const currentStateName = workflow.getState().currentStateMachineState
-    const currentPrefix = getExpectedPrefix(currentStateName, registry)
-
-    const gate = this.applyIdentityGate(sessionId, workflow, 'bash-check')
-    if (gate !== undefined) return gate
-
-    if (toolName !== 'Bash') {
-      workflow.appendEvent({
-        type: 'bash-checked',
-        at: this.engineDeps.now(),
-        tool: toolName,
-        command,
-        allowed: true 
-      })
-      this.persistEvents(sessionId, workflow)
-      return {
-        type: 'success',
-        output: '' 
-      }
-    }
-
-    const exemptions = registry[currentStateName].allowForbidden?.bash ?? []
-    const bashCheckResult = checkBashCommand(command, bashForbidden, exemptions)
-    if (!bashCheckResult.pass) {
-      const reason = `Bash command blocked in ${currentStateName}. ${bashCheckResult.reason}`
-      workflow.appendEvent({
-        type: 'bash-checked',
-        at: this.engineDeps.now(),
-        tool: toolName,
-        command,
-        allowed: false,
-        reason,
-      })
-      this.persistEvents(sessionId, workflow)
-      return {
-        type: 'blocked',
-        output: formatOperationGateError('bash-check', reason, currentPrefix) 
-      }
-    }
-
-    workflow.appendEvent({
-      type: 'bash-checked',
-      at: this.engineDeps.now(),
-      tool: toolName,
-      command,
-      allowed: true 
-    })
-    this.persistEvents(sessionId, workflow)
-    return {
-      type: 'success',
-      output: '' 
-    }
+    return checkBashWithPlatformEvents(this.platformOperationContext(sessionId, workflow), toolName, command, bashForbidden)
   }
 
   checkWrite(
@@ -248,89 +207,7 @@ export class WorkflowEngine<
   ): EngineResult {
     this.requireSession(sessionId)
     const workflow = this.rehydrateFromEvents(sessionId)
-    const registry = this.factory.getRegistry()
-    const currentStateName = workflow.getState().currentStateMachineState
-    const currentPrefix = getExpectedPrefix(currentStateName, registry)
-
-    const gate = this.applyIdentityGate(sessionId, workflow, 'write-check')
-    if (gate !== undefined) return gate
-
-    const writeTools = new Set(['Write', 'Edit', 'NotebookEdit'])
-    if (!writeTools.has(toolName)) {
-      workflow.appendEvent({
-        type: 'write-checked',
-        at: this.engineDeps.now(),
-        tool: toolName,
-        filePath,
-        allowed: true 
-      })
-      this.persistEvents(sessionId, workflow)
-      return {
-        type: 'success',
-        output: '' 
-      }
-    }
-
-    const storePath = `${this.engineDeps.getPluginRoot()}/workflow.db`
-    if (filePath === storePath) {
-      workflow.appendEvent({
-        type: 'write-checked',
-        at: this.engineDeps.now(),
-        tool: toolName,
-        filePath,
-        allowed: true 
-      })
-      this.persistEvents(sessionId, workflow)
-      return {
-        type: 'success',
-        output: '' 
-      }
-    }
-
-    if (!(registry[currentStateName].forbidden?.write ?? false)) {
-      workflow.appendEvent({
-        type: 'write-checked',
-        at: this.engineDeps.now(),
-        tool: toolName,
-        filePath,
-        allowed: true 
-      })
-      this.persistEvents(sessionId, workflow)
-      return {
-        type: 'success',
-        output: '' 
-      }
-    }
-
-    if (!isWriteAllowed(filePath, workflow.getState())) {
-      const reason = `Write to '${filePath}' is forbidden in state ${currentStateName}`
-      workflow.appendEvent({
-        type: 'write-checked',
-        at: this.engineDeps.now(),
-        tool: toolName,
-        filePath,
-        allowed: false,
-        reason,
-      })
-      this.persistEvents(sessionId, workflow)
-      return {
-        type: 'blocked',
-        output: formatOperationGateError('write-check', reason, currentPrefix) 
-      }
-    }
-
-    workflow.appendEvent({
-      type: 'write-checked',
-      at: this.engineDeps.now(),
-      tool: toolName,
-      filePath,
-      allowed: true 
-    })
-    this.persistEvents(sessionId, workflow)
-    return {
-      type: 'success',
-      output: '' 
-    }
+    return checkWriteWithPlatformEvents(this.platformOperationContext(sessionId, workflow), toolName, filePath, isWriteAllowed)
   }
 
   getState(sessionId: string): EngineResult {
@@ -358,11 +235,7 @@ export class WorkflowEngine<
 
   private rehydrateFromEvents(sessionId: string): TWorkflow {
     const stored = this.engineDeps.store.readEvents(sessionId)
-    const events = stored.map(flattenStoredEvent)
-    const state = events.reduce<TState>(
-      (accumulator, event) => this.factory.fold(accumulator, event),
-      this.factory.initialState(),
-    )
+    const state = reduceWorkflowStateFromStoredEvents(this.factory, stored)
     return this.factory.buildWorkflow(state, this.workflowDeps)
   }
 
@@ -416,12 +289,12 @@ export class WorkflowEngine<
     const messages = this.engineDeps.transcriptReader.readMessages(transcriptPath)
     const identityCheckResult = checkIdentity(messages, pattern)
 
-    this.engineDeps.store.appendEvents(sessionId, this.wrapEvents([{
+    this.persistPlatformEvent(sessionId, workflow.getState(), {
       type: 'identity-verified',
       at: this.engineDeps.now(),
       status: identityCheckResult.status,
       transcriptPath,
-    }], workflow.getState()))
+    })
 
     if (identityCheckResult.status === 'lost') {
       const currentProcedure = readProcedure(this.engineDeps, state)
@@ -438,5 +311,27 @@ export class WorkflowEngine<
     }
 
     return undefined
+  }
+
+  private platformOperationContext(sessionId: string, workflow: TWorkflow) {
+    return {
+      workflow,
+      engineDeps: this.engineDeps,
+      factory: this.factory,
+      applyIdentityGate: (op: string) => this.applyIdentityGate(sessionId, workflow, op),
+      persistPlatformEvent: (event: unknown) => this.persistPlatformEvent(sessionId, workflow.getState(), event),
+    }
+  }
+
+  private persistPlatformEvent(sessionId: string, state: TState, event: unknown): void {
+    const platformEvent = engineEventSchema.parse(event)
+    this.engineDeps.store.appendEvents(sessionId, [{
+      envelope: {
+        type: platformEvent.type,
+        at: platformEvent.at,
+        state: state.currentStateMachineState,
+      },
+      payload: toPayload(platformEvent),
+    }])
   }
 }

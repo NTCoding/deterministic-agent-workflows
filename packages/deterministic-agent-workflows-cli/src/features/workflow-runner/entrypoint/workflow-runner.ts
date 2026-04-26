@@ -4,10 +4,7 @@ import type {
   RehydratableWorkflow,
   WorkflowEngineDeps,
 } from '@nt-ai-lab/deterministic-agent-workflow-engine'
-import {
-  pass,
-  WorkflowEngine,
-} from '@nt-ai-lab/deterministic-agent-workflow-engine'
+import { WorkflowEngine } from '@nt-ai-lab/deterministic-agent-workflow-engine'
 import {
   EXIT_ALLOW, EXIT_BLOCK, EXIT_ERROR 
 } from '../../../shell/exit-codes'
@@ -167,7 +164,7 @@ function handleWriteJournalRoute<
   TDeps,
   TStateName extends string,
   TOperation extends string,
->(engine: WorkflowEngine<TWorkflow, TState, TDeps, TStateName, TOperation>, engineDeps: WorkflowEngineDeps, args: readonly string[], getSessionId?: () => string): RunnerResult {
+>(engine: WorkflowEngine<TWorkflow, TState, TDeps, TStateName, TOperation>, args: readonly string[], getSessionId?: () => string): RunnerResult {
   const hasExplicitSessionId = getSessionId === undefined
   const sessionId = hasExplicitSessionId ? args[1] : getSessionId()
   const agentNameIndex = hasExplicitSessionId ? 2 : 1
@@ -180,15 +177,7 @@ function handleWriteJournalRoute<
       exitCode: EXIT_ERROR,
     }
   }
-  return engineResultToRunnerResult(engine.transaction(sessionId, 'write-journal', (workflow) => {
-    workflow.appendEvent({
-      type: 'journal-entry',
-      at: engineDeps.now(),
-      agentName,
-      content,
-    })
-    return pass()
-  }))
+  return engineResultToRunnerResult(engine.writeJournal(sessionId, agentName, content))
 }
 
 function handleGetStateRoute<
@@ -279,7 +268,7 @@ function resolveBuiltinRoute<
     case 'record-review':
       return handleRecordReviewRoute(engine, engineDeps, config.workflowDefinition, args, readStdin, getSessionId)
     case 'write-journal':
-      return handleWriteJournalRoute(engine, engineDeps, args, getSessionId)
+      return handleWriteJournalRoute(engine, args, getSessionId)
     default:
       return undefined
   }

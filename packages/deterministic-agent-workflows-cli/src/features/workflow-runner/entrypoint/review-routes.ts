@@ -6,7 +6,7 @@ import type {
   WorkflowEngineDeps,
 } from '@nt-ai-lab/deterministic-agent-workflow-engine'
 import {
-  flattenStoredEvent,
+  reduceWorkflowStateFromStoredEvents,
   reviewPayloadSchema,
 } from '@nt-ai-lab/deterministic-agent-workflow-engine'
 import {
@@ -167,9 +167,7 @@ function computeCurrentState<
   TStateName extends string,
   TOperation extends string,
 >(workflowDefinition: WorkflowDefinition<TWorkflow, TState, TDeps, TStateName, TOperation>, storedEvents: readonly StoredEvent[]): TStateName {
-  const state = storedEvents
-    .map(flattenStoredEvent)
-    .reduce((currentState, event) => workflowDefinition.fold(currentState, event), workflowDefinition.initialState())
+  const state = reduceWorkflowStateFromStoredEvents(workflowDefinition, storedEvents)
   return state.currentStateMachineState
 }
 
