@@ -315,3 +315,31 @@ export type ReflectionDto = {
   readonly sourceState?: string | undefined
   readonly reflection: ReflectionPayloadDto
 }
+
+/** @riviere-role web-tbc */
+export type ReviewFindingDto = {
+  readonly title?: string | undefined
+  readonly severity?: string | undefined
+  readonly status?: string | undefined
+  readonly rule?: string | undefined
+  readonly file?: string | undefined
+  readonly startLine?: number | undefined
+  readonly endLine?: number | undefined
+  readonly details?: string | undefined
+  readonly recommendation?: string | undefined
+}
+
+/** @riviere-role web-tbc */
+export type ReviewDto = {
+  readonly id: number
+  readonly sessionId: string
+  readonly createdAt: string
+  readonly reviewType: string
+  readonly verdict: 'PASS' | 'FAIL'
+  readonly repository?: string | undefined
+  readonly branch?: string | undefined
+  readonly pullRequestNumber?: number | undefined
+  readonly sourceState?: string | undefined
+  readonly summary?: string | undefined
+  readonly findings: ReadonlyArray<ReviewFindingDto>
+}

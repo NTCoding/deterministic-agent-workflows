@@ -3,11 +3,15 @@ import {
   WorkflowEngine,
   pass,
   type BaseEvent,
+  type ListedReview,
   type RecordReflectionInput,
+  type RecordReviewInput,
   type PreconditionResult,
   type RehydratableWorkflow,
+  type ReviewFilters,
   type StoredEvent,
   type StoredReflection,
+  type StoredReview,
   type WorkflowDefinition,
   type WorkflowEngineDeps,
   type WorkflowEventStore,
@@ -104,6 +108,10 @@ class ReflectionStoreNotConfiguredError extends Error {
   }
 }
 
+function throwStoreNotConfigured(): never {
+  throw new ReflectionStoreNotConfiguredError()
+}
+
 class MemoryStore implements WorkflowEventStore {
   private readonly eventsBySessionId = new Map<string, StoredEvent[]>()
 
@@ -130,10 +138,32 @@ class MemoryStore implements WorkflowEventStore {
     void _sessionId
     void _createdAt
     void _input
-    throw new ReflectionStoreNotConfiguredError()
+    return throwStoreNotConfigured()
   }
 
   listReflections(): readonly StoredReflection[] {
+    return []
+  }
+
+  recordReview(_sessionId: string, _createdAt: string, _input: RecordReviewInput): StoredReview {
+    return this.recordReviewWithEvent(_sessionId, _createdAt, _input, 'unconfigured')
+  }
+
+  recordReviewWithEvent(_sessionId: string, _createdAt: string, _input: RecordReviewInput, _eventState: string): StoredReview {
+    void _sessionId
+    void _createdAt
+    void _input
+    void _eventState
+    return throwStoreNotConfigured()
+  }
+
+  listSessionReviews(_sessionId: string): readonly StoredReview[] {
+    void _sessionId
+    return []
+  }
+
+  listReviews(_filters: ReviewFilters): readonly ListedReview[] {
+    void _filters
     return []
   }
 }

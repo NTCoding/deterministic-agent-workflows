@@ -1,6 +1,7 @@
 /** @riviere-role web-tbc */
 export type Route =
   | { view: 'dashboard' }
+  | { view: 'reviews' }
   | {
     view: 'session';
     id: string 
@@ -17,6 +18,7 @@ export function parseRoute(): Route {
   const hash = window.location.hash.slice(1) || '/'
 
   if (hash === '/' || hash === '') return { view: 'dashboard' }
+  if (hash === '/reviews') return { view: 'reviews' }
   if (hash === '/analytics') return { view: 'analytics' }
 
   const sessionMatch = /^\/session\/(.+)$/.exec(hash)

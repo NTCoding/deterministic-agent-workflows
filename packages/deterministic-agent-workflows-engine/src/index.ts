@@ -32,6 +32,31 @@ export type {
   StoredReflection,
 } from './platform/domain/reflection-types'
 
+export {
+  reviewTypeSchema,
+  reviewVerdictSchema,
+  reviewFindingSeveritySchema,
+  reviewFindingStatusSchema,
+  reviewFindingSchema,
+  reviewPayloadSchema,
+  recordReviewInputSchema,
+  storedReviewSchema,
+  listedReviewSchema,
+  reviewFiltersSchema,
+} from './platform/domain/review-types'
+export type {
+  ReviewType,
+  ReviewVerdict,
+  ReviewFindingSeverity,
+  ReviewFindingStatus,
+  ReviewFinding,
+  ReviewPayload,
+  RecordReviewInput,
+  StoredReview,
+  ListedReview,
+  ReviewFilters,
+} from './platform/domain/review-types'
+
 export { engineEventSchema } from './platform/domain/engine-events'
 export type {
   EngineEvent,
@@ -46,6 +71,7 @@ export type {
   IdleCheckedEvent,
   IdentityVerifiedEvent,
   ContextRequestedEvent,
+  ReviewRecordedEvent,
 } from './platform/domain/engine-events'
 
 export { repositoryMetadataEventSchema } from './platform/domain/repository-tracking-events'

@@ -36,6 +36,7 @@ import {
   handleGetReflectionProcessRoute,
   handleRecordReflectionRoute,
 } from './reflection-routes'
+import { handleRecordReviewRoute } from './review-routes'
 
 export type { PreToolUseHandlerFn } from '../../../platform/domain/pre-tool-use-handler'
 
@@ -275,6 +276,8 @@ function resolveBuiltinRoute<
       return handleGetReflectionProcessRoute(engine, engineDeps, config, args, getSessionId, getSessionTranscriptPath, getSessionRepository, getRepositoryRoot, getWorkflowEventsDbPath)
     case 'record-reflection':
       return handleRecordReflectionRoute(engine, engineDeps, args, readStdin, getSessionId)
+    case 'record-review':
+      return handleRecordReviewRoute(engine, engineDeps, config.workflowDefinition, args, readStdin, getSessionId)
     case 'write-journal':
       return handleWriteJournalRoute(engine, engineDeps, args, getSessionId)
     default:

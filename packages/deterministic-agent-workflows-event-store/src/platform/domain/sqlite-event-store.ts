@@ -1,12 +1,18 @@
 import { z } from 'zod'
 import type {
+  ListedReview,
+  RecordReviewInput,
   RecordReflectionInput,
+  ReviewFilters,
   StoredEvent,
   StoredReflection,
+  StoredReview,
 } from '@nt-ai-lab/deterministic-agent-workflow-engine'
 import {
+  recordReviewInputSchema,
   recordReflectionInputSchema,
   storedReflectionSchema,
+  storedReviewSchema,
   stripEnvelopeKeys,
   WorkflowStateError,
 } from '@nt-ai-lab/deterministic-agent-workflow-engine'
@@ -15,6 +21,19 @@ import {
   openSqliteDatabase,
   type SqliteDatabase,
 } from '../infra/external-clients/sqlite/sqlite-runtime'
+import {
+  buildReviewFilters,
+  createReviewsBranchIndexSql,
+  createReviewsPullRequestIndexSql,
+  createReviewsSessionIndexSql,
+  createReviewsTableSql,
+  createReviewsTypeVerdictIndexSql,
+  listedReviewRowsSchema,
+  parseListedReviewRow,
+  parseStoredReviewRow,
+  reviewIdRowSchema,
+  reviewRowsSchema,
+} from './sqlite-review-storage'
 
 const createTableSql = `
   CREATE TABLE IF NOT EXISTS events (
@@ -73,6 +92,10 @@ export type SqliteEventStore = {
   readonly hasSessionStarted: (sessionId: string) => boolean
   readonly recordReflection: (sessionId: string, createdAt: string, input: RecordReflectionInput) => StoredReflection
   readonly listReflections: (sessionId: string) => readonly StoredReflection[]
+  readonly recordReview: (sessionId: string, createdAt: string, input: RecordReviewInput) => StoredReview
+  readonly recordReviewWithEvent: (sessionId: string, createdAt: string, input: RecordReviewInput, eventState: string) => StoredReview
+  readonly listSessionReviews: (sessionId: string) => readonly StoredReview[]
+  readonly listReviews: (filters: ReviewFilters) => readonly ListedReview[]
   readonly listSessions: () => readonly string[]
   readonly db: SqliteDatabase
 }
@@ -84,6 +107,11 @@ export function createStore(dbPath: string): SqliteEventStore {
   db.exec(createTableSql)
   db.exec(createReflectionsTableSql)
   db.exec(createReflectionsIndexSql)
+  db.exec(createReviewsTableSql)
+  db.exec(createReviewsSessionIndexSql)
+  db.exec(createReviewsTypeVerdictIndexSql)
+  db.exec(createReviewsBranchIndexSql)
+  db.exec(createReviewsPullRequestIndexSql)
   ensureStateColumn(db)
 
   return {
@@ -170,6 +198,113 @@ export function createStore(dbPath: string): SqliteEventStore {
           reflection: reflectionPayload,
         })
       })
+    },
+    recordReview(sessionId: string, createdAt: string, input: RecordReviewInput): StoredReview {
+      const parsedInput = recordReviewInputSchema.parse(input)
+      const insert = db.prepare('INSERT INTO reviews (session_id, created_at, review_type, verdict, branch, pull_request_number, source_state, payload_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+      db.exec('BEGIN IMMEDIATE')
+      try {
+        insert.run(
+          sessionId,
+          createdAt,
+          parsedInput.reviewType,
+          parsedInput.verdict,
+          parsedInput.branch ?? null,
+          parsedInput.pullRequestNumber ?? null,
+          parsedInput.sourceState ?? null,
+          JSON.stringify(parsedInput),
+        )
+        const rawId = db.prepare('SELECT last_insert_rowid() AS id').get()
+        const parsedId = reviewIdRowSchema.parse(rawId)
+        const id = Number(parsedId.id)
+        db.exec('COMMIT')
+        return storedReviewSchema.parse({
+          id,
+          sessionId,
+          createdAt,
+          ...parsedInput,
+        })
+      } catch (error) {
+        db.exec('ROLLBACK')
+        throw error
+      }
+    },
+    recordReviewWithEvent(sessionId: string, createdAt: string, input: RecordReviewInput, eventState: string): StoredReview {
+      const parsedInput = recordReviewInputSchema.parse(input)
+      const insertReview = db.prepare('INSERT INTO reviews (session_id, created_at, review_type, verdict, branch, pull_request_number, source_state, payload_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+      const insertEvent = db.prepare('INSERT INTO events (session_id, type, at, state, payload) VALUES (?, ?, ?, ?, ?)')
+      db.exec('BEGIN IMMEDIATE')
+      try {
+        insertReview.run(
+          sessionId,
+          createdAt,
+          parsedInput.reviewType,
+          parsedInput.verdict,
+          parsedInput.branch ?? null,
+          parsedInput.pullRequestNumber ?? null,
+          parsedInput.sourceState ?? null,
+          JSON.stringify(parsedInput),
+        )
+        const rawId = db.prepare('SELECT last_insert_rowid() AS id').get()
+        const parsedId = reviewIdRowSchema.parse(rawId)
+        const id = Number(parsedId.id)
+        insertEvent.run(
+          sessionId,
+          'review-recorded',
+          createdAt,
+          eventState,
+          JSON.stringify({
+            reviewId: id,
+            reviewType: parsedInput.reviewType,
+            verdict: parsedInput.verdict,
+          }),
+        )
+        db.exec('COMMIT')
+        return storedReviewSchema.parse({
+          id,
+          sessionId,
+          createdAt,
+          ...parsedInput,
+        })
+      } catch (error) {
+        db.exec('ROLLBACK')
+        throw error
+      }
+    },
+    listSessionReviews(sessionId: string): readonly StoredReview[] {
+      const rawRows = db.prepare('SELECT id, session_id, created_at, review_type, verdict, branch, pull_request_number, source_state, payload_json FROM reviews WHERE session_id = ? ORDER BY created_at ASC, id ASC').all(sessionId)
+      const rows = reviewRowsSchema.parse(rawRows)
+      return rows.map(parseStoredReviewRow)
+    },
+    listReviews(filters: ReviewFilters): readonly ListedReview[] {
+      const parsedFilters = buildReviewFilters(filters)
+      const whereClause = parsedFilters.conditions.length === 0
+        ? ''
+        : `WHERE ${parsedFilters.conditions.join(' AND ')}`
+      const rawRows = db.prepare(`
+        SELECT
+          reviews.id,
+          reviews.session_id,
+          reviews.created_at,
+          reviews.review_type,
+          reviews.verdict,
+          reviews.branch,
+          reviews.pull_request_number,
+          reviews.source_state,
+          reviews.payload_json,
+          (
+            SELECT json_extract(events.payload, '$.repository')
+            FROM events
+            WHERE events.session_id = reviews.session_id AND events.type = 'session-started'
+            ORDER BY events.seq ASC
+            LIMIT 1
+          ) AS repository
+        FROM reviews
+        ${whereClause}
+        ORDER BY reviews.created_at DESC, reviews.id DESC
+      `).all(...parsedFilters.parameters)
+      const rows = listedReviewRowsSchema.parse(rawRows)
+      return rows.map(parseListedReviewRow)
     },
     listSessions(): readonly string[] {
       const rawRows = db.prepare('SELECT session_id FROM events GROUP BY session_id ORDER BY MIN(seq)').all()

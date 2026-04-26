@@ -4,6 +4,12 @@ import type {
   RecordReflectionInput,
   StoredReflection,
 } from './reflection-types'
+import type {
+  ListedReview,
+  RecordReviewInput,
+  ReviewFilters,
+  StoredReview,
+} from './review-types'
 import type { StoredEvent } from './stored-event'
 import type { PreconditionResult } from './precondition-result'
 import type { TranscriptReader } from '../infra/external-clients/transcript/transcript-reader'
@@ -65,6 +71,10 @@ export interface WorkflowEventStore {
   hasSessionStarted(sessionId: string): boolean
   recordReflection(sessionId: string, createdAt: string, input: RecordReflectionInput): StoredReflection
   listReflections(sessionId: string): readonly StoredReflection[]
+  recordReview(sessionId: string, createdAt: string, input: RecordReviewInput): StoredReview
+  recordReviewWithEvent(sessionId: string, createdAt: string, input: RecordReviewInput, eventState: string): StoredReview
+  listSessionReviews(sessionId: string): readonly StoredReview[]
+  listReviews(filters: ReviewFilters): readonly ListedReview[]
 }
 
 /** @riviere-role value-object */

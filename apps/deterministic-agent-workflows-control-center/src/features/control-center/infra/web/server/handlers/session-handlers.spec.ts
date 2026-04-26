@@ -5,16 +5,19 @@ import {
   createTestDb,
   insertEvent,
   insertReflection,
+  seedReviewSimulation,
   seedSessionEvents,
   seedMultipleSessions,
 } from '../../../../domain/query/session-queries-test-fixtures'
 import {
   handleListSessions,
+  handleListReviews,
   handleGetSession,
   handleGetSessionEvents,
   handleGetSessionJournal,
   handleGetSessionInsights,
   handleGetSessionReflections,
+  handleGetSessionReviews,
 } from './session-handlers'
 import type { SessionHandlerDeps } from './session-handlers'
 import {
@@ -78,6 +81,15 @@ describe('session-handlers', () => {
       createdAt: z.string(),
       reflection: z.object({ findings: z.array(z.unknown()) }),
     }).passthrough()) 
+  })
+  const reviewsBodySchema = z.object({
+    reviews: z.array(z.object({
+      id: z.number(),
+      createdAt: z.string(),
+      reviewType: z.string(),
+      verdict: z.string(),
+      findings: z.array(z.unknown()),
+    }).passthrough()),
   })
 
   beforeEach(() => {
@@ -343,6 +355,37 @@ describe('session-handlers', () => {
       const response = createMockResponse()
       handler(mockReq(), response.res, makeRoute({ id: 'nonexistent' }))
       expect(response.written.statusCode).toBe(404)
+    })
+  })
+
+  describe('handleGetSessionReviews', () => {
+    it('returns reviews oldest first', () => {
+      seedReviewSimulation(state.db, 'test-1')
+      const handler = handleGetSessionReviews(state.deps)
+      const response = createMockResponse()
+      handler(mockReq(), response.res, makeRoute({ id: 'test-1' }))
+      const body = parseJsonBody(response.written.body, reviewsBodySchema)
+      expect(response.written.statusCode).toBe(200)
+      expect(body.reviews).toHaveLength(4)
+      expect(body.reviews[0]?.reviewType).toBe('architecture-review')
+      expect(body.reviews[3]?.verdict).toBe('PASS')
+    })
+  })
+
+  describe('handleListReviews', () => {
+    it('returns matching review type and verdict when filters are provided', () => {
+      seedReviewSimulation(state.db, 'session-a')
+      const handler = handleListReviews(state.deps)
+      const response = createMockResponse()
+      handler(mockReq(), response.res, makeRoute({}, {
+        reviewType: 'task-check',
+        verdict: 'PASS',
+      }))
+      const body = parseJsonBody(response.written.body, reviewsBodySchema)
+      expect(response.written.statusCode).toBe(200)
+      expect(body.reviews).toHaveLength(1)
+      expect(body.reviews[0]?.reviewType).toBe('task-check')
+      expect(body.reviews[0]?.verdict).toBe('PASS')
     })
   })
 })

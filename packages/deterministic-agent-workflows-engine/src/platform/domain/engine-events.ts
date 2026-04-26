@@ -88,6 +88,14 @@ const contextRequestedSchema = z.object({
   agentName: z.string(),
 })
 
+const reviewRecordedSchema = z.object({
+  type: z.literal('review-recorded'),
+  at: z.string(),
+  reviewId: z.number().int().positive(),
+  reviewType: z.string(),
+  verdict: z.enum(['PASS', 'FAIL']),
+})
+
 export const engineEventSchema = z.discriminatedUnion('type', [
   sessionStartedSchema,
   transitionedSchema,
@@ -100,6 +108,7 @@ export const engineEventSchema = z.discriminatedUnion('type', [
   idleCheckedSchema,
   identityVerifiedSchema,
   contextRequestedSchema,
+  reviewRecordedSchema,
 ])
 
 /** @riviere-role value-object */
@@ -126,3 +135,5 @@ export type IdleCheckedEvent = z.infer<typeof idleCheckedSchema>
 export type IdentityVerifiedEvent = z.infer<typeof identityVerifiedSchema>
 /** @riviere-role value-object */
 export type ContextRequestedEvent = z.infer<typeof contextRequestedSchema>
+/** @riviere-role value-object */
+export type ReviewRecordedEvent = z.infer<typeof reviewRecordedSchema>

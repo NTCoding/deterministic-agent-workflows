@@ -16,6 +16,9 @@
     "@nt-ai-lab/deterministic-agent-workflow-event-store": "workspace:*",
     "zod": "^3.25.76"
   },
+  "devDependencies": {
+    "vitest": "^2.1.9"
+  },
   "publishConfig": {
     "access": "public"
   }
