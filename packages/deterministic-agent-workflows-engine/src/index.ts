@@ -57,7 +57,10 @@ export type {
   ReviewFilters,
 } from './platform/domain/review-types'
 
-export { engineEventSchema } from './platform/domain/engine-events'
+export {
+  engineEventSchema,
+  reviewRecordedEventSchema,
+} from './platform/domain/engine-events'
 export type {
   EngineEvent,
   SessionStartedEvent,
