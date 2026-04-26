@@ -31,6 +31,7 @@ export type WorkflowStateDefinition<
 > = {
   readonly emoji: string
   readonly agentInstructions: string
+  readonly allowIdle?: boolean
   readonly canTransitionTo: readonly TStateName[]
   readonly allowedWorkflowOperations: readonly TOperation[]
   readonly forbidden?: {readonly write?: boolean}
