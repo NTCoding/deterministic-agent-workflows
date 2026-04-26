@@ -22,7 +22,7 @@ import type {
   WorkflowEngineDeps,
 } from '@nt-ai-lab/deterministic-agent-workflow-engine'
 import {
-  flattenStoredEvent,
+  reduceWorkflowStateFromStoredEvents,
   WorkflowEngine,
 } from '@nt-ai-lab/deterministic-agent-workflow-engine'
 import type { PlatformContext } from '@nt-ai-lab/deterministic-agent-workflow-cli'
@@ -91,12 +91,7 @@ function isIdleAllowedForSession<
   engineDeps: WorkflowEngineDeps,
   sessionID: string,
 ): boolean {
-  const currentState = engineDeps.store.readEvents(sessionID)
-    .map(flattenStoredEvent)
-    .reduce(
-      (state, event) => workflowDefinition.fold(state, event),
-      workflowDefinition.initialState(),
-    )
+  const currentState = reduceWorkflowStateFromStoredEvents(workflowDefinition, engineDeps.store.readEvents(sessionID))
   return workflowDefinition.getRegistry()[currentState.currentStateMachineState].allowIdle === true
 }
 

@@ -73,6 +73,9 @@ export type {
   ContextRequestedEvent,
   ReviewRecordedEvent,
 } from './platform/domain/engine-events'
+export { isPlatformOwnedEventExcludedFromWorkflowState } from './platform/domain/engine-events'
+
+export { reduceWorkflowStateFromStoredEvents } from './platform/domain/workflow-state-reducer'
 
 export { repositoryMetadataEventSchema } from './platform/domain/repository-tracking-events'
 export type {

@@ -4,7 +4,7 @@ import type {
   StoredEvent,
   WorkflowDefinition,
 } from '@nt-ai-lab/deterministic-agent-workflow-engine'
-import { flattenStoredEvent } from '@nt-ai-lab/deterministic-agent-workflow-engine'
+import { reduceWorkflowStateFromStoredEvents } from '@nt-ai-lab/deterministic-agent-workflow-engine'
 import {
   buildDenialSummary,
   buildObservedEventTypes,
@@ -22,10 +22,7 @@ function computeCurrentState<
   TStateName extends string,
   TOperation extends string,
 >(workflowDefinition: WorkflowDefinition<TWorkflow, TState, TDeps, TStateName, TOperation>, events: readonly StoredEvent[]): string {
-  return events.reduce(
-    (state, event) => workflowDefinition.fold(state, flattenStoredEvent(event)),
-    workflowDefinition.initialState(),
-  ).currentStateMachineState
+  return reduceWorkflowStateFromStoredEvents(workflowDefinition, events).currentStateMachineState
 }
 
 function buildDiscoverySources(input: {

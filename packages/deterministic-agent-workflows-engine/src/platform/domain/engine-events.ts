@@ -111,6 +111,24 @@ export const engineEventSchema = z.discriminatedUnion('type', [
   reviewRecordedSchema,
 ])
 
+const platformOwnedEventTypesExcludedFromWorkflowState = new Set<string>([
+  'agent-registered',
+  'agent-shut-down',
+  'journal-entry',
+  'write-checked',
+  'bash-checked',
+  'plugin-read-checked',
+  'idle-checked',
+  'identity-verified',
+  'context-requested',
+  'review-recorded',
+])
+
+/** @riviere-role domain-service */
+export function isPlatformOwnedEventExcludedFromWorkflowState(type: string): boolean {
+  return platformOwnedEventTypesExcludedFromWorkflowState.has(type)
+}
+
 /** @riviere-role value-object */
 export type EngineEvent = z.infer<typeof engineEventSchema>
 /** @riviere-role value-object */
