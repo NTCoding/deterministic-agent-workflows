@@ -42,10 +42,12 @@ import { OpenCodeTranscriptReader } from '../../../platform/infra/external-clien
 export const IDLE_RECOVERY_MESSAGE = 'You have stopped. You should never stop until the workflow is complete unless your current state permits stopping.'
 
 const TRANSLATION_NOTE = [
-  '> **OpenCode**: When instructions say `/dev-workflow-v2:workflow <op> [args]`, call',
+  '> **OpenCode**: When instructions say to run a workflow command, call',
   '> the `workflow` tool instead: `operation: "<op>"`, `args: ["<arg>", ...]`.',
-  '> Example: `/dev-workflow-v2:workflow transition REVIEWING`',
+  '> Example: `<workflow-command> transition REVIEWING`',
   '>   → `workflow({ operation: "transition", args: ["REVIEWING"] })`',
+  '> Example: `<workflow-command> record-review --type platform-review` with JSON stdin',
+  '>   → `workflow({ operation: "record-review", args: ["--type", "platform-review"], stdin: "{...}" })`',
   '',
   '---',
   '',
@@ -241,10 +243,12 @@ export function createOpenCodeWorkflowPlugin<
       args: {
         operation: tool.schema.string().describe('operation name, e.g. "init", "transition", "record-issue"'),
         args: tool.schema.array(tool.schema.string()).optional().describe('operation arguments'),
+        stdin: tool.schema.string().optional().describe('stdin content for workflow operations that read JSON from stdin'),
       },
       execute: async (rawArgs, ctx) => {
         const operation = rawArgs.operation
         const argList = rawArgs.args ?? []
+        const stdin = rawArgs.stdin
         const {
           engineDeps, workflowDeps 
         } = buildEngineContext(ctx.sessionID)
@@ -262,13 +266,18 @@ export function createOpenCodeWorkflowPlugin<
             isWriteAllowed: config.isWriteAllowed,
             customGates: config.customGates,
           })
-        return runner([operation, ...argList], engineDeps, workflowDeps, {
+        const result = runner([operation, ...argList], engineDeps, workflowDeps, {
           getSessionId: () => ctx.sessionID,
           getSessionTranscriptPath: () => dbPath,
           getSessionRepository: () => getRepositoryName(ctx.worktree),
           getRepositoryRoot: () => ctx.worktree,
           getWorkflowEventsDbPath: () => resolveWorkflowEventsDatabasePath(),
-        }).output
+          ...(stdin === undefined ? {} : { readStdin: () => stdin }),
+        })
+        if (result.exitCode !== 0) {
+          throw new TypeError(result.output)
+        }
+        return result.output
       },
     })
 
