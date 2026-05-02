@@ -85,6 +85,41 @@ function readLatestIdentityStatus(dbPath, sessionId) {
   }
 }
 
+function readReviewSummary(dbPath, sessionId) {
+  const db = openSqliteDatabase(dbPath, { readonly: true })
+  try {
+    const reviewCountRow = db.prepare(
+      'SELECT COUNT(1) AS count FROM reviews WHERE session_id = ?',
+    ).get(sessionId)
+    const eventCountRow = db.prepare(
+      "SELECT COUNT(1) AS count FROM events WHERE session_id = ? AND type = 'review-recorded'",
+    ).get(sessionId)
+    const reviewRow = db.prepare(
+      'SELECT review_type, verdict FROM reviews WHERE session_id = ? ORDER BY id DESC LIMIT 1',
+    ).get(sessionId)
+    const eventRow = db.prepare(
+      "SELECT payload FROM events WHERE session_id = ? AND type = 'review-recorded' ORDER BY seq DESC LIMIT 1",
+    ).get(sessionId)
+    return {
+      reviewCount: Number(reviewCountRow.count),
+      eventCount: Number(eventCountRow.count),
+      reviewRow,
+      eventRow,
+    }
+  } finally {
+    db.close()
+  }
+}
+
+async function captureWorkflowError(workflowCall) {
+  try {
+    await workflowCall()
+    return undefined
+  } catch (error) {
+    return error instanceof Error ? error.message : String(error)
+  }
+}
+
 function createWorkflow(initialState = {
   currentStateMachineState: 'PLANNING',
   transcriptPath: '' 
@@ -140,16 +175,16 @@ const workflowDefinition = {
     if (event.type === 'transitioned' && typeof event.to === 'string') {
       return {
         ...state,
-        currentStateMachineState: event.to 
+        currentStateMachineState: event.to
       }
     }
     return state
   },
   buildWorkflow: (state) => createWorkflow(state),
-  stateSchema: z.enum(['PLANNING', 'DEVELOPING']),
+  stateSchema: z.enum(['PLANNING', 'DEVELOPING', 'REVIEWING']),
   initialState: () => ({
     currentStateMachineState: 'PLANNING',
-    transcriptPath: '' 
+    transcriptPath: ''
   }),
   getRegistry: () => ({
     PLANNING: {
@@ -163,8 +198,14 @@ const workflowDefinition = {
       emoji: '🛠️',
       agentInstructions: 'states/developing.md',
       allowIdle: true,
-      canTransitionTo: ['PLANNING'],
+      canTransitionTo: ['PLANNING', 'REVIEWING'],
       allowedWorkflowOperations: [],
+    },
+    REVIEWING: {
+      emoji: '🔎',
+      agentInstructions: 'states/reviewing.md',
+      canTransitionTo: ['DEVELOPING'],
+      allowedWorkflowOperations: ['record-review'],
     },
   }),
   buildTransitionContext: (state, from, to) => ({
@@ -185,7 +226,7 @@ const routes = {
   init: { type: 'session-start' },
   transition: {
     type: 'transition',
-    args: [arg.state('STATE', z.enum(['PLANNING', 'DEVELOPING']))] 
+    args: [arg.state('STATE', z.enum(['PLANNING', 'DEVELOPING', 'REVIEWING']))]
   },
 }
 
@@ -193,6 +234,7 @@ const pluginRoot = mkdtempSync(join(tmpdir(), 'daw-opencode-smoke-'))
 mkdirSync(join(pluginRoot, 'states'))
 writeFileSync(join(pluginRoot, 'states', 'planning.md'), 'planning instructions')
 writeFileSync(join(pluginRoot, 'states', 'developing.md'), 'developing instructions')
+writeFileSync(join(pluginRoot, 'states', 'reviewing.md'), 'reviewing instructions')
 const workflowEventsPath = join(pluginRoot, 'workflow-events.db')
 const opencodeDatabasePath = join(pluginRoot, 'opencode.db')
 process.env['WORKFLOW_EVENTS_DB'] = workflowEventsPath
@@ -275,13 +317,67 @@ try {
     allowed = false
   }
 
-  if (!initOutput.includes('planning instructions') || !blocked || !allowed || identityStatus !== 'verified' || promptedTexts.length !== 1) {
+  await hooks.tool.workflow.execute({
+    operation: 'transition',
+    args: ['REVIEWING']
+  }, ctx)
+  const reviewOutput = await hooks.tool.workflow.execute({
+    operation: 'record-review',
+    args: ['platform-review', JSON.stringify({
+      verdict: 'PASS',
+      summary: 'No platform issues found.',
+      findings: [],
+    })],
+  }, ctx)
+  const missingPayloadError = await captureWorkflowError(() => hooks.tool.workflow.execute({
+    operation: 'record-review',
+    args: ['platform-review'],
+  }, ctx))
+  const invalidJsonError = await captureWorkflowError(() => hooks.tool.workflow.execute({
+    operation: 'record-review',
+    args: ['platform-review', '{'],
+  }, ctx))
+  await hooks.tool.workflow.execute({
+    operation: 'transition',
+    args: ['DEVELOPING']
+  }, ctx)
+  const blockedStateError = await captureWorkflowError(() => hooks.tool.workflow.execute({
+    operation: 'record-review',
+    args: ['platform-review', JSON.stringify({
+      verdict: 'PASS',
+      summary: 'No platform issues found.',
+      findings: [],
+    })],
+  }, ctx))
+  const reviewSummary = readReviewSummary(workflowEventsPath, 'session-1')
+
+  if (
+    !initOutput.includes('planning instructions')
+    || !blocked
+    || !allowed
+    || identityStatus !== 'verified'
+    || promptedTexts.length !== 1
+    || !reviewOutput.includes('"ok": true')
+    || missingPayloadError !== 'record-review requires <review-type> and <review-json> arguments'
+    || !invalidJsonError?.includes('Invalid review JSON')
+    || blockedStateError !== 'record-review is not allowed in state DEVELOPING.'
+    || reviewSummary.reviewCount !== 1
+    || reviewSummary.eventCount !== 1
+    || reviewSummary.reviewRow?.review_type !== 'platform-review'
+    || reviewSummary.reviewRow?.verdict !== 'PASS'
+    || typeof reviewSummary.eventRow?.payload !== 'string'
+  ) {
     throw new Error(`Smoke test failed: ${JSON.stringify({
       blocked,
       allowed,
       identityStatus,
       promptedTexts,
-      initOutput 
+      initOutput,
+      reviewOutput,
+      missingPayloadError,
+      invalidJsonError,
+      blockedStateError,
+      reviewSummary
     })}`)
   }
 } finally {

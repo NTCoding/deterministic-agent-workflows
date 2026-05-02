@@ -42,10 +42,12 @@ import { OpenCodeTranscriptReader } from '../../../platform/infra/external-clien
 export const IDLE_RECOVERY_MESSAGE = 'You have stopped. You should never stop until the workflow is complete unless your current state permits stopping.'
 
 const TRANSLATION_NOTE = [
-  '> **OpenCode**: When instructions say `/dev-workflow-v2:workflow <op> [args]`, call',
+  '> **OpenCode**: When instructions say to run a workflow command, call',
   '> the `workflow` tool instead: `operation: "<op>"`, `args: ["<arg>", ...]`.',
-  '> Example: `/dev-workflow-v2:workflow transition REVIEWING`',
+  '> Example: `<workflow-command> transition REVIEWING`',
   '>   → `workflow({ operation: "transition", args: ["REVIEWING"] })`',
+  '> Example: `<workflow-command> record-review platform-review {...}`',
+  '>   → `workflow({ operation: "record-review", args: ["platform-review", "{...}"] })`',
   '',
   '---',
   '',
@@ -262,13 +264,17 @@ export function createOpenCodeWorkflowPlugin<
             isWriteAllowed: config.isWriteAllowed,
             customGates: config.customGates,
           })
-        return runner([operation, ...argList], engineDeps, workflowDeps, {
+        const result = runner([operation, ...argList], engineDeps, workflowDeps, {
           getSessionId: () => ctx.sessionID,
           getSessionTranscriptPath: () => dbPath,
           getSessionRepository: () => getRepositoryName(ctx.worktree),
           getRepositoryRoot: () => ctx.worktree,
           getWorkflowEventsDbPath: () => resolveWorkflowEventsDatabasePath(),
-        }).output
+        })
+        if (result.exitCode !== 0) {
+          throw new TypeError(result.output)
+        }
+        return result.output
       },
     })
 

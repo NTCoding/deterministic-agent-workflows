@@ -216,21 +216,20 @@ function createEngineDeps(store: WorkflowEventStore): WorkflowEngineDeps {
   }
 }
 
-function recordReview(store: ReviewRouteStore, readStdin: () => string, sessionId = 'test-session') {
+function recordReview(store: ReviewRouteStore, reviewJson: string, sessionId = 'test-session') {
   return handleRecordReviewRoute(
     { hasSessionStarted: (candidateSessionId) => store.hasSessionStarted(candidateSessionId) },
     createEngineDeps(store),
     workflowDefinition,
-    ['record-review', '--type', 'custom-review'],
-    readStdin,
+    ['record-review', 'custom-review', reviewJson],
     () => sessionId,
   )
 }
 
 describe('handleRecordReviewRoute', () => {
-  it('returns error when stdin is invalid JSON', () => {
+  it('returns error when review JSON argument is invalid JSON', () => {
     const store = new ReviewRouteStore()
-    const result = recordReview(store, () => '{')
+    const result = recordReview(store, '{')
 
     expect(result.exitCode).toBe(EXIT_ERROR)
     expect(result.output).toContain('Invalid review JSON')
@@ -239,7 +238,7 @@ describe('handleRecordReviewRoute', () => {
 
   it('returns error when verdict is unknown', () => {
     const store = new ReviewRouteStore()
-    const result = recordReview(store, () => JSON.stringify({
+    const result = recordReview(store, JSON.stringify({
       verdict: 'MAYBE',
       findings: [] 
     }))
@@ -251,7 +250,7 @@ describe('handleRecordReviewRoute', () => {
 
   it('returns error when session has not started', () => {
     const store = new ReviewRouteStore()
-    const result = recordReview(store, () => JSON.stringify({
+    const result = recordReview(store, JSON.stringify({
       verdict: 'PASS',
       findings: [] 
     }), 'missing-session')
@@ -264,7 +263,7 @@ describe('handleRecordReviewRoute', () => {
 
   it('records review row and review event when payload is valid', () => {
     const store = new ReviewRouteStore()
-    const result = recordReview(store, () => JSON.stringify({
+    const result = recordReview(store, JSON.stringify({
       verdict: 'FAIL',
       findings: [{ title: 'Missing command tests' }],
     }))
@@ -296,11 +295,11 @@ describe('handleRecordReviewRoute', () => {
 
   it('preserves repeated review attempts', () => {
     const store = new ReviewRouteStore()
-    recordReview(store, () => JSON.stringify({
+    recordReview(store, JSON.stringify({
       verdict: 'FAIL',
       findings: [{ title: 'First failure' }] 
     }))
-    recordReview(store, () => JSON.stringify({
+    recordReview(store, JSON.stringify({
       verdict: 'PASS',
       findings: [] 
     }))
@@ -323,7 +322,7 @@ describe('handleRecordReviewRoute', () => {
 
   it('returns blocked when current state disallows record-review', () => {
     const store = new ReviewRouteStore('PLANNING')
-    const result = recordReview(store, () => JSON.stringify({
+    const result = recordReview(store, JSON.stringify({
       verdict: 'PASS',
       findings: [] 
     }))
