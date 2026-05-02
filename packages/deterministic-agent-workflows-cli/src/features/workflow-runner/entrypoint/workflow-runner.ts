@@ -266,7 +266,7 @@ function resolveBuiltinRoute<
     case 'record-reflection':
       return handleRecordReflectionRoute(engine, engineDeps, args, readStdin, getSessionId)
     case 'record-review':
-      return handleRecordReviewRoute(engine, engineDeps, config.workflowDefinition, args, readStdin, getSessionId)
+      return handleRecordReviewRoute(engine, engineDeps, config.workflowDefinition, args, getSessionId)
     case 'write-journal':
       return handleWriteJournalRoute(engine, args, getSessionId)
     default:

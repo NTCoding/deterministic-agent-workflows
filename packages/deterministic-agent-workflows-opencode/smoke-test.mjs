@@ -323,21 +323,19 @@ try {
   }, ctx)
   const reviewOutput = await hooks.tool.workflow.execute({
     operation: 'record-review',
-    args: ['--type', 'platform-review'],
-    stdin: JSON.stringify({
+    args: ['platform-review', JSON.stringify({
       verdict: 'PASS',
       summary: 'No platform issues found.',
       findings: [],
-    }),
+    })],
   }, ctx)
-  const missingStdinError = await captureWorkflowError(() => hooks.tool.workflow.execute({
+  const missingPayloadError = await captureWorkflowError(() => hooks.tool.workflow.execute({
     operation: 'record-review',
-    args: ['--type', 'platform-review'],
+    args: ['platform-review'],
   }, ctx))
   const invalidJsonError = await captureWorkflowError(() => hooks.tool.workflow.execute({
     operation: 'record-review',
-    args: ['--type', 'platform-review'],
-    stdin: '{',
+    args: ['platform-review', '{'],
   }, ctx))
   await hooks.tool.workflow.execute({
     operation: 'transition',
@@ -345,12 +343,11 @@ try {
   }, ctx)
   const blockedStateError = await captureWorkflowError(() => hooks.tool.workflow.execute({
     operation: 'record-review',
-    args: ['--type', 'platform-review'],
-    stdin: JSON.stringify({
+    args: ['platform-review', JSON.stringify({
       verdict: 'PASS',
       summary: 'No platform issues found.',
       findings: [],
-    }),
+    })],
   }, ctx))
   const reviewSummary = readReviewSummary(workflowEventsPath, 'session-1')
 
@@ -361,7 +358,7 @@ try {
     || identityStatus !== 'verified'
     || promptedTexts.length !== 1
     || !reviewOutput.includes('"ok": true')
-    || missingStdinError !== 'record-review requires JSON on stdin'
+    || missingPayloadError !== 'record-review requires <review-type> and <review-json> arguments'
     || !invalidJsonError?.includes('Invalid review JSON')
     || blockedStateError !== 'record-review is not allowed in state DEVELOPING.'
     || reviewSummary.reviewCount !== 1
@@ -377,7 +374,7 @@ try {
       promptedTexts,
       initOutput,
       reviewOutput,
-      missingStdinError,
+      missingPayloadError,
       invalidJsonError,
       blockedStateError,
       reviewSummary

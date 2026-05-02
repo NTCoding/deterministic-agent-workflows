@@ -16,10 +16,11 @@ import {
 } from '../../../shell/exit-codes'
 import type { RunnerResult } from '../../../platform/domain/workflow-runner-types'
 
-type FlagParseResult =
+type ReviewArgumentParseResult =
   | {
     readonly ok: true
-    readonly flags: ReadonlyMap<string, string>
+    readonly reviewType: string
+    readonly reviewJson: string
   }
   | {
     readonly ok: false
@@ -47,41 +48,26 @@ function blockedResult(output: string): RunnerResult {
   }
 }
 
-function parseFlagArgs(args: readonly string[]): FlagParseResult {
-  const flags = new Map<string, string>()
-  for (const [index, key] of args.entries()) {
-    if (index % 2 === 1) continue
-    const value = args[index + 1]
-    if (!key.startsWith('--')) {
-      return {
-        ok: false,
-        message: `Invalid flag: ${String(key)}`,
-      }
+function parseReviewArguments(args: readonly string[]): ReviewArgumentParseResult {
+  const reviewType = args[1]
+  const reviewJson = args[2]
+  if (args.length !== 3 || typeof reviewType !== 'string' || typeof reviewJson !== 'string') {
+    return {
+      ok: false,
+      message: 'record-review requires <review-type> and <review-json> arguments',
     }
-    if (typeof value !== 'string' || value.length === 0) {
-      return {
-        ok: false,
-        message: `Missing value for flag: ${key}`,
-      }
+  }
+  if (reviewType.length === 0) {
+    return {
+      ok: false,
+      message: 'record-review requires a non-empty review type',
     }
-    flags.set(key, value)
   }
   return {
     ok: true,
-    flags,
+    reviewType,
+    reviewJson,
   }
-}
-
-function validateReviewFlags(flags: ReadonlyMap<string, string>): string | null {
-  for (const key of flags.keys()) {
-    if (key !== '--type') {
-      return `Unknown flag: ${key}`
-    }
-  }
-  if (!flags.has('--type')) {
-    return 'record-review requires --type'
-  }
-  return null
 }
 
 function isReviewAllowed(
@@ -97,26 +83,14 @@ export function handleRecordReviewRoute<
   TDeps,
   TStateName extends string,
   TOperation extends string,
->(engine: { readonly hasSessionStarted: (sessionId: string) => boolean }, engineDeps: WorkflowEngineDeps, workflowDefinition: WorkflowDefinition<TWorkflow, TState, TDeps, TStateName, TOperation>, args: readonly string[], readStdin: (() => string) | undefined, getSessionId: (() => string) | undefined): RunnerResult {
+>(engine: { readonly hasSessionStarted: (sessionId: string) => boolean }, engineDeps: WorkflowEngineDeps, workflowDefinition: WorkflowDefinition<TWorkflow, TState, TDeps, TStateName, TOperation>, args: readonly string[], getSessionId: (() => string) | undefined): RunnerResult {
   if (getSessionId === undefined) {
     return errorResult('record-review requires an active workflow session')
   }
-  if (readStdin === undefined) {
-    return errorResult('record-review requires JSON on stdin')
-  }
 
-  const parsedFlags = parseFlagArgs(args.slice(1))
-  if (!parsedFlags.ok) {
-    return errorResult(parsedFlags.message)
-  }
-  const flagError = validateReviewFlags(parsedFlags.flags)
-  if (flagError !== null) {
-    return errorResult(flagError)
-  }
-
-  const reviewType = parsedFlags.flags.get('--type')
-  if (reviewType === undefined) {
-    return errorResult('record-review requires a non-empty --type value')
+  const parsedArguments = parseReviewArguments(args)
+  if (!parsedArguments.ok) {
+    return errorResult(parsedArguments.message)
   }
 
   const sessionId = getSessionId()
@@ -124,7 +98,7 @@ export function handleRecordReviewRoute<
     return errorResult(`Session ${sessionId} has not been started`)
   }
 
-  const reviewPayloadResult = parseReviewPayload(readStdin)
+  const reviewPayloadResult = parseReviewPayload(parsedArguments.reviewJson)
   if (!reviewPayloadResult.ok) {
     return errorResult(reviewPayloadResult.message)
   }
@@ -145,7 +119,7 @@ export function handleRecordReviewRoute<
 
   const createdAt = engineDeps.now()
   const stored = engineDeps.store.recordReviewWithEvent(sessionId, createdAt, {
-    reviewType,
+    reviewType: parsedArguments.reviewType,
     sourceState: currentStateName,
     ...parsedReview.data,
   }, currentStateName)
@@ -155,7 +129,7 @@ export function handleRecordReviewRoute<
     id: stored.id,
     sessionId,
     createdAt: stored.createdAt,
-    reviewType,
+    reviewType: parsedArguments.reviewType,
     verdict: parsedReview.data.verdict,
   })
 }
@@ -171,7 +145,7 @@ function computeCurrentState<
   return state.currentStateMachineState
 }
 
-function parseReviewPayload(readStdin: () => string):
+function parseReviewPayload(reviewJson: string):
   | {
     readonly ok: true
     readonly payload: unknown
@@ -183,7 +157,7 @@ function parseReviewPayload(readStdin: () => string):
   try {
     return {
       ok: true,
-      payload: JSON.parse(readStdin()),
+      payload: JSON.parse(reviewJson),
     }
   } catch (error) {
     return {

@@ -46,8 +46,8 @@ const TRANSLATION_NOTE = [
   '> the `workflow` tool instead: `operation: "<op>"`, `args: ["<arg>", ...]`.',
   '> Example: `<workflow-command> transition REVIEWING`',
   '>   → `workflow({ operation: "transition", args: ["REVIEWING"] })`',
-  '> Example: `<workflow-command> record-review --type platform-review` with JSON stdin',
-  '>   → `workflow({ operation: "record-review", args: ["--type", "platform-review"], stdin: "{...}" })`',
+  '> Example: `<workflow-command> record-review platform-review {...}`',
+  '>   → `workflow({ operation: "record-review", args: ["platform-review", "{...}"] })`',
   '',
   '---',
   '',
@@ -243,12 +243,10 @@ export function createOpenCodeWorkflowPlugin<
       args: {
         operation: tool.schema.string().describe('operation name, e.g. "init", "transition", "record-issue"'),
         args: tool.schema.array(tool.schema.string()).optional().describe('operation arguments'),
-        stdin: tool.schema.string().optional().describe('stdin content for workflow operations that read JSON from stdin'),
       },
       execute: async (rawArgs, ctx) => {
         const operation = rawArgs.operation
         const argList = rawArgs.args ?? []
-        const stdin = rawArgs.stdin
         const {
           engineDeps, workflowDeps 
         } = buildEngineContext(ctx.sessionID)
@@ -272,7 +270,6 @@ export function createOpenCodeWorkflowPlugin<
           getSessionRepository: () => getRepositoryName(ctx.worktree),
           getRepositoryRoot: () => ctx.worktree,
           getWorkflowEventsDbPath: () => resolveWorkflowEventsDatabasePath(),
-          ...(stdin === undefined ? {} : { readStdin: () => stdin }),
         })
         if (result.exitCode !== 0) {
           throw new TypeError(result.output)

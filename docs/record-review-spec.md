@@ -80,16 +80,16 @@ The command name is:
 record-review
 ```
 
-The command accepts flags:
+The command accepts the review type and review JSON as normal arguments:
 
 ```bash
-record-review --type code-review
-record-review --type architecture-review
-record-review --type bug-scanner
-record-review --type task-check
+record-review code-review '{"verdict":"PASS","summary":"No issues found.","findings":[]}'
+record-review architecture-review '{"verdict":"PASS","summary":"No issues found.","findings":[]}'
+record-review bug-scanner '{"verdict":"PASS","summary":"No issues found.","findings":[]}'
+record-review task-check '{"verdict":"PASS","summary":"No issues found.","findings":[]}'
 ```
 
-The command reads JSON from stdin. The JSON is the source of truth. Markdown report files are not required.
+The JSON argument is the source of truth. Markdown report files are not required.
 
 ### Input schema
 
@@ -271,7 +271,7 @@ Remove workflow-specific review recording commands:
 
 Allow `record-review` in `REVIEWING`.
 
-Update review agents to return full structured review JSON. The main workflow records each valid result with `record-review --type <review-type>`.
+Update review agents to return full structured review JSON. The main workflow records each valid result with `record-review <review-type> <review-json>`.
 
 The `REVIEWING -> SUBMITTING_PR` and `REVIEWING -> IMPLEMENTING` guards must preserve current behavior.
 
