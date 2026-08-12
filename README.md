@@ -28,6 +28,8 @@ pnpm add @nt-ai-lab/deterministic-agent-workflow-cli
 pnpm add @nt-ai-lab/deterministic-agent-workflow-opencode
 # or
 pnpm add @nt-ai-lab/deterministic-agent-workflow-claude-code
+# or
+pnpm add @nt-ai-lab/deterministic-agent-workflow-codex
 ```
 
 ## OpenCode example
@@ -250,6 +252,49 @@ createClaudeCodeWorkflowCli({
   processDeps: createDefaultProcessDeps(),
 })
 ```
+
+## Codex example
+
+Create a Codex workflow entrypoint in the consumer repository. Codex starts
+workflow sessions automatically; the session-start hook tells the agent the
+exact command to use for transitions and custom operations.
+
+```ts
+import { createCodexWorkflowCli } from '@nt-ai-lab/deterministic-agent-workflow-codex'
+import { createDefaultProcessDeps } from '@nt-ai-lab/deterministic-agent-workflow-cli'
+import { WORKFLOW_DEFINITION } from './features/workflow/infra/persistence/workflow-definition'
+import { ROUTES, PRE_TOOL_USE_POLICY } from './features/workflow/entrypoint/workflow-cli'
+
+createCodexWorkflowCli({
+  workflowDefinition: WORKFLOW_DEFINITION,
+  routes: ROUTES,
+  bashForbidden: PRE_TOOL_USE_POLICY.bashForbidden,
+  isWriteAllowed: PRE_TOOL_USE_POLICY.isWriteAllowed,
+  workflowCommand: 'node "$(git rev-parse --show-toplevel)/dist/workflow-codex.js"',
+  processDeps: createDefaultProcessDeps(),
+  buildWorkflowDeps: (platform) => ({
+    now: platform.now,
+  }),
+})
+```
+
+Compile that entrypoint, then add `.codex/hooks.json`:
+
+```json
+{
+  "hooks": {
+    "SessionStart": [{ "hooks": [{ "type": "command", "command": "node \"$(git rev-parse --show-toplevel)/dist/workflow-codex.js\"" }] }],
+    "PreToolUse": [{ "matcher": "Bash|apply_patch", "hooks": [{ "type": "command", "command": "node \"$(git rev-parse --show-toplevel)/dist/workflow-codex.js\"" }] }],
+    "SubagentStart": [{ "hooks": [{ "type": "command", "command": "node \"$(git rev-parse --show-toplevel)/dist/workflow-codex.js\"" }] }],
+    "Stop": [{ "hooks": [{ "type": "command", "command": "node \"$(git rev-parse --show-toplevel)/dist/workflow-codex.js\"" }] }]
+  }
+}
+```
+
+Review and trust the project hooks in Codex before using them. Codex uses the
+same event store as the other adapters, so the Control Center shows sessions,
+states, transitions and denials. Codex transcript and activity parsing are not
+included because its hook transcript path is not a stable public contract.
 
 ## Event store
 
