@@ -4,10 +4,10 @@ import type {
   TranscriptReader,
 } from '@nt-ai-lab/deterministic-agent-workflow-engine'
 import type {
+  PlatformContext,
   ProcessDeps,
   WorkflowRunnerConfig,
 } from '@nt-ai-lab/deterministic-agent-workflow-cli'
-import type { PlatformContext } from '@nt-ai-lab/deterministic-agent-workflow-cli'
 
 /** @riviere-role value-object */
 export type CodexWorkflowCliConfig<

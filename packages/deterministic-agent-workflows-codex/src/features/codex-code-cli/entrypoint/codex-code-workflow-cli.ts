@@ -1,4 +1,3 @@
-import { execFileSync } from 'node:child_process'
 import { join } from 'node:path'
 import type {
   BaseWorkflowState,
@@ -72,14 +71,12 @@ function handleWorkflowCommand<
   TStateName extends string,
   TOperation extends string,
 >(config: CodexWorkflowCliConfig<TWorkflow, TState, TDeps, TStateName, TOperation>, engineDeps: WorkflowEngineDeps, root: string, now: () => string, args: readonly string[]): RunnerResult {
-  const [operation, sessionId, ...operationArgs] = args
-  if (operation === undefined || sessionId === undefined || sessionId === '') {
+  if (args.length < 2 || args[0] === '' || args[1] === '') {
     throw new TypeError('Codex workflow commands require <operation> <session-id> [args]')
   }
+  const [operation, sessionId, ...operationArgs] = args
   const workflowDeps = buildWorkflowDeps(config, engineDeps.store, root, now, sessionId)
-  return createWorkflowRunner(config)([operation, ...operationArgs], engineDeps, workflowDeps, {
-    getSessionId: () => sessionId,
-  })
+  return createWorkflowRunner(config)([operation, ...operationArgs], engineDeps, workflowDeps, {getSessionId: () => sessionId,})
 }
 
 function buildWorkflowDeps<
@@ -99,11 +96,7 @@ function buildWorkflowDeps<
 }
 
 function resolveWorkflowRoot(): string {
-  try {
-    return execFileSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf8' }).trim()
-  } catch {
-    return process.cwd()
-  }
+  return process.cwd()
 }
 
 function resolveDatabasePath(processDeps: ProcessDeps): string {
@@ -141,7 +134,12 @@ function startSession<
   TOperation extends string,
 >(config: CodexWorkflowCliConfig<TWorkflow, TState, TDeps, TStateName, TOperation>, engine: WorkflowEngine<TWorkflow, TState, TDeps, TStateName, TOperation>, sessionId: string, transcriptPath: string | null, cwd: string): RunnerResult {
   if (!engine.hasSessionStarted(sessionId)) {
-    const result = engine.startSession(sessionId, transcriptPath ?? '', getRepositoryName(cwd))
+    const noTranscriptPath = ''
+    const result = engine.startSession(
+      sessionId,
+      transcriptPath ?? noTranscriptPath,
+      getRepositoryName(cwd),
+    )
     if (result.type !== 'success') return toRunnerResult(result)
   }
   return {
@@ -158,9 +156,15 @@ function checkToolUse<
   TOperation extends string,
 >(config: CodexWorkflowCliConfig<TWorkflow, TState, TDeps, TStateName, TOperation>, engine: WorkflowEngine<TWorkflow, TState, TDeps, TStateName, TOperation>, raw: string): RunnerResult {
   const input = codexPreToolUseInputSchema.parse(JSON.parse(raw))
-  if (!engine.hasSessionStarted(input.session_id)) return { output: '', exitCode: 0 }
+  if (!engine.hasSessionStarted(input.session_id)) return {
+    output: '',
+    exitCode: 0
+  }
   const handler = resolvePreToolUseHandler(config)
-  if (handler === undefined) return { output: '', exitCode: 0 }
+  if (handler === undefined) return {
+    output: '',
+    exitCode: 0
+  }
   if (input.tool_name === 'apply_patch') return checkPatchPaths(handler, engine, input.session_id, input.tool_input)
   return toHookResult(handler(engine, input.session_id, input.tool_name, input.tool_input))
 }
@@ -203,7 +207,10 @@ function checkPatchPaths<
     const result = handler(engine, sessionId, 'Write', { file_path: path })
     if (result.type === 'blocked') return toHookResult(result)
   }
-  return { output: '', exitCode: 0 }
+  return {
+    output: '',
+    exitCode: 0
+  }
 }
 
 function extractPatchPaths(command: string): readonly string[] {
@@ -224,7 +231,10 @@ function registerSubagent<
   TOperation extends string,
 >(engine: WorkflowEngine<TWorkflow, TState, TDeps, TStateName, TOperation>, raw: string): RunnerResult {
   const input = codexSubagentStartInputSchema.parse(JSON.parse(raw))
-  if (!engine.hasSessionStarted(input.session_id)) return { output: '', exitCode: 0 }
+  if (!engine.hasSessionStarted(input.session_id)) return {
+    output: '',
+    exitCode: 0
+  }
   const result = engine.transaction(input.session_id, 'register-agent', (workflow) => workflow.registerAgent(input.agent_type, input.agent_id))
   return {
     output: formatContextInjection(result.type === 'success' ? result.output : ''),
@@ -240,11 +250,20 @@ function preventUnsupportedStop<
   TOperation extends string,
 >(config: CodexWorkflowCliConfig<TWorkflow, TState, TDeps, TStateName, TOperation>, engineDeps: WorkflowEngineDeps, sessionId: string): RunnerResult {
   const stored = engineDeps.store.readEvents(sessionId)
-  if (!engineDeps.store.hasSessionStarted(sessionId)) return { output: '', exitCode: 0 }
+  if (!engineDeps.store.hasSessionStarted(sessionId)) return {
+    output: '',
+    exitCode: 0
+  }
   const state = reduceWorkflowStateFromStoredEvents(config.workflowDefinition, stored)
-  if (config.workflowDefinition.getRegistry()[state.currentStateMachineState].allowIdle === true) return { output: '', exitCode: 0 }
+  if (config.workflowDefinition.getRegistry()[state.currentStateMachineState].allowIdle === true) return {
+    output: '',
+    exitCode: 0
+  }
   return {
-    output: JSON.stringify({ continue: false, stopReason: `Workflow state ${state.currentStateMachineState} does not allow stopping.` }),
+    output: JSON.stringify({
+      continue: false,
+      stopReason: `Workflow state ${state.currentStateMachineState} does not allow stopping.`
+    }),
     exitCode: 0,
   }
 }
@@ -255,11 +274,17 @@ function toHookResult(result: EngineResult): RunnerResult {
 }
 
 function toRunnerResult(result: EngineResult): RunnerResult {
-  return { output: result.output, exitCode: result.type === 'success' ? 0 : 1 }
+  return {
+    output: result.output,
+    exitCode: result.type === 'success' ? 0 : 1
+  }
 }
 
 function deny(reason: string): RunnerResult {
-  return { output: formatDenyDecision(reason), exitCode: 0 }
+  return {
+    output: formatDenyDecision(reason),
+    exitCode: 0
+  }
 }
 
 function writeResult(processDeps: ProcessDeps, result: RunnerResult): void {
