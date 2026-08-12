@@ -3,6 +3,11 @@
   "version": "0.3.7",
   "private": false,
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/NTCoding/deterministic-agent-workflows.git",
+    "directory": "packages/deterministic-agent-workflows-cli"
+  },
   "exports": {
     ".": "./dist/index.js"
   },

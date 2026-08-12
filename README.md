@@ -340,6 +340,23 @@ Search the event log:
 
 ![Event log](docs/event-log.png)
 
+## npm publishing
+
+The release workflow uses npm trusted publishing through GitHub Actions OIDC.
+It does not use `NPM_TOKEN`.
+
+Before the first release, configure a trusted publisher for each public
+`@nt-ai-lab/deterministic-agent-workflow-*` package in npm:
+
+1. Select GitHub Actions.
+2. Set organisation to `NTCoding`, repository to `deterministic-agent-workflows`,
+   and workflow filename to `ci.yml`.
+3. Allow `npm publish`.
+
+After a successful OIDC release, restrict each package's publishing access to
+require two-factor authentication and disallow tokens, then revoke the old npm
+automation token.
+
 
 
 

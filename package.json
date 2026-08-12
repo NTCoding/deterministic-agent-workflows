@@ -2,7 +2,7 @@
   "name": "deterministic-agent-workflows",
   "version": "0.0.0",
   "private": true,
-  "packageManager": "pnpm@10.28.0",
+  "packageManager": "pnpm@10.34.0",
   "scripts": {
     "lint": "nx run-many -t lint --all",
     "typecheck": "nx run-many -t typecheck --all",
