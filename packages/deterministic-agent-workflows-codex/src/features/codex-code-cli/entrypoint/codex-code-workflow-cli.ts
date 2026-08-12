@@ -134,9 +134,33 @@ function checkToolUse<
 >(config: CodexWorkflowCliConfig<TWorkflow, TState, TDeps, TStateName, TOperation>, engine: WorkflowEngine<TWorkflow, TState, TDeps, TStateName, TOperation>, raw: string): RunnerResult {
   const input = codexPreToolUseInputSchema.parse(JSON.parse(raw))
   if (!engine.hasSessionStarted(input.session_id)) return { output: '', exitCode: 0 }
-  const handler = createPreToolUseHandler(config)
+  const handler = resolvePreToolUseHandler(config)
+  if (handler === undefined) return { output: '', exitCode: 0 }
   if (input.tool_name === 'apply_patch') return checkPatchPaths(handler, engine, input.session_id, input.tool_input)
   return toHookResult(handler(engine, input.session_id, input.tool_name, input.tool_input))
+}
+
+function resolvePreToolUseHandler<
+  TWorkflow extends RehydratableWorkflow<TState>,
+  TState extends BaseWorkflowState<TStateName>,
+  TDeps,
+  TStateName extends string,
+  TOperation extends string,
+>(config: CodexWorkflowCliConfig<TWorkflow, TState, TDeps, TStateName, TOperation>): PreToolUseHandlerFn<TWorkflow, TState, TDeps, TStateName, TOperation> | undefined {
+  if (config.bashForbidden === undefined && config.isWriteAllowed === undefined) {
+    if (config.customGates !== undefined) {
+      throw new TypeError('CodexWorkflowCliConfig: customGates requires bashForbidden and isWriteAllowed.')
+    }
+    return undefined
+  }
+  if (config.bashForbidden === undefined || config.isWriteAllowed === undefined) {
+    throw new TypeError('CodexWorkflowCliConfig: bashForbidden and isWriteAllowed must be provided together.')
+  }
+  return createPreToolUseHandler({
+    bashForbidden: config.bashForbidden,
+    isWriteAllowed: config.isWriteAllowed,
+    customGates: config.customGates,
+  })
 }
 
 function checkPatchPaths<
