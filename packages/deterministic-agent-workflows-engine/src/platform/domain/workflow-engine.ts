@@ -215,6 +215,10 @@ export class WorkflowEngine<
     return serializeWorkflowState(this.rehydrateFromEvents(sessionId).getState())
   }
 
+  persistSessionId(sessionId: string): void {
+    this.engineDeps.appendToFile(this.engineDeps.getEnvFilePath(), `export CLAUDE_SESSION_ID='${sessionId}'\n`)
+  }
+
   hasSession(sessionId: string): boolean {
     return this.engineDeps.store.hasSessionStarted(sessionId)
   }

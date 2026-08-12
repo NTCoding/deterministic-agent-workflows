@@ -24,7 +24,6 @@ export type RunnerOptions = {
   readonly getSessionRepository?: () => string | undefined
   readonly getRepositoryRoot?: () => string
   readonly getWorkflowEventsDbPath?: () => string
-  readonly onSessionStarted?: (sessionId: string) => void
 }
 
 /** @riviere-role value-object */

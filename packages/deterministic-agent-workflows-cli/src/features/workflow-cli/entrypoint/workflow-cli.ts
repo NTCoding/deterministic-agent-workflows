@@ -86,12 +86,6 @@ export function createWorkflowCli<
       getSessionRepository: () => getRepositoryName(process.cwd()),
       getRepositoryRoot: () => process.cwd(),
       getWorkflowEventsDbPath: () => workflowEventsDbPath,
-      onSessionStarted: (sessionId) => {
-        processDeps.appendToFile(
-          join(readEnvVar('HOME'), '.claude', 'claude.env'),
-          `export CLAUDE_SESSION_ID='${sessionId}'\n`,
-        )
-      },
     })
 
     if (result.output) {

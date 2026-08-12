@@ -154,7 +154,7 @@ export function createWorkflowRunner<
       output: 'No command and no stdin available',
       exitCode: EXIT_ERROR 
     }
-    return handleHook(engine, resolvedHandler, options.readStdin, options.onSessionStarted)
+    return handleHook(engine, resolvedHandler, options.readStdin)
   }
 }
 
@@ -280,7 +280,7 @@ function handleHook<
   TDeps,
   TStateName extends string,
   TOperation extends string,
->(engine: WorkflowEngine<TWorkflow, TState, TDeps, TStateName, TOperation>, resolvedHandler: PreToolUseHandlerFn<TWorkflow, TState, TDeps, TStateName, TOperation> | undefined, readStdin: () => string, onSessionStarted: ((sessionId: string) => void) | undefined): RunnerResult {
+>(engine: WorkflowEngine<TWorkflow, TState, TDeps, TStateName, TOperation>, resolvedHandler: PreToolUseHandlerFn<TWorkflow, TState, TDeps, TStateName, TOperation> | undefined, readStdin: () => string): RunnerResult {
   const stdin = readStdin()
   const hookInput: unknown = JSON.parse(stdin)
   const commonParse = hookCommonInputSchema.safeParse(hookInput)
@@ -291,7 +291,7 @@ function handleHook<
 
   const common = commonParse.data
   if (common.hook_event_name === 'SessionStart') {
-    onSessionStarted?.(common.session_id)
+    engine.persistSessionId(common.session_id)
     if (!engine.hasSessionStarted(common.session_id)) {
       return {
         output: '',
