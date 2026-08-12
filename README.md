@@ -259,6 +259,9 @@ Create a Codex workflow entrypoint in the consumer repository. Codex starts
 workflow sessions automatically; the session-start hook tells the agent the
 exact command to use for transitions and custom operations.
 
+The Codex adapter consumes the explicit session id itself before calling the
+existing route. Keep existing route argument definitions unchanged.
+
 ```ts
 import { createCodexWorkflowCli } from '@nt-ai-lab/deterministic-agent-workflow-codex'
 import { createDefaultProcessDeps } from '@nt-ai-lab/deterministic-agent-workflow-cli'

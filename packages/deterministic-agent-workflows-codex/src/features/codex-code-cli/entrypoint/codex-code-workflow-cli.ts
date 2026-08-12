@@ -52,26 +52,50 @@ export function createCodexWorkflowCli<
     now,
     transcriptReader: config.transcriptReader ?? EMPTY_TRANSCRIPT_READER,
   }
-  const platform: PlatformContext = {
-    getPluginRoot: () => root,
-    now,
-    getSessionId: () => {
-      throw new TypeError('Codex workflow commands require an explicit session id')
-    },
-    store,
-  }
-  const workflowDeps = config.buildWorkflowDeps(platform)
   const args = config.processDeps.getArgv().slice(2)
 
   try {
     const result = args.length === 0
-      ? handleHook(config, engineDeps, workflowDeps)
-      : createWorkflowRunner(config)(args, engineDeps, workflowDeps)
+      ? handleHookInvocation(config, engineDeps, root, now)
+      : handleWorkflowCommand(config, engineDeps, root, now, args)
     writeResult(config.processDeps, result)
   } catch (error: unknown) {
     config.processDeps.writeStderr(`[${now()}] ERROR: ${String(error)}\n`)
     config.processDeps.exit(1)
   }
+}
+
+function handleWorkflowCommand<
+  TWorkflow extends RehydratableWorkflow<TState>,
+  TState extends BaseWorkflowState<TStateName>,
+  TDeps,
+  TStateName extends string,
+  TOperation extends string,
+>(config: CodexWorkflowCliConfig<TWorkflow, TState, TDeps, TStateName, TOperation>, engineDeps: WorkflowEngineDeps, root: string, now: () => string, args: readonly string[]): RunnerResult {
+  const [operation, sessionId, ...operationArgs] = args
+  if (operation === undefined || sessionId === undefined || sessionId === '') {
+    throw new TypeError('Codex workflow commands require <operation> <session-id> [args]')
+  }
+  const workflowDeps = buildWorkflowDeps(config, engineDeps.store, root, now, sessionId)
+  return createWorkflowRunner(config)([operation, ...operationArgs], engineDeps, workflowDeps, {
+    getSessionId: () => sessionId,
+  })
+}
+
+function buildWorkflowDeps<
+  TWorkflow extends RehydratableWorkflow<TState>,
+  TState extends BaseWorkflowState<TStateName>,
+  TDeps,
+  TStateName extends string,
+  TOperation extends string,
+>(config: CodexWorkflowCliConfig<TWorkflow, TState, TDeps, TStateName, TOperation>, store: WorkflowEngineDeps['store'], root: string, now: () => string, sessionId: string): TDeps {
+  const platform: PlatformContext = {
+    getPluginRoot: () => root,
+    now,
+    getSessionId: () => sessionId,
+    store,
+  }
+  return config.buildWorkflowDeps(platform)
 }
 
 function resolveWorkflowRoot(): string {
@@ -90,15 +114,16 @@ function resolveDatabasePath(processDeps: ProcessDeps): string {
   return join(home, '.workflow-events.db')
 }
 
-function handleHook<
+function handleHookInvocation<
   TWorkflow extends RehydratableWorkflow<TState>,
   TState extends BaseWorkflowState<TStateName>,
   TDeps,
   TStateName extends string,
   TOperation extends string,
->(config: CodexWorkflowCliConfig<TWorkflow, TState, TDeps, TStateName, TOperation>, engineDeps: WorkflowEngineDeps, workflowDeps: TDeps): RunnerResult {
+>(config: CodexWorkflowCliConfig<TWorkflow, TState, TDeps, TStateName, TOperation>, engineDeps: WorkflowEngineDeps, root: string, now: () => string): RunnerResult {
   const raw = config.processDeps.readFile('/dev/stdin')
   const parsed = codexHookInputSchema.parse(JSON.parse(raw))
+  const workflowDeps = buildWorkflowDeps(config, engineDeps.store, root, now, parsed.session_id)
   const engine = new WorkflowEngine(config.workflowDefinition, engineDeps, workflowDeps)
   switch (parsed.hook_event_name) {
     case 'SessionStart': return startSession(config, engine, parsed.session_id, parsed.transcript_path, parsed.cwd)

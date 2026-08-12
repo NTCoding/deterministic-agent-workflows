@@ -10,6 +10,7 @@ import { createCodexWorkflowCli } from './dist/index.js'
 
 const root = mkdtempSync(join(tmpdir(), 'daw-codex-smoke-'))
 const databasePath = join(root, 'workflow-events.db')
+const resolvedSessionIds = []
 
 class Workflow {
   constructor(state) {
@@ -22,6 +23,7 @@ class Workflow {
   getTranscriptPath() { return this.state.transcriptPath }
   registerAgent() { return pass() }
   handleTeammateIdle() { return pass() }
+  recordNote() { return pass() }
 
   appendEvent(event) {
     this.pendingEvents.push(event)
@@ -60,7 +62,7 @@ const definition = {
       emoji: '📝', agentInstructions: '', canTransitionTo: ['DEVELOPING'], allowedWorkflowOperations: [], forbidden: { write: true },
     },
     DEVELOPING: {
-      emoji: '🛠️', agentInstructions: '', canTransitionTo: [], allowedWorkflowOperations: [], forbidden: { write: false },
+      emoji: '🛠️', agentInstructions: '', canTransitionTo: [], allowedWorkflowOperations: ['record-note'], forbidden: { write: false },
     },
   }),
   buildTransitionContext: (state, from, to) => ({
@@ -78,7 +80,8 @@ function invoke({ args = [], hook }) {
   createCodexWorkflowCli({
     workflowDefinition: definition,
     routes: {
-      transition: { type: 'transition', args: [arg.string('SESSION_ID'), arg.state('STATE', stateSchema)] },
+      transition: { type: 'transition', args: [arg.state('STATE', stateSchema)] },
+      'record-note': { type: 'transaction', args: [arg.string('NOTE')], handler: (workflow) => workflow.recordNote() },
     },
     bashForbidden: { commands: ['git push'] },
     isWriteAllowed: () => false,
@@ -98,7 +101,10 @@ function invoke({ args = [], hook }) {
       writeStderr: (value) => { stderr += value },
       exit: (code) => { exitCode = code },
     },
-    buildWorkflowDeps: () => ({}),
+    buildWorkflowDeps: (platform) => {
+      resolvedSessionIds.push(platform.getSessionId())
+      return {}
+    },
   })
   return { stdout, stderr, exitCode }
 }
@@ -124,6 +130,11 @@ try {
 
   const transition = invoke({ args: ['transition', 'one', 'DEVELOPING'] })
   assert.equal(transition.exitCode, 0)
+  assert.equal(resolvedSessionIds.at(-1), 'one')
+
+  const customOperation = invoke({ args: ['record-note', 'one', 'done'] })
+  assert.equal(customOperation.exitCode, 0)
+  assert.equal(resolvedSessionIds.at(-1), 'one')
 
   const allowedWrite = invoke({ hook: {
     session_id: 'one', transcript_path: null, cwd: root, hook_event_name: 'PreToolUse', tool_name: 'apply_patch',
