@@ -28,6 +28,8 @@ pnpm add @nt-ai-lab/deterministic-agent-workflow-cli
 pnpm add @nt-ai-lab/deterministic-agent-workflow-opencode
 # or
 pnpm add @nt-ai-lab/deterministic-agent-workflow-claude-code
+# or
+pnpm add @nt-ai-lab/deterministic-agent-workflow-codex
 ```
 
 ## OpenCode example
@@ -251,6 +253,52 @@ createClaudeCodeWorkflowCli({
 })
 ```
 
+## Codex example
+
+Create a Codex workflow entrypoint in the consumer repository. Codex starts
+workflow sessions automatically; the session-start hook tells the agent the
+exact command to use for transitions and custom operations.
+
+The Codex adapter consumes the explicit session id itself before calling the
+existing route. Keep existing route argument definitions unchanged.
+
+```ts
+import { createCodexWorkflowCli } from '@nt-ai-lab/deterministic-agent-workflow-codex'
+import { createDefaultProcessDeps } from '@nt-ai-lab/deterministic-agent-workflow-cli'
+import { WORKFLOW_DEFINITION } from './features/workflow/infra/persistence/workflow-definition'
+import { ROUTES, PRE_TOOL_USE_POLICY } from './features/workflow/entrypoint/workflow-cli'
+
+createCodexWorkflowCli({
+  workflowDefinition: WORKFLOW_DEFINITION,
+  routes: ROUTES,
+  bashForbidden: PRE_TOOL_USE_POLICY.bashForbidden,
+  isWriteAllowed: PRE_TOOL_USE_POLICY.isWriteAllowed,
+  workflowCommand: 'node "$(git rev-parse --show-toplevel)/dist/workflow-codex.js"',
+  processDeps: createDefaultProcessDeps(),
+  buildWorkflowDeps: (platform) => ({
+    now: platform.now,
+  }),
+})
+```
+
+Compile that entrypoint, then add `.codex/hooks.json`:
+
+```json
+{
+  "hooks": {
+    "SessionStart": [{ "hooks": [{ "type": "command", "command": "node \"$(git rev-parse --show-toplevel)/dist/workflow-codex.js\"" }] }],
+    "PreToolUse": [{ "matcher": "Bash|apply_patch", "hooks": [{ "type": "command", "command": "node \"$(git rev-parse --show-toplevel)/dist/workflow-codex.js\"" }] }],
+    "SubagentStart": [{ "hooks": [{ "type": "command", "command": "node \"$(git rev-parse --show-toplevel)/dist/workflow-codex.js\"" }] }],
+    "Stop": [{ "hooks": [{ "type": "command", "command": "node \"$(git rev-parse --show-toplevel)/dist/workflow-codex.js\"" }] }]
+  }
+}
+```
+
+Review and trust the project hooks in Codex before using them. Codex uses the
+same event store as the other adapters, so the Control Center shows sessions,
+states, transitions and denials. Codex transcript and activity parsing are not
+included because its hook transcript path is not a stable public contract.
+
 ## Event store
 
 The adapter creates the SQLite event store automatically.
@@ -291,6 +339,32 @@ Dig into the session transcript organized by workflow state:
 Search the event log:
 
 ![Event log](docs/event-log.png)
+
+## npm publishing
+
+The release workflow uses npm trusted publishing through GitHub Actions OIDC.
+It does not use `NPM_TOKEN`.
+
+For each existing public `@nt-ai-lab/deterministic-agent-workflow-*` package,
+configure a trusted publisher in npm:
+
+1. Select GitHub Actions.
+2. Set organisation to `NTCoding`, repository to `deterministic-agent-workflows`,
+   and workflow filename to `ci.yml`.
+3. Allow `npm publish`.
+
+Trusted publishing cannot create a new npm package. For a new package, publish
+the reviewed commit once from an interactive npm login, then configure its
+trusted publisher before merging the pull request:
+
+```bash
+pnpm build
+pnpm --filter <package-name> publish --access public --no-git-checks
+```
+
+After a successful OIDC release, restrict each package's publishing access to
+require two-factor authentication and disallow tokens, then revoke the old npm
+automation token.
 
 
 

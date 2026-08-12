@@ -32,7 +32,7 @@ If docs or APIs force that, the repo is not ready.
 
 1. User installs:
    - `@nt-ai-lab/deterministic-agent-workflow-dsl`
-   - one adapter: `@nt-ai-lab/deterministic-agent-workflow-opencode` or `@nt-ai-lab/deterministic-agent-workflow-claude-code`
+   - one adapter: `@nt-ai-lab/deterministic-agent-workflow-opencode`, `@nt-ai-lab/deterministic-agent-workflow-claude-code`, or `@nt-ai-lab/deterministic-agent-workflow-codex`
 2. User defines workflow states, transitions, and policy.
 3. User creates plugin via one high-level factory.
 4. Runtime automatically:
@@ -49,6 +49,7 @@ If docs or APIs force that, the repo is not ready.
 - Provide `@nt-ai-lab/deterministic-agent-workflow-cli` for route definition and Claude Code process wiring.
 - Provide `createOpenCodeWorkflowPlugin(...)`.
 - Provide `createClaudeCodeWorkflowCli(...)`.
+- Provide `createCodexWorkflowCli(...)`.
 - Preserve the existing consumer setup shape exactly.
 - Hide engine/event-sourcing internals behind adapter APIs.
 
@@ -77,6 +78,7 @@ If docs or APIs force that, the repo is not ready.
   - `@nt-ai-lab/deterministic-agent-workflow-event-store`
   - `@nt-ai-lab/deterministic-agent-workflow-claude-code`
   - `@nt-ai-lab/deterministic-agent-workflow-opencode`
+  - `@nt-ai-lab/deterministic-agent-workflow-codex`
 
 ---
 
@@ -168,6 +170,9 @@ Status legend: `TODO`, `IN_PROGRESS`, `BLOCKED`, `DONE`
 - [ ] **TODO** Confirm lockstep release flow works.
 - [ ] **TODO** Do not mark release-ready until README example and smoke tests both pass.
 
+### 10) Native Codex adapter
+- [x] **DONE** Add project-configured Codex lifecycle hooks, session-scoped workflow commands, and enforcement.
+
 ---
 
 ## Acceptance criteria for “done”
@@ -176,6 +181,7 @@ This repo is only ready when all of the following are true:
 
 - A consumer can create an OpenCode integration with one high-level factory.
 - A consumer can create a Claude Code integration with the preserved high-level CLI wrapper.
+- A consumer can create a Codex integration with automatic lifecycle hooks and explicit session-scoped workflow commands.
 - The main README shows that exact usage style.
 - The README example does not mention `appendEvent`, `getPendingEvents`, `RehydratableWorkflow`, or manual event rehydration.
 - A smoke test proves:

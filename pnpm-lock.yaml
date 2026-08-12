@@ -100,6 +100,21 @@ importers:
         specifier: ^3.25.76
         version: 3.25.76
 
+  packages/deterministic-agent-workflows-codex:
+    dependencies:
+      '@nt-ai-lab/deterministic-agent-workflow-cli':
+        specifier: workspace:*
+        version: link:../deterministic-agent-workflows-cli
+      '@nt-ai-lab/deterministic-agent-workflow-engine':
+        specifier: workspace:*
+        version: link:../deterministic-agent-workflows-engine
+      '@nt-ai-lab/deterministic-agent-workflow-event-store':
+        specifier: workspace:*
+        version: link:../deterministic-agent-workflows-event-store
+      zod:
+        specifier: ^3.25.76
+        version: 3.25.76
+
   packages/deterministic-agent-workflows-cli:
     dependencies:
       '@nt-ai-lab/deterministic-agent-workflow-dsl':
