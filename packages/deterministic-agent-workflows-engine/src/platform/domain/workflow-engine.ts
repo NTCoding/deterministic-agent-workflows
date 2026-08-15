@@ -20,7 +20,10 @@ import {
   formatTransitionSuccess,
 } from '../infra/cli/presentation/output-guidance'
 import type { PreconditionResult } from './precondition-result'
-import type { BashForbiddenConfig } from './workflow-registry'
+import type {
+  BashForbiddenConfig,
+  WorkflowStateDefinition,
+} from './workflow-registry'
 import type {
   EngineResult,
   RehydratableWorkflow,
@@ -40,6 +43,8 @@ import {
 import { reduceWorkflowStateFromStoredEvents } from './workflow-state-reducer'
 import { serializeWorkflowState } from './workflow-state-serialization'
 import { requireNonEmptyString } from './non-empty-string'
+import { getLatestReviewCommit } from './workflow-review-cycle-support'
+import { runWorkflowReviewCycle } from './workflow-review-cycle-runner'
 
 /** @riviere-role domain-service */
 export class WorkflowEngine<
@@ -129,37 +134,28 @@ export class WorkflowEngine<
   transition(sessionId: string, target: TStateName): EngineResult {
     this.requireSession(sessionId)
     const workflow = this.rehydrateFromEvents(sessionId)
+    const identityGate = this.applyIdentityGate(sessionId, workflow, 'transition')
+    if (identityGate !== undefined) return identityGate
+    return this.transitionTo(sessionId, target)
+  }
+
+  private transitionTo(sessionId: string, target: TStateName): EngineResult {
+    this.requireSession(sessionId)
+    const workflow = this.rehydrateFromEvents(sessionId)
     const state = workflow.getState()
     const currentStateName = state.currentStateMachineState
     const registry = this.factory.getRegistry()
 
-    const gate = this.applyIdentityGate(sessionId, workflow, 'transition')
-    if (gate !== undefined) return gate
-
     const currentDef = registry[currentStateName]
-    if (!currentDef.canTransitionTo.includes(target)) {
-      const legalTargets = currentDef.canTransitionTo
-      const reason = `Illegal transition ${currentStateName} -> ${target}. Legal targets from ${currentStateName}: [${legalTargets.join(', ') || 'none'}].`
-      const currentProcedure = readProcedure(this.engineDeps, workflow.getState().currentStateMachineState)
-      const currentPrefix = getExpectedPrefix(currentStateName, registry)
-      return {
-        type: 'blocked',
-        output: formatIllegalTransitionError(reason, currentProcedure, currentPrefix) 
-      }
-    }
+    const legality = this.checkLegalTransition(workflow, target, currentDef.canTransitionTo)
+    if (legality !== undefined) return legality
 
-    if (target !== 'BLOCKED' && currentDef.transitionGuard) {
-      const context = this.factory.buildTransitionContext(state, currentStateName, target, this.workflowDeps)
-      const guardResult = currentDef.transitionGuard(context)
-      if (!guardResult.pass) {
-        const currentProcedure = readProcedure(this.engineDeps, workflow.getState().currentStateMachineState)
-        const currentPrefix = getExpectedPrefix(currentStateName, registry)
-        return {
-          type: 'blocked',
-          output: formatTransitionError(target, guardResult.reason, currentProcedure, currentPrefix),
-        }
-      }
-    }
+    const reviewCycle = this.factory.reviewCycle
+    const duplicateReview = this.checkReviewCommit(sessionId, workflow, target, reviewCycle)
+    if (duplicateReview !== undefined) return duplicateReview
+
+    const transitionGuard = this.checkTransitionGuard(workflow, target, currentDef.transitionGuard)
+    if (transitionGuard !== undefined) return transitionGuard
 
     const targetDef = registry[target]
     const stateBefore = workflow.getState()
@@ -179,6 +175,18 @@ export class WorkflowEngine<
     targetDef.afterEntry?.()
     this.persistEvents(sessionId, workflow)
 
+    if (target === reviewCycle?.reviewingState) {
+      return runWorkflowReviewCycle({
+        sessionId,
+        reviewCycle,
+        engineDeps: this.engineDeps,
+        workflowDeps: this.workflowDeps,
+        getState: () => this.rehydrateFromEvents(sessionId).getState(),
+        persistPlatformEvent: (eventState, event) => this.persistPlatformEvent(sessionId, eventState, event),
+        transition: (nextState) => this.transitionTo(sessionId, nextState),
+      })
+    }
+
     const newState = workflow.getState()
     const title = this.factory.getTransitionTitle?.(newState.currentStateMachineState, newState)
       ?? newState.currentStateMachineState
@@ -190,6 +198,37 @@ export class WorkflowEngine<
     }
   }
 
+  private checkLegalTransition(workflow: TWorkflow, target: TStateName, legalTargets: readonly TStateName[]): EngineResult | undefined {
+    if (legalTargets.includes(target)) return undefined
+    const currentStateName = workflow.getState().currentStateMachineState
+    const reason = `Illegal transition ${currentStateName} -> ${target}. Legal targets from ${currentStateName}: [${legalTargets.join(', ') || 'none'}].`
+    return {
+      type: 'blocked',
+      output: formatIllegalTransitionError(reason, readProcedure(this.engineDeps, currentStateName), getExpectedPrefix(currentStateName, this.factory.getRegistry())),
+    }
+  }
+
+  private checkReviewCommit(sessionId: string, workflow: TWorkflow, target: TStateName, reviewCycle: WorkflowDefinition<TWorkflow, TState, TDeps, TStateName, TOperation>['reviewCycle']): EngineResult | undefined {
+    if (target !== reviewCycle?.reviewingState) return undefined
+    const reviewedCommit = reviewCycle.buildRequest(workflow.getState(), this.workflowDeps).reviewedCommit
+    if (getLatestReviewCommit(this.engineDeps.store, sessionId) !== reviewedCommit) return undefined
+    const currentStateName = workflow.getState().currentStateMachineState
+    return {
+      type: 'blocked',
+      output: formatTransitionError(target, 'A review cycle has already completed for the current commit. Create a new commit before requesting another review.', readProcedure(this.engineDeps, currentStateName), getExpectedPrefix(currentStateName, this.factory.getRegistry())),
+    }
+  }
+
+  private checkTransitionGuard(workflow: TWorkflow, target: TStateName, transitionGuard: WorkflowStateDefinition<TState, TStateName, TOperation>['transitionGuard']): EngineResult | undefined {
+    if (target === 'BLOCKED' || transitionGuard === undefined) return undefined
+    const currentStateName = workflow.getState().currentStateMachineState
+    const result = transitionGuard(this.factory.buildTransitionContext(workflow.getState(), currentStateName, target, this.workflowDeps))
+    if (result.pass) return undefined
+    return {
+      type: 'blocked',
+      output: formatTransitionError(target, result.reason, readProcedure(this.engineDeps, currentStateName), getExpectedPrefix(currentStateName, this.factory.getRegistry())),
+    }
+  }
   checkBash(
     sessionId: string,
     toolName: string,
@@ -227,6 +266,16 @@ export class WorkflowEngine<
 
   hasSessionStarted(sessionId: string): boolean {
     return this.engineDeps.store.hasSessionStarted(sessionId)
+  }
+
+  hasWorkflowOwnedReviewCycle(): boolean {
+    return this.factory.reviewCycle !== undefined
+  }
+
+  isRequiredReviewAgent(sessionId: string, agentType: string): boolean {
+    const reviewCycle = this.factory.reviewCycle
+    if (reviewCycle === undefined || !this.engineDeps.store.hasSessionStarted(sessionId)) return false
+    return reviewCycle.buildRequest(this.rehydrateFromEvents(sessionId).getState(), this.workflowDeps).requiredReviewTypes.includes(agentType)
   }
 
   private requireSession(sessionId: string): void {

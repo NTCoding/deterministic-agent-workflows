@@ -33,7 +33,6 @@ import {
   handleGetReflectionProcessRoute,
   handleRecordReflectionRoute,
 } from './reflection-routes'
-import { handleRecordReviewRoute } from './review-routes'
 
 export type { PreToolUseHandlerFn } from '../../../platform/domain/pre-tool-use-handler'
 
@@ -267,8 +266,6 @@ function resolveBuiltinRoute<
       return handleGetReflectionProcessRoute(engine, engineDeps, config, args, getSessionId, getSessionTranscriptPath, getSessionRepository, getRepositoryRoot, getWorkflowEventsDbPath)
     case 'record-reflection':
       return handleRecordReflectionRoute(engine, engineDeps, args, readStdin, getSessionId)
-    case 'record-review':
-      return handleRecordReviewRoute(engine, engineDeps, config.workflowDefinition, args, getSessionId)
     case 'write-journal':
       return handleWriteJournalRoute(engine, args, getSessionId)
     default:
@@ -370,6 +367,10 @@ function handleSubagentStartHook<
   }
 
   const input: SubagentStartInput = parsed.data
+  if (engine.isRequiredReviewAgent(input.session_id, input.agent_type)) return {
+    output: formatDenyDecision(`Review agent '${input.agent_type}' is workflow-owned. Transition to the configured review state; the workflow dispatches the required review bundle.`),
+    exitCode: EXIT_BLOCK,
+  }
   const result = engine.transaction(input.session_id, 'register-agent', (workflow) => workflow.registerAgent(input.agent_type, input.agent_id))
   return {
     output: formatContextInjection(result.type === 'success' ? result.output : ''),

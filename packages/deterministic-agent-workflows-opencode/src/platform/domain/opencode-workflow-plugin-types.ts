@@ -1,6 +1,7 @@
 import type {
   BaseWorkflowState,
   RehydratableWorkflow,
+  ReviewBundleRunner,
   WorkflowDefinition,
 } from '@nt-ai-lab/deterministic-agent-workflow-engine'
 import type {
@@ -44,4 +45,6 @@ export type OpenCodeWorkflowPluginConfig<
   readonly routes?: RouteMap<TWorkflow, TState>
   readonly commandDirectories?: readonly string[]
   readonly commandPrefix?: string
+  /** Runs only when the engine enters workflowDefinition.reviewCycle.reviewingState. */
+  readonly reviewBundleRunner?: ReviewBundleRunner
 }

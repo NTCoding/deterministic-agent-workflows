@@ -97,6 +97,22 @@ export const reviewRecordedEventSchema = z.object({
   verdict: z.enum(['PASS', 'FAIL']),
 })
 
+export const reviewCycleStartedEventSchema = z.object({
+  type: z.literal('review-cycle-started'),
+  at: nonEmptyStringSchema,
+  reviewedCommit: nonEmptyStringSchema,
+  requiredReviewTypes: z.array(nonEmptyStringSchema).nonempty(),
+})
+
+export const reviewCycleCompletedEventSchema = z.object({
+  type: z.literal('review-cycle-completed'),
+  at: nonEmptyStringSchema,
+  reviewedCommit: nonEmptyStringSchema,
+  outcome: z.enum(['PASS', 'FAIL', 'ERROR']),
+  reviewIds: z.array(z.number().int().positive()),
+  error: nonEmptyStringSchema.optional(),
+})
+
 export const engineEventSchema = z.discriminatedUnion('type', [
   sessionStartedSchema,
   transitionedSchema,
@@ -110,6 +126,8 @@ export const engineEventSchema = z.discriminatedUnion('type', [
   identityVerifiedSchema,
   contextRequestedSchema,
   reviewRecordedEventSchema,
+  reviewCycleStartedEventSchema,
+  reviewCycleCompletedEventSchema,
 ])
 
 const platformOwnedEventTypesExcludedFromWorkflowState = new Set<string>([
@@ -155,3 +173,7 @@ export type IdentityVerifiedEvent = z.infer<typeof identityVerifiedSchema>
 export type ContextRequestedEvent = z.infer<typeof contextRequestedSchema>
 /** @riviere-role value-object */
 export type ReviewRecordedEvent = z.infer<typeof reviewRecordedEventSchema>
+/** @riviere-role value-object */
+export type ReviewCycleStartedEvent = z.infer<typeof reviewCycleStartedEventSchema>
+/** @riviere-role value-object */
+export type ReviewCycleCompletedEvent = z.infer<typeof reviewCycleCompletedEventSchema>

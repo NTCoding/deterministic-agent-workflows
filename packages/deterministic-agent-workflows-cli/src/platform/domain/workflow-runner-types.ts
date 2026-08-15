@@ -1,6 +1,7 @@
 import type {
   BaseWorkflowState,
   RehydratableWorkflow,
+  ReviewBundleRunner,
   WorkflowDefinition,
 } from '@nt-ai-lab/deterministic-agent-workflow-engine'
 import type { BashForbiddenConfig } from '@nt-ai-lab/deterministic-agent-workflow-dsl'
@@ -40,4 +41,6 @@ export type WorkflowRunnerConfig<
   readonly isWriteAllowed?: (filePath: string, state: TState) => boolean
   readonly customGates?: readonly CustomPreToolUseGate<TWorkflow, TState, TStateName>[]
   readonly preToolUseHandler?: PreToolUseHandlerFn<TWorkflow, TState, TDeps, TStateName, TOperation>
+  /** Runs only when the engine enters workflowDefinition.reviewCycle.reviewingState. */
+  readonly reviewBundleRunner?: ReviewBundleRunner
 }

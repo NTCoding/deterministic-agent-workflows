@@ -205,7 +205,7 @@ const workflowDefinition = {
       emoji: '🔎',
       agentInstructions: 'states/reviewing.md',
       canTransitionTo: ['DEVELOPING'],
-      allowedWorkflowOperations: ['record-review'],
+      allowedWorkflowOperations: [],
     },
   }),
   buildTransitionContext: (state, from, to) => ({
@@ -321,27 +321,11 @@ try {
     operation: 'transition',
     args: ['REVIEWING']
   }, ctx)
-  const reviewOutput = await hooks.tool.workflow.execute({
-    operation: 'record-review',
-    args: ['platform-review', JSON.stringify({
-      verdict: 'PASS',
-      summary: 'No platform issues found.',
-      findings: [],
-    })],
-  }, ctx)
-  const missingPayloadError = await captureWorkflowError(() => hooks.tool.workflow.execute({
-    operation: 'record-review',
-    args: ['platform-review'],
-  }, ctx))
-  const invalidJsonError = await captureWorkflowError(() => hooks.tool.workflow.execute({
-    operation: 'record-review',
-    args: ['platform-review', '{'],
-  }, ctx))
   await hooks.tool.workflow.execute({
     operation: 'transition',
     args: ['DEVELOPING']
   }, ctx)
-  const blockedStateError = await captureWorkflowError(() => hooks.tool.workflow.execute({
+  const directReviewError = await captureWorkflowError(() => hooks.tool.workflow.execute({
     operation: 'record-review',
     args: ['platform-review', JSON.stringify({
       verdict: 'PASS',
@@ -349,7 +333,6 @@ try {
       findings: [],
     })],
   }, ctx))
-  const reviewSummary = readReviewSummary(workflowEventsPath, 'session-1')
 
   if (
     !initOutput.includes('planning instructions')
@@ -357,15 +340,7 @@ try {
     || !allowed
     || identityStatus !== 'verified'
     || promptedTexts.length !== 1
-    || !reviewOutput.includes('"ok": true')
-    || missingPayloadError !== 'record-review requires <review-type> and <review-json> arguments'
-    || !invalidJsonError?.includes('Invalid review JSON')
-    || blockedStateError !== 'record-review is not allowed in state DEVELOPING.'
-    || reviewSummary.reviewCount !== 1
-    || reviewSummary.eventCount !== 1
-    || reviewSummary.reviewRow?.review_type !== 'platform-review'
-    || reviewSummary.reviewRow?.verdict !== 'PASS'
-    || typeof reviewSummary.eventRow?.payload !== 'string'
+    || directReviewError !== 'Unknown command: record-review'
   ) {
     throw new Error(`Smoke test failed: ${JSON.stringify({
       blocked,
@@ -373,11 +348,7 @@ try {
       identityStatus,
       promptedTexts,
       initOutput,
-      reviewOutput,
-      missingPayloadError,
-      invalidJsonError,
-      blockedStateError,
-      reviewSummary
+      directReviewError
     })}`)
   }
 } finally {

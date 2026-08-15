@@ -64,6 +64,8 @@ export type {
 export {
   engineEventSchema,
   reviewRecordedEventSchema,
+  reviewCycleStartedEventSchema,
+  reviewCycleCompletedEventSchema,
 } from './platform/domain/engine-events'
 export type {
   EngineEvent,
@@ -79,6 +81,8 @@ export type {
   IdentityVerifiedEvent,
   ContextRequestedEvent,
   ReviewRecordedEvent,
+  ReviewCycleStartedEvent,
+  ReviewCycleCompletedEvent,
 } from './platform/domain/engine-events'
 export { isPlatformOwnedEventExcludedFromWorkflowState } from './platform/domain/engine-events'
 
@@ -114,6 +118,11 @@ export type {
   WorkflowDefinition,
   WorkflowEventStore,
   WorkflowEngineDeps,
+  ReviewCycleDefinition,
+  ReviewBundleRequest,
+  ReviewBundleRunInput,
+  ReviewBundleResult,
+  ReviewBundleRunner,
 } from './platform/domain/workflow-engine-types'
 
 export type {

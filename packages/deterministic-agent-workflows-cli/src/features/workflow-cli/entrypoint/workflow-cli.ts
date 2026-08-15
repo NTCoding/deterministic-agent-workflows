@@ -61,6 +61,7 @@ export function createWorkflowCli<
     appendToFile: processDeps.appendToFile,
     now,
     transcriptReader: config.transcriptReader,
+    reviewBundleRunner: config.reviewBundleRunner,
   }
 
   const workflowDeps = config.buildWorkflowDeps(platformCtx)

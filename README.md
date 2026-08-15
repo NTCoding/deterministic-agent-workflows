@@ -287,7 +287,7 @@ Compile that entrypoint, then add `.codex/hooks.json`:
 {
   "hooks": {
     "SessionStart": [{ "hooks": [{ "type": "command", "command": "node \"$(git rev-parse --show-toplevel)/dist/workflow-codex.js\"" }] }],
-    "PreToolUse": [{ "matcher": "Bash|apply_patch", "hooks": [{ "type": "command", "command": "node \"$(git rev-parse --show-toplevel)/dist/workflow-codex.js\"" }] }],
+    "PreToolUse": [{ "matcher": "Bash|apply_patch|Agent", "hooks": [{ "type": "command", "command": "node \"$(git rev-parse --show-toplevel)/dist/workflow-codex.js\"" }] }],
     "SubagentStart": [{ "hooks": [{ "type": "command", "command": "node \"$(git rev-parse --show-toplevel)/dist/workflow-codex.js\"" }] }],
     "Stop": [{ "hooks": [{ "type": "command", "command": "node \"$(git rev-parse --show-toplevel)/dist/workflow-codex.js\"" }] }]
   }
