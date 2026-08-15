@@ -216,7 +216,9 @@ export function createOpenCodeWorkflowPlugin<
         if (engine.hasSession(hookInput.sessionID)) {
           // Session already exists for the default non-router path.
         } else {
-          engine.startSession(hookInput.sessionID, dbPath)
+          const repository = getRepositoryName(process.cwd())
+          if (repository === undefined) throw new TypeError('repository must be a non-empty string.')
+          engine.startSession(hookInput.sessionID, dbPath, repository)
         }
       } else if (engine.hasSessionStarted(hookInput.sessionID)) {
         // Routed mode only enforces tools after the session starts.

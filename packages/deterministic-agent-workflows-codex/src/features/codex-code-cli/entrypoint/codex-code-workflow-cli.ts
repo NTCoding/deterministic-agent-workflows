@@ -1,3 +1,10 @@
+import {
+  accessSync,
+  constants,
+  readdirSync,
+  statSync,
+} from 'node:fs'
+import { homedir } from 'node:os'
 import { join } from 'node:path'
 import type {
   BaseWorkflowState,
@@ -29,6 +36,55 @@ import {
 } from '../../../platform/infra/external-clients/codex/codex-hook-schemas'
 
 const EMPTY_TRANSCRIPT_READER: TranscriptReader = { readMessages: () => [] }
+
+function requireNonEmptyString(value: string | undefined, name: string): string {
+  if (value === undefined) throw new TypeError(`${name} must be a non-empty string.`)
+  const trimmed = value.trim()
+  if (trimmed.length === 0) throw new TypeError(`${name} must be a non-empty string.`)
+  return trimmed
+}
+
+export function resolveTranscriptPath(sessionId: string, suppliedPath: string | null, now: () => string): string {
+  const candidate = suppliedPath === null ? '' : suppliedPath.trim()
+  if (candidate.length > 0) {
+    try {
+      accessSync(candidate, constants.R_OK)
+      if (!statSync(candidate).isFile()) throw new TypeError('not a file')
+    } catch {
+      throw new TypeError(`Codex transcript is not a readable file: ${candidate}`)
+    }
+    return candidate
+  }
+
+  const startedAt = new Date(now())
+  const directory = join(
+    homedir(),
+    '.codex',
+    'sessions',
+    String(startedAt.getUTCFullYear()),
+    String(startedAt.getUTCMonth() + 1).padStart(2, '0'),
+    String(startedAt.getUTCDate()).padStart(2, '0'),
+  )
+  const suffix = `-${sessionId}.jsonl`
+  const matches = (() => {
+    try {
+      return readdirSync(directory).filter((name) => name.startsWith('rollout-') && name.endsWith(suffix)).map((name) => join(directory, name))
+    } catch {
+      throw new TypeError(`Unable to resolve exactly one readable Codex transcript for session ${sessionId} in ${directory}.`)
+    }
+  })()
+  if (matches.length !== 1) {
+    throw new TypeError(`Unable to resolve exactly one readable Codex transcript for session ${sessionId} in ${directory}.`)
+  }
+  const transcriptPath = requireNonEmptyString(matches[0], 'transcriptPath')
+  try {
+    accessSync(transcriptPath, constants.R_OK)
+    if (!statSync(transcriptPath).isFile()) throw new TypeError('not a file')
+  } catch {
+    throw new TypeError(`Unable to resolve exactly one readable Codex transcript for session ${sessionId} in ${directory}.`)
+  }
+  return transcriptPath
+}
 
 /** @riviere-role cli-entrypoint */
 export function createCodexWorkflowCli<
@@ -119,7 +175,7 @@ function handleHookInvocation<
   const workflowDeps = buildWorkflowDeps(config, engineDeps.store, root, now, parsed.session_id)
   const engine = new WorkflowEngine(config.workflowDefinition, engineDeps, workflowDeps)
   switch (parsed.hook_event_name) {
-    case 'SessionStart': return startSession(config, engine, parsed.session_id, parsed.transcript_path, parsed.cwd)
+    case 'SessionStart': return startSession(config, engine, parsed.session_id, parsed.transcript_path, parsed.cwd, now)
     case 'PreToolUse': return checkToolUse(config, engine, raw)
     case 'SubagentStart': return registerSubagent(engine, raw)
     case 'Stop': return preventUnsupportedStop(config, engineDeps, parsed.session_id)
@@ -132,13 +188,15 @@ function startSession<
   TDeps,
   TStateName extends string,
   TOperation extends string,
->(config: CodexWorkflowCliConfig<TWorkflow, TState, TDeps, TStateName, TOperation>, engine: WorkflowEngine<TWorkflow, TState, TDeps, TStateName, TOperation>, sessionId: string, transcriptPath: string | null, cwd: string): RunnerResult {
+>(config: CodexWorkflowCliConfig<TWorkflow, TState, TDeps, TStateName, TOperation>, engine: WorkflowEngine<TWorkflow, TState, TDeps, TStateName, TOperation>, sessionId: string, transcriptPath: string | null, cwd: string, now: () => string): RunnerResult {
   if (!engine.hasSessionStarted(sessionId)) {
-    const noTranscriptPath = ''
+    const transcriptFile = resolveTranscriptPath(sessionId, transcriptPath, now)
+    const repository = getRepositoryName(cwd)
+    if (repository === undefined) throw new TypeError('repository must be a non-empty string.')
     const result = engine.startSession(
       sessionId,
-      transcriptPath ?? noTranscriptPath,
-      getRepositoryName(cwd),
+      transcriptFile,
+      repository,
     )
     if (result.type !== 'success') return toRunnerResult(result)
   }
@@ -204,7 +262,10 @@ function checkPatchPaths<
   const paths = extractPatchPaths(command)
   if (paths.length === 0) return deny('Cannot determine every file edited by Codex apply_patch')
   for (const path of paths) {
-    const result = handler(engine, sessionId, 'Write', { file_path: path })
+    const result = handler(engine, sessionId, 'Write', {
+      file_path: path,
+      command
+    })
     if (result.type === 'blocked') return toHookResult(result)
   }
   return {
