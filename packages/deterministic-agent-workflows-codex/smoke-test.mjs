@@ -155,7 +155,10 @@ try {
   assert.equal(subagent.exitCode, 0)
 
   const stop = invoke({ hook: { session_id: 'one', transcript_path: null, cwd: root, hook_event_name: 'Stop' } })
-  assert.match(stop.stdout, /"continue":false/)
+  assert.deepEqual(JSON.parse(stop.stdout), {
+    decision: 'block',
+    reason: 'Workflow state DEVELOPING does not allow stopping.',
+  })
 
   invoke({ hook: { session_id: 'two', transcript_path: null, cwd: root, hook_event_name: 'SessionStart' } })
   const isolated = invoke({ hook: {
