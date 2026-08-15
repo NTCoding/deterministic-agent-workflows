@@ -331,15 +331,35 @@ function createEngine(): {
 }
 
 describe('WorkflowEngine platform-owned events', () => {
+  it.each([
+    ['repository', ''],
+    ['repository', '   '],
+    ['transcriptPath', ''],
+    ['transcriptPath', '   '],
+    ['sessionId', ''],
+    ['sessionId', '   '],
+  ])('rejects empty %s before persisting a session', (field, value) => {
+    const {
+      engine,
+      store,
+    } = createEngine()
+    const sessionId = field === 'sessionId' ? value : 'session-1'
+    const transcriptPath = field === 'transcriptPath' ? value : '/transcripts/session-1.jsonl'
+    const repository = field === 'repository' ? value : 'test/repo'
+
+    expect(() => engine.startSession(sessionId, transcriptPath, repository)).toThrow(`${field} must be a non-empty string.`)
+    expect(store.readEvents('session-1')).toStrictEqual([])
+  })
+
   it('persists journal and write-check events without routing them through the consumer workflow', () => {
     const {
       engine,
       store,
     } = createEngine()
-    engine.startSession('session-1', '/transcripts/session-1.jsonl')
+    engine.startSession('session-1', '/transcripts/session-1.jsonl', 'test/repo')
 
     const journalResult = engine.writeJournal('session-1', 'gpt-5.4', 'Captured planning context.')
-    const writeCheckResult = engine.checkWrite('session-1', 'Read', '', () => true)
+    const writeCheckResult = engine.checkWrite('session-1', 'Read', '/src/example.ts', () => true)
     const stateResult = engine.getState('session-1')
 
     expect(journalResult.type).toBe('success')

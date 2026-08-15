@@ -3,6 +3,10 @@ export { WorkflowStateError } from './platform/domain/workflow-state'
 
 export type { BaseEvent } from './platform/domain/base-event'
 export { baseEventSchema } from './platform/domain/base-event'
+export {
+  nonEmptyStringSchema,
+  requireNonEmptyString,
+} from './platform/domain/non-empty-string'
 
 export type {
   EventEnvelope,

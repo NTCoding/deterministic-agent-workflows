@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { nonEmptyStringSchema } from './non-empty-string'
 
 export const reflectionCategorySchema = z.enum([
   'state-efficiency',
@@ -10,14 +11,14 @@ export const reflectionCategorySchema = z.enum([
 
 export const reflectionConfidenceSchema = z.enum(['low', 'medium', 'high'])
 
-const evidenceBaseSchema = z.object({label: z.string().min(1).optional(),})
+const evidenceBaseSchema = z.object({label: nonEmptyStringSchema.optional(),})
 
 export const reflectionEvidenceSchema = z.discriminatedUnion('kind', [
   evidenceBaseSchema.extend({
     kind: z.literal('state-period'),
-    state: z.string().min(1),
-    startedAt: z.string().min(1).optional(),
-    endedAt: z.string().min(1).optional(),
+    state: nonEmptyStringSchema,
+    startedAt: nonEmptyStringSchema.optional(),
+    endedAt: nonEmptyStringSchema.optional(),
   }),
   evidenceBaseSchema.extend({
     kind: z.literal('event'),
@@ -30,8 +31,8 @@ export const reflectionEvidenceSchema = z.discriminatedUnion('kind', [
   }),
   evidenceBaseSchema.extend({
     kind: z.literal('journal-entry'),
-    at: z.string().min(1),
-    agentName: z.string().min(1).optional(),
+    at: nonEmptyStringSchema,
+    agentName: nonEmptyStringSchema.optional(),
   }),
   evidenceBaseSchema.extend({
     kind: z.literal('transcript-range'),
@@ -40,42 +41,42 @@ export const reflectionEvidenceSchema = z.discriminatedUnion('kind', [
   }),
   evidenceBaseSchema.extend({
     kind: z.literal('tool-activity'),
-    state: z.string().min(1).optional(),
-    toolName: z.string().min(1).optional(),
-    metric: z.string().min(1).optional(),
+    state: nonEmptyStringSchema.optional(),
+    toolName: nonEmptyStringSchema.optional(),
+    metric: nonEmptyStringSchema.optional(),
   }),
 ])
 
 export const reflectionFindingSchema = z.object({
-  title: z.string().min(1),
+  title: nonEmptyStringSchema,
   category: reflectionCategorySchema,
-  opportunity: z.string().min(1),
-  likelyCause: z.string().min(1),
-  suggestedChange: z.string().min(1),
-  expectedImpact: z.string().min(1),
+  opportunity: nonEmptyStringSchema,
+  likelyCause: nonEmptyStringSchema,
+  suggestedChange: nonEmptyStringSchema,
+  expectedImpact: nonEmptyStringSchema,
   confidence: reflectionConfidenceSchema.optional(),
   evidence: z.array(reflectionEvidenceSchema).min(1),
 })
 
 export const reflectionPayloadSchema = z.object({
-  summary: z.string().min(1).optional(),
+  summary: nonEmptyStringSchema.optional(),
   findings: z.array(reflectionFindingSchema).max(10),
 }).strict()
 
 export const recordReflectionInputSchema = z.object({
-  label: z.string().min(1).optional(),
-  agentName: z.string().min(1).optional(),
-  sourceState: z.string().min(1).optional(),
+  label: nonEmptyStringSchema.optional(),
+  agentName: nonEmptyStringSchema.optional(),
+  sourceState: nonEmptyStringSchema.optional(),
   reflection: reflectionPayloadSchema,
 }).strict()
 
 export const storedReflectionSchema = z.object({
   id: z.number().int().positive(),
-  sessionId: z.string().min(1),
-  createdAt: z.string().min(1),
-  label: z.string().min(1).optional(),
-  agentName: z.string().min(1).optional(),
-  sourceState: z.string().min(1).optional(),
+  sessionId: nonEmptyStringSchema,
+  createdAt: nonEmptyStringSchema,
+  label: nonEmptyStringSchema.optional(),
+  agentName: nonEmptyStringSchema.optional(),
+  sourceState: nonEmptyStringSchema.optional(),
   reflection: reflectionPayloadSchema,
 }).strict()
 

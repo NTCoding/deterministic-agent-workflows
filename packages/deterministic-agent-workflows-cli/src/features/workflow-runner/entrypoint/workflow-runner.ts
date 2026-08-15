@@ -242,7 +242,9 @@ function handleRoute<
   switch (routeDef.type) {
     case 'session-start': {
       const transcriptPath = getSessionTranscriptPath === undefined ? '' : getSessionTranscriptPath()
-      return engineResultToRunnerResult(engine.startSession(resolveSessionId(), transcriptPath, getSessionRepository?.()))
+      const repository = getSessionRepository === undefined ? '' : getSessionRepository()
+      if (repository === undefined) throw new TypeError('repository must be a non-empty string.')
+      return engineResultToRunnerResult(engine.startSession(resolveSessionId(), transcriptPath, repository))
     }
     case 'transition':
       return engineResultToRunnerResult(engine.transition(resolveSessionId(), config.workflowDefinition.stateSchema.parse(resolveTarget())))
@@ -298,7 +300,9 @@ function handleHook<
         exitCode: EXIT_ALLOW
       }
     }
-    return engineResultToRunnerResult(engine.startSession(common.session_id, common.transcript_path, getRepositoryName(common.cwd)))
+    const repository = getRepositoryName(common.cwd)
+    if (repository === undefined) throw new TypeError('repository must be a non-empty string.')
+    return engineResultToRunnerResult(engine.startSession(common.session_id, common.transcript_path, repository))
   }
   if (!engine.hasSession(common.session_id)) return {
     output: '',

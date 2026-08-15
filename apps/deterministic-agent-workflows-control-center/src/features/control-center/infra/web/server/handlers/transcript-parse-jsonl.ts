@@ -173,8 +173,57 @@ function buildSystemEntry(timestamp: string, parentUuid: string | null, isSidech
   }
 }
 
+function toRecord(value: object): Record<string, unknown> {
+  return Object.entries(value).reduce<Record<string, unknown>>((record, [key, entry]) => {
+    record[key] = entry
+    return record
+  }, {})
+}
+
+function parseCodexTextPart(part: unknown): ReadonlyArray<{
+  readonly kind: 'text';
+  readonly text: string
+}> {
+  if (typeof part !== 'object' || part === null) return []
+  const item = toRecord(part)
+  if ((item['type'] === 'input_text' || item['type'] === 'output_text') && typeof item['text'] === 'string') {
+    return [{
+      kind: 'text',
+      text: item['text']
+    }]
+  }
+  return []
+}
+
+function isTranscriptRole(value: unknown): value is 'user' | 'assistant' {
+  return value === 'user' || value === 'assistant'
+}
+
+function parseCodexResponseItem(obj: unknown): TranscriptEntry | null {
+  if (typeof obj !== 'object' || obj === null) return null
+  const envelope = toRecord(obj)
+  if (envelope['type'] !== 'response_item') return null
+  const payload = envelope['payload']
+  if (typeof payload !== 'object' || payload === null) return null
+  const message = toRecord(payload)
+  const role = message['role']
+  if (message['type'] !== 'message' || !isTranscriptRole(role)) return null
+  const content = Array.isArray(message['content'])
+    ? message['content'].flatMap(parseCodexTextPart)
+    : []
+  if (content.length === 0) return null
+  return {
+    type: role,
+    timestamp: typeof envelope['timestamp'] === 'string' ? envelope['timestamp'] : new Date().toISOString(),
+    content,
+    ...(typeof message['id'] === 'string' ? { messageId: message['id'] } : {}),
+  }
+}
+
 function parseJsonlLine(line: string, toolNames: Map<string, string>): TranscriptEntry | null {
   const obj = safeParseJson(line)
+  const codexEntry = parseCodexResponseItem(obj)
+  if (codexEntry !== null) return codexEntry
   const parsed = jsonlEntrySchema.safeParse(obj)
   if (!parsed.success) return null
   const data = parsed.data
