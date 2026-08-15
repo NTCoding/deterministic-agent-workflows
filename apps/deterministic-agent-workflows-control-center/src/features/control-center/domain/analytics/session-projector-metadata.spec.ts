@@ -89,7 +89,12 @@ describe('projectSession domain metadata', () => {
         sessionId: 's1',
         type: 'session-started',
         at: '2026-01-01T00:00:00Z',
-        payload: { repository: 'org/repo' } 
+        payload: {
+          transcriptPath: '/transcripts/test-transcript.jsonl',
+          repository: 'org/repo',
+          currentState: 'SPAWN',
+          states: ['SPAWN', 'COMPLETE'],
+        }
       },
       {
         seq: 2,
