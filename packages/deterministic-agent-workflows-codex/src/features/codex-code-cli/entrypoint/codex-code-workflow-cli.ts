@@ -261,8 +261,8 @@ function preventUnsupportedStop<
   }
   return {
     output: JSON.stringify({
-      continue: false,
-      stopReason: `Workflow state ${state.currentStateMachineState} does not allow stopping.`
+      decision: 'block',
+      reason: `Workflow state ${state.currentStateMachineState} does not allow stopping.`
     }),
     exitCode: 0,
   }
