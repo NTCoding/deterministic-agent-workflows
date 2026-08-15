@@ -10,6 +10,7 @@ export function makeEvents(sessionId: string): ReadonlyArray<ParsedEvent> {
       type: 'session-started',
       at: '2026-01-01T00:00:00Z',
       payload: {
+        transcriptPath: '/transcripts/test-transcript.jsonl',
         repository: 'test/repo',
         currentState: 'SPAWN',
         states: WORKFLOW_STATES,

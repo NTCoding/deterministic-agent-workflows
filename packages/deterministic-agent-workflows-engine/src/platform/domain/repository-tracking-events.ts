@@ -1,20 +1,21 @@
 import { z } from 'zod'
+import { nonEmptyStringSchema } from './non-empty-string'
 
 const issueRecordedSchema = z.object({
   type: z.literal('issue-recorded'),
-  at: z.string(),
+  at: nonEmptyStringSchema,
   issueNumber: z.number(),
 })
 
 const branchRecordedSchema = z.object({
   type: z.literal('branch-recorded'),
-  at: z.string(),
-  branch: z.string(),
+  at: nonEmptyStringSchema,
+  branch: nonEmptyStringSchema,
 })
 
 const prRecordedSchema = z.object({
   type: z.literal('pr-recorded'),
-  at: z.string(),
+  at: nonEmptyStringSchema,
   prNumber: z.number(),
 })
 

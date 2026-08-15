@@ -247,7 +247,7 @@ const engineDeps: WorkflowEngineDeps = {
 it('reinserts the current procedure when identity verification fails', () => {
   const emptyWorkflowDeps: WorkflowDeps = {}
   const engine = new WorkflowEngine(workflowDefinition, engineDeps, emptyWorkflowDeps)
-  engine.startSession('session-1', '/transcripts/session-1.jsonl')
+  engine.startSession('session-1', '/transcripts/session-1.jsonl', 'test/repo')
 
   const result = engine.checkWrite('session-1', 'Write', '/workspace/note.md', () => true)
 
