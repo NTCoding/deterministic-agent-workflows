@@ -7,6 +7,7 @@ import type {
 import type {
   ListedReview,
   RecordReviewInput,
+  ReviewPayload,
   ReviewFilters,
   StoredReview,
 } from './review-types'
@@ -61,7 +62,40 @@ export interface WorkflowDefinition<
   getOperationBody?(op: string, state: TState): string
   getTransitionTitle?(to: TStateName, state: TState): string
   buildTransitionEvent?(from: TStateName, to: TStateName, stateBefore: TState, stateAfter: TState, now: string): BaseEvent
+  reviewCycle?: ReviewCycleDefinition<TState, TDeps, TStateName>
 }
+
+/** @riviere-role value-object */
+export type ReviewCycleDefinition<TState, TDeps, TStateName extends string> = {
+  readonly reviewingState: TStateName
+  readonly passedState: TStateName
+  readonly reworkState: TStateName
+  readonly blockedState: TStateName
+  readonly buildRequest: (state: TState, deps: TDeps) => ReviewBundleRequest
+}
+
+/** @riviere-role value-object */
+export type ReviewBundleRequest = {
+  readonly reviewedCommit: string
+  readonly requiredReviewTypes: readonly string[]
+}
+
+/** @riviere-role value-object */
+export type ReviewBundleRunInput = ReviewBundleRequest & {
+  readonly sessionId: string
+  readonly repository: string
+}
+
+/** @riviere-role value-object */
+export type ReviewBundleResult = {
+  readonly reviews: readonly {
+    readonly reviewType: string
+    readonly payload: ReviewPayload
+  }[]
+}
+
+/** @riviere-role value-object */
+export interface ReviewBundleRunner {run(input: ReviewBundleRunInput): ReviewBundleResult}
 
 /** @riviere-role value-object */
 export interface WorkflowEventStore {
@@ -87,4 +121,5 @@ export type WorkflowEngineDeps = {
   readonly appendToFile: (filePath: string, content: string) => void
   readonly now: () => string
   readonly transcriptReader: TranscriptReader
+  readonly reviewBundleRunner?: ReviewBundleRunner
 }

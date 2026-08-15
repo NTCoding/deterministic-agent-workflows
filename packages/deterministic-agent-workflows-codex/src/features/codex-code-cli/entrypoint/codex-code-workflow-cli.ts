@@ -106,6 +106,7 @@ export function createCodexWorkflowCli<
     appendToFile: config.processDeps.appendToFile,
     now,
     transcriptReader: config.transcriptReader ?? EMPTY_TRANSCRIPT_READER,
+    reviewBundleRunner: config.reviewBundleRunner,
   }
   const args = config.processDeps.getArgv().slice(2)
 
@@ -218,6 +219,9 @@ function checkToolUse<
     output: '',
     exitCode: 0
   }
+  if (input.tool_name === 'Agent' && engine.hasWorkflowOwnedReviewCycle()) {
+    return deny('Subagents are not agent-callable for a workflow-owned review cycle. Transition to the configured review state; the workflow dispatches the required review bundle.')
+  }
   const handler = resolvePreToolUseHandler(config)
   if (handler === undefined) return {
     output: '',
@@ -295,6 +299,9 @@ function registerSubagent<
   if (!engine.hasSessionStarted(input.session_id)) return {
     output: '',
     exitCode: 0
+  }
+  if (engine.isRequiredReviewAgent(input.session_id, input.agent_type)) {
+    return deny(`Review agent '${input.agent_type}' is workflow-owned. Transition to the configured review state; the workflow dispatches the required review bundle.`)
   }
   const result = engine.transaction(input.session_id, 'register-agent', (workflow) => workflow.registerAgent(input.agent_type, input.agent_id))
   return {

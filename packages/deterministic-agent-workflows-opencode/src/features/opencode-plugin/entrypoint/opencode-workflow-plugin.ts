@@ -46,8 +46,6 @@ const TRANSLATION_NOTE = [
   '> the `workflow` tool instead: `operation: "<op>"`, `args: ["<arg>", ...]`.',
   '> Example: `<workflow-command> transition REVIEWING`',
   '>   → `workflow({ operation: "transition", args: ["REVIEWING"] })`',
-  '> Example: `<workflow-command> record-review platform-review {...}`',
-  '>   → `workflow({ operation: "record-review", args: ["platform-review", "{...}"] })`',
   '',
   '---',
   '',
@@ -158,6 +156,7 @@ export function createOpenCodeWorkflowPlugin<
       appendToFile: (path, content) => appendFileSync(path, content),
       now,
       transcriptReader,
+      reviewBundleRunner: config.reviewBundleRunner,
     }
 
     const platformCtx: PlatformContext = {

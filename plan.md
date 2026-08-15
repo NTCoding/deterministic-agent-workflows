@@ -173,6 +173,11 @@ Status legend: `TODO`, `IN_PROGRESS`, `BLOCKED`, `DONE`
 ### 10) Native Codex adapter
 - [x] **DONE** Add project-configured Codex lifecycle hooks, session-scoped workflow commands, and enforcement.
 
+### 11) Workflow-owned review cycles
+- [x] **DONE** Make transition into the configured review state the sole way to run a required review bundle; persist one complete, commit-bound outcome and move automatically to the configured pass or rework state.
+- [x] **DONE** Remove agent-facing review recording/dispatch routes and reject duplicate review cycles for the same commit.
+- [x] **DONE** Prove the lifecycle through engine and adapter tests.
+
 ---
 
 ## Acceptance criteria for “done”
