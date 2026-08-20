@@ -97,7 +97,7 @@ export function createCodexWorkflowCli<
   const root = config.workflowRoot ?? resolveWorkflowRoot()
   const databasePath = resolveDatabasePath(config.processDeps)
   const store = config.processDeps.buildStore(databasePath)
-  const now = () => new Date().toISOString()
+  const now = config.now ?? (() => new Date().toISOString())
   const engineDeps: WorkflowEngineDeps = {
     store,
     getPluginRoot: () => root,
@@ -132,7 +132,12 @@ function handleWorkflowCommand<
   }
   const [operation, sessionId, ...operationArgs] = args
   const workflowDeps = buildWorkflowDeps(config, engineDeps.store, root, now, sessionId)
-  return createWorkflowRunner(config)([operation, ...operationArgs], engineDeps, workflowDeps, {getSessionId: () => sessionId,})
+  return createWorkflowRunner(config)([operation, ...operationArgs], engineDeps, workflowDeps, {
+    getSessionId: () => sessionId,
+    getSessionTranscriptPath: () => resolveTranscriptPath(sessionId, null, now),
+    getSessionRepository: () => getRepositoryName(process.cwd()),
+    getRepositoryRoot: () => process.cwd(),
+  })
 }
 
 function buildWorkflowDeps<
