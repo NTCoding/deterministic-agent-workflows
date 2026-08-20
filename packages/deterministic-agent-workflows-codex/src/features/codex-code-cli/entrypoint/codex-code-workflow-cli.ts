@@ -132,7 +132,12 @@ function handleWorkflowCommand<
   }
   const [operation, sessionId, ...operationArgs] = args
   const workflowDeps = buildWorkflowDeps(config, engineDeps.store, root, now, sessionId)
-  return createWorkflowRunner(config)([operation, ...operationArgs], engineDeps, workflowDeps, {getSessionId: () => sessionId,})
+  return createWorkflowRunner(config)([operation, ...operationArgs], engineDeps, workflowDeps, {
+    getSessionId: () => sessionId,
+    getSessionTranscriptPath: () => resolveTranscriptPath(sessionId, null, now),
+    getSessionRepository: () => getRepositoryName(process.cwd()),
+    getRepositoryRoot: () => process.cwd(),
+  })
 }
 
 function buildWorkflowDeps<

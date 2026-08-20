@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { z } from 'zod'
@@ -12,6 +12,8 @@ const root = mkdtempSync(join(tmpdir(), 'daw-codex-smoke-'))
 const databasePath = join(root, 'workflow-events.db')
 const transcriptPath = join(root, 'transcript.jsonl')
 writeFileSync(transcriptPath, '')
+const originalHome = process.env.HOME
+process.env.HOME = root
 const resolvedSessionIds = []
 
 class Workflow {
@@ -83,6 +85,7 @@ function invoke({ args = [], hook }) {
   createCodexWorkflowCli({
     workflowDefinition: definition,
     routes: {
+      init: { type: 'session-start' },
       transition: { type: 'transition', args: [arg.state('STATE', stateSchema)] },
       'record-note': { type: 'transaction', args: [arg.string('NOTE')], handler: (workflow) => workflow.recordNote() },
     },
@@ -113,6 +116,25 @@ function invoke({ args = [], hook }) {
 }
 
 try {
+  const now = new Date()
+  const directSessionDirectory = join(
+    root,
+    '.codex',
+    'sessions',
+    String(now.getUTCFullYear()),
+    String(now.getUTCMonth() + 1).padStart(2, '0'),
+    String(now.getUTCDate()).padStart(2, '0'),
+  )
+  const directTranscriptPath = join(directSessionDirectory, 'rollout-smoke-direct-command.jsonl')
+  mkdirSync(directSessionDirectory, { recursive: true })
+  writeFileSync(directTranscriptPath, '')
+
+  const directInit = invoke({ args: ['init', 'direct-command'] })
+  assert.equal(directInit.exitCode, 0, directInit.stderr)
+  assert.equal(resolvedSessionIds.at(-1), 'direct-command')
+  const directSessionEvents = createStore(databasePath).readEvents('direct-command')
+  assert.equal(directSessionEvents[0].payload.transcriptPath, directTranscriptPath)
+
   const start = invoke({ hook: { session_id: 'one', transcript_path: transcriptPath, cwd: process.cwd(), hook_event_name: 'SessionStart' } })
   assert.equal(start.exitCode, 0)
   assert.match(start.stdout, /Workflow session: one/)
@@ -170,5 +192,7 @@ try {
   } })
   assert.match(isolated.stdout, /permissionDecision":"deny"/)
 } finally {
+  if (originalHome === undefined) delete process.env.HOME
+  else process.env.HOME = originalHome
   rmSync(root, { recursive: true, force: true })
 }
