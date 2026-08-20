@@ -22,4 +22,5 @@ export type CodexWorkflowCliConfig<
   readonly workflowCommand: string
   readonly workflowRoot?: string
   readonly transcriptReader?: TranscriptReader
+  readonly now?: () => string
 }

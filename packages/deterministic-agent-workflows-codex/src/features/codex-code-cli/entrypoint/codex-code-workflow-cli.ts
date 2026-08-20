@@ -97,7 +97,7 @@ export function createCodexWorkflowCli<
   const root = config.workflowRoot ?? resolveWorkflowRoot()
   const databasePath = resolveDatabasePath(config.processDeps)
   const store = config.processDeps.buildStore(databasePath)
-  const now = () => new Date().toISOString()
+  const now = config.now ?? (() => new Date().toISOString())
   const engineDeps: WorkflowEngineDeps = {
     store,
     getPluginRoot: () => root,

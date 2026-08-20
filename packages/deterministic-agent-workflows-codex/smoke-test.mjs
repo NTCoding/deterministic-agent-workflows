@@ -1,5 +1,10 @@
 import assert from 'node:assert/strict'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { z } from 'zod'
@@ -15,6 +20,7 @@ writeFileSync(transcriptPath, '')
 const originalHome = process.env.HOME
 process.env.HOME = root
 const resolvedSessionIds = []
+const workflowNow = () => '2026-08-20T15:00:00.000Z'
 
 class Workflow {
   constructor(state) {
@@ -97,6 +103,7 @@ function invoke({ args = [], hook }) {
     }],
     workflowCommand: 'node ./workflow-codex.mjs',
     workflowRoot: root,
+    now: workflowNow,
     processDeps: {
       getEnv: (name) => name === 'HOME' ? root : name === 'WORKFLOW_EVENTS_DB' ? databasePath : undefined,
       getArgv: () => ['node', 'workflow-codex.mjs', ...args],
@@ -116,7 +123,7 @@ function invoke({ args = [], hook }) {
 }
 
 try {
-  const now = new Date()
+  const now = new Date(workflowNow())
   const directSessionDirectory = join(
     root,
     '.codex',
@@ -134,6 +141,7 @@ try {
   assert.equal(resolvedSessionIds.at(-1), 'direct-command')
   const directSessionEvents = createStore(databasePath).readEvents('direct-command')
   assert.equal(directSessionEvents[0].payload.transcriptPath, directTranscriptPath)
+  assert.equal(directSessionEvents[0].payload.repository, 'NTCoding/deterministic-agent-workflows')
 
   const start = invoke({ hook: { session_id: 'one', transcript_path: transcriptPath, cwd: process.cwd(), hook_event_name: 'SessionStart' } })
   assert.equal(start.exitCode, 0)
