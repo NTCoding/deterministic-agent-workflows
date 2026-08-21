@@ -40,7 +40,7 @@ export function createWorkflowCli<
   const configuredWorkflowEventsDbPath = processDeps.getEnv('WORKFLOW_EVENTS_DB')
   const workflowEventsDbPath = configuredWorkflowEventsDbPath !== undefined && configuredWorkflowEventsDbPath !== ''
     ? configuredWorkflowEventsDbPath
-    : join(readEnvVar('HOME'), '.workflow-events.db')
+    : join(readEnvVar('HOME'), 'ai-workflow-database', '.workflow-events.db')
 
   const store = processDeps.buildStore(workflowEventsDbPath)
   const now = () => new Date().toISOString()
