@@ -160,7 +160,7 @@ function resolveDatabasePath(processDeps: ProcessDeps): string {
   if (configured !== undefined && configured !== '') return configured
   const home = processDeps.getEnv('HOME')
   if (home === undefined || home === '') throw new TypeError('Missing required environment variable: HOME')
-  return join(home, '.workflow-events.db')
+  return join(home, 'ai-workflow-database', '.workflow-events.db')
 }
 
 function handleHookInvocation<
