@@ -46,16 +46,26 @@ function createHandler() {
 }
 
 describe('createPreToolUseHandler', () => {
-  it.each(['Write', 'Edit', 'MultiEdit', 'NotebookEdit'])('checks the Claude Code %s tool as a write', (toolName) => {
+  it.each([
+    ['Write', { file_path: 'src/file.ts' }],
+    ['Edit', { file_path: 'src/file.ts' }],
+    ['MultiEdit', { file_path: 'src/file.ts' }],
+    ['NotebookEdit', { notebook_path: 'src/notebook.ipynb' }],
+  ])('checks the Claude Code %s tool as a write', (toolName, toolInput) => {
     const {
       engine,
       checkWrite,
     } = createEngine()
 
-    createHandler()(engine, 'session-1', toolName, { file_path: 'src/file.ts' })
+    createHandler()(engine, 'session-1', toolName, toolInput)
 
     expect(checkWrite).toHaveBeenCalledOnce()
-    expect(checkWrite).toHaveBeenCalledWith('session-1', toolName, 'src/file.ts', expect.any(Function))
+    expect(checkWrite).toHaveBeenCalledWith(
+      'session-1',
+      toolName,
+      toolName === 'NotebookEdit' ? 'src/notebook.ipynb' : 'src/file.ts',
+      expect.any(Function),
+    )
   })
 
   it('checks OpenCode writes and every path in an apply_patch input', () => {

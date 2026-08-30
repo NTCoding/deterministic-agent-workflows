@@ -345,7 +345,12 @@ try {
     tool: 'workflow',
     sessionID: 'session-1',
     callID: 'workflow-1',
-  }, { args: { operation: 'record-issue', args: ['410'] } })
+  }, {
+    args: {
+      operation: 'record-issue',
+      args: ['410'],
+    },
+  })
   const recordIssueOutput = await hooks.tool.workflow.execute({
     operation: 'record-issue',
     args: ['410'],

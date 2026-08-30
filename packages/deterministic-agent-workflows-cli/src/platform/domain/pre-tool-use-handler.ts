@@ -145,6 +145,7 @@ function checkCustomGates<
 function extractFilePath(toolInput: Record<string, unknown>): string {
   return resolveStringField(toolInput['file_path'])
     || resolveStringField(toolInput['filePath'])
+    || resolveStringField(toolInput['notebook_path'])
     || resolveStringField(toolInput['path'])
     || resolveStringField(toolInput['pattern'])
 }
