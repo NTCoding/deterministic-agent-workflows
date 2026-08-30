@@ -1,6 +1,6 @@
 {
   "name": "@nt-ai-lab/deterministic-agent-workflow-claude-code",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "private": false,
   "type": "module",
   "repository": {
