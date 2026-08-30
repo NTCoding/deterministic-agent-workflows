@@ -362,17 +362,27 @@ try {
   let blocked = false
   try {
     await beforeHook({
-      tool: 'Write',
+      tool: 'write',
       sessionID: 'session-1',
       callID: 'c1' 
-    }, { args: { file_path: 'src/a.ts' } })
+    }, { args: { filePath: 'src/a.ts' } })
   } catch {
     blocked = true
+  }
+  let applyPatchBlocked = false
+  try {
+    await beforeHook({
+      tool: 'apply_patch',
+      sessionID: 'session-1',
+      callID: 'apply-patch-1',
+    }, { args: { patchText: '*** Begin Patch\n*** Update File: src/a.ts\n*** Move to: src/b.ts\n*** End Patch' } })
+  } catch {
+    applyPatchBlocked = true
   }
   let bashBlocked = false
   try {
     await beforeHook({
-      tool: 'Bash',
+      tool: 'bash',
       sessionID: 'session-1',
       callID: 'bash-1',
     }, { args: { command: 'rm -rf build' } })
@@ -403,14 +413,15 @@ try {
   let allowed = true
   try {
     await beforeHook({
-      tool: 'Write',
+      tool: 'write',
       sessionID: 'session-1',
       callID: 'c2' 
-    }, { args: { file_path: 'src/a.ts' } })
+    }, { args: { filePath: 'src/a.ts' } })
   } catch {
     allowed = false
   }
-  const writeCheckCount = readWriteCheckCount(workflowEventsPath, 'session-1', 'Write')
+  const writeCheckCount = readWriteCheckCount(workflowEventsPath, 'session-1', 'write')
+  const applyPatchWriteCheckCount = readWriteCheckCount(workflowEventsPath, 'session-1', 'apply_patch')
 
   await hooks.tool.workflow.execute({
     operation: 'transition',
@@ -449,6 +460,7 @@ try {
   if (
     !initOutput.includes('planning instructions')
     || !blocked
+    || !applyPatchBlocked
     || !bashBlocked
     || !allowed
     || !recordIssueOutput.includes('record-issue')
@@ -456,6 +468,7 @@ try {
     || !stateAfterRecordingIssue.issueNumbers.includes(410)
     || workflowWriteCheckCount !== 0
     || writeCheckCount !== 2
+    || applyPatchWriteCheckCount !== 1
     || identityStatus !== 'verified'
     || promptedTexts.length !== 1
     || !reviewOutput.includes('"ok": true')
@@ -470,6 +483,7 @@ try {
   ) {
     throw new Error(`Smoke test failed: ${JSON.stringify({
       blocked,
+      applyPatchBlocked,
       bashBlocked,
       allowed,
       recordIssueOutput,
@@ -477,6 +491,7 @@ try {
       stateAfterRecordingIssue,
       workflowWriteCheckCount,
       writeCheckCount,
+      applyPatchWriteCheckCount,
       identityStatus,
       promptedTexts,
       initOutput,
