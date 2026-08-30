@@ -6,8 +6,14 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { z } from 'zod'
 import { arg } from '../deterministic-agent-workflows-cli/dist/index.js'
-import { pass } from '../deterministic-agent-workflows-engine/dist/index.js'
-import { openSqliteDatabase } from '../deterministic-agent-workflows-event-store/dist/index.js'
+import {
+  pass,
+  reduceWorkflowStateFromStoredEvents,
+} from '../deterministic-agent-workflows-engine/dist/index.js'
+import {
+  createStore,
+  openSqliteDatabase,
+} from '../deterministic-agent-workflows-event-store/dist/index.js'
 import { createOpenCodeWorkflowPlugin } from './dist/index.js'
 
 const repoRoot = fileURLToPath(new URL('../..', import.meta.url))
@@ -111,6 +117,27 @@ function readReviewSummary(dbPath, sessionId) {
   }
 }
 
+function readWorkflowState(dbPath, sessionId) {
+  const store = createStore(dbPath)
+  try {
+    return reduceWorkflowStateFromStoredEvents(workflowDefinition, store.readEvents(sessionId))
+  } finally {
+    store.db.close()
+  }
+}
+
+function readWriteCheckCount(dbPath, sessionId, tool) {
+  const db = openSqliteDatabase(dbPath, { readonly: true })
+  try {
+    const row = db.prepare(
+      "SELECT COUNT(1) AS count FROM events WHERE session_id = ? AND type = 'write-checked' AND json_extract(payload, '$.tool') = ?",
+    ).get(sessionId, tool)
+    return Number(row.count)
+  } finally {
+    db.close()
+  }
+}
+
 async function captureWorkflowError(workflowCall) {
   try {
     await workflowCall()
@@ -122,7 +149,8 @@ async function captureWorkflowError(workflowCall) {
 
 function createWorkflow(initialState = {
   currentStateMachineState: 'PLANNING',
-  transcriptPath: '' 
+  transcriptPath: '',
+  issueNumbers: [],
 }) {
   let state = initialState
   const pending = []
@@ -143,6 +171,12 @@ function createWorkflow(initialState = {
           currentStateMachineState: event.to 
         }
       }
+      if (event.type === 'issue-recorded' && typeof event.issueNumber === 'number') {
+        state = {
+          ...state,
+          issueNumbers: [...state.issueNumbers, event.issueNumber],
+        }
+      }
     },
     getPendingEvents: () => pending.splice(0),
     startSession: (transcriptPath, repository) => {
@@ -161,6 +195,18 @@ function createWorkflow(initialState = {
     registerAgent: () => pass(),
     handleTeammateIdle: () => pass(),
     executeRecording: () => pass(),
+    recordIssue: (issueNumber) => {
+      pending.push({
+        type: 'issue-recorded',
+        at: new Date().toISOString(),
+        issueNumber,
+      })
+      state = {
+        ...state,
+        issueNumbers: [...state.issueNumbers, issueNumber],
+      }
+      return pass()
+    },
   }
 }
 
@@ -178,13 +224,20 @@ const workflowDefinition = {
         currentStateMachineState: event.to
       }
     }
+    if (event.type === 'issue-recorded' && typeof event.issueNumber === 'number') {
+      return {
+        ...state,
+        issueNumbers: [...state.issueNumbers, event.issueNumber],
+      }
+    }
     return state
   },
   buildWorkflow: (state) => createWorkflow(state),
-  stateSchema: z.enum(['PLANNING', 'DEVELOPING', 'REVIEWING']),
+  stateSchema: z.enum(['PLANNING', 'DEVELOPING', 'REVIEWING', 'BLOCKED']),
   initialState: () => ({
     currentStateMachineState: 'PLANNING',
-    transcriptPath: ''
+    transcriptPath: '',
+    issueNumbers: [],
   }),
   getRegistry: () => ({
     PLANNING: {
@@ -198,7 +251,7 @@ const workflowDefinition = {
       emoji: '🛠️',
       agentInstructions: 'states/developing.md',
       allowIdle: true,
-      canTransitionTo: ['PLANNING', 'REVIEWING'],
+      canTransitionTo: ['PLANNING', 'REVIEWING', 'BLOCKED'],
       allowedWorkflowOperations: [],
     },
     REVIEWING: {
@@ -206,6 +259,12 @@ const workflowDefinition = {
       agentInstructions: 'states/reviewing.md',
       canTransitionTo: ['DEVELOPING'],
       allowedWorkflowOperations: ['record-review'],
+    },
+    BLOCKED: {
+      emoji: 'BLOCKED',
+      agentInstructions: 'states/blocked.md',
+      canTransitionTo: ['DEVELOPING'],
+      allowedWorkflowOperations: [],
     },
   }),
   buildTransitionContext: (state, from, to) => ({
@@ -226,7 +285,12 @@ const routes = {
   init: { type: 'session-start' },
   transition: {
     type: 'transition',
-    args: [arg.state('STATE', z.enum(['PLANNING', 'DEVELOPING', 'REVIEWING']))]
+    args: [arg.state('STATE', z.enum(['PLANNING', 'DEVELOPING', 'REVIEWING', 'BLOCKED']))]
+  },
+  'record-issue': {
+    type: 'transaction',
+    args: [arg.string('ISSUE')],
+    handler: (workflow, issue) => workflow.recordIssue(Number(issue)),
   },
 }
 
@@ -235,6 +299,7 @@ mkdirSync(join(pluginRoot, 'states'))
 writeFileSync(join(pluginRoot, 'states', 'planning.md'), 'planning instructions')
 writeFileSync(join(pluginRoot, 'states', 'developing.md'), 'developing instructions')
 writeFileSync(join(pluginRoot, 'states', 'reviewing.md'), 'reviewing instructions')
+writeFileSync(join(pluginRoot, 'states', 'blocked.md'), 'blocked instructions')
 const workflowEventsPath = join(pluginRoot, 'workflow-events.db')
 const opencodeDatabasePath = join(pluginRoot, 'opencode.db')
 process.env['WORKFLOW_EVENTS_DB'] = workflowEventsPath
@@ -276,6 +341,22 @@ try {
 
   const initOutput = await hooks.tool.workflow.execute({ operation: 'init' }, ctx)
   const beforeHook = hooks['tool.execute.before']
+  await beforeHook({
+    tool: 'workflow',
+    sessionID: 'session-1',
+    callID: 'workflow-1',
+  }, {
+    args: {
+      operation: 'record-issue',
+      args: ['410'],
+    },
+  })
+  const recordIssueOutput = await hooks.tool.workflow.execute({
+    operation: 'record-issue',
+    args: ['410'],
+  }, ctx)
+  const stateAfterRecordingIssue = readWorkflowState(workflowEventsPath, 'session-1')
+  const workflowWriteCheckCount = readWriteCheckCount(workflowEventsPath, 'session-1', 'workflow')
   await hooks.event({
     event: {
       type: 'session.idle',
@@ -286,17 +367,45 @@ try {
   let blocked = false
   try {
     await beforeHook({
-      tool: 'Write',
+      tool: 'write',
       sessionID: 'session-1',
       callID: 'c1' 
-    }, { args: { file_path: 'src/a.ts' } })
+    }, { args: { filePath: 'src/a.ts' } })
   } catch {
     blocked = true
+  }
+  let applyPatchBlocked = false
+  try {
+    await beforeHook({
+      tool: 'apply_patch',
+      sessionID: 'session-1',
+      callID: 'apply-patch-1',
+    }, { args: { patchText: '*** Begin Patch\n*** Update File: src/a.ts\n*** Move to: src/b.ts\n*** End Patch' } })
+  } catch {
+    applyPatchBlocked = true
+  }
+  let bashBlocked = false
+  try {
+    await beforeHook({
+      tool: 'bash',
+      sessionID: 'session-1',
+      callID: 'bash-1',
+    }, { args: { command: 'rm -rf build' } })
+  } catch {
+    bashBlocked = true
   }
 
   await hooks.tool.workflow.execute({
     operation: 'transition',
     args: ['DEVELOPING'] 
+  }, ctx)
+  const blockedTransitionOutput = await hooks.tool.workflow.execute({
+    operation: 'transition',
+    args: ['BLOCKED'],
+  }, ctx)
+  await hooks.tool.workflow.execute({
+    operation: 'transition',
+    args: ['DEVELOPING'],
   }, ctx)
   await hooks.event({
     event: {
@@ -309,13 +418,15 @@ try {
   let allowed = true
   try {
     await beforeHook({
-      tool: 'Write',
+      tool: 'write',
       sessionID: 'session-1',
       callID: 'c2' 
-    }, { args: { file_path: 'src/a.ts' } })
+    }, { args: { filePath: 'src/a.ts' } })
   } catch {
     allowed = false
   }
+  const writeCheckCount = readWriteCheckCount(workflowEventsPath, 'session-1', 'write')
+  const applyPatchWriteCheckCount = readWriteCheckCount(workflowEventsPath, 'session-1', 'apply_patch')
 
   await hooks.tool.workflow.execute({
     operation: 'transition',
@@ -354,7 +465,15 @@ try {
   if (
     !initOutput.includes('planning instructions')
     || !blocked
+    || !applyPatchBlocked
+    || !bashBlocked
     || !allowed
+    || !recordIssueOutput.includes('record-issue')
+    || !blockedTransitionOutput.includes('BLOCKED')
+    || !stateAfterRecordingIssue.issueNumbers.includes(410)
+    || workflowWriteCheckCount !== 0
+    || writeCheckCount !== 2
+    || applyPatchWriteCheckCount !== 1
     || identityStatus !== 'verified'
     || promptedTexts.length !== 1
     || !reviewOutput.includes('"ok": true')
@@ -369,7 +488,15 @@ try {
   ) {
     throw new Error(`Smoke test failed: ${JSON.stringify({
       blocked,
+      applyPatchBlocked,
+      bashBlocked,
       allowed,
+      recordIssueOutput,
+      blockedTransitionOutput,
+      stateAfterRecordingIssue,
+      workflowWriteCheckCount,
+      writeCheckCount,
+      applyPatchWriteCheckCount,
       identityStatus,
       promptedTexts,
       initOutput,
