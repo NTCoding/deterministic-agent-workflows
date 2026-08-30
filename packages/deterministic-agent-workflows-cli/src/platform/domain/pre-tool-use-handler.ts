@@ -81,7 +81,13 @@ export function createPreToolUseHandler<
     }
 
     if (toolName === 'Bash') return engine.checkBash(sessionId, toolName, command, config.bashForbidden)
-    return engine.checkWrite(sessionId, toolName, filePath, config.isWriteAllowed)
+    if (toolName === 'Write' || toolName === 'Edit' || toolName === 'NotebookEdit') {
+      return engine.checkWrite(sessionId, toolName, filePath, config.isWriteAllowed)
+    }
+    return {
+      type: 'success',
+      output: '',
+    }
   }
 }
 
