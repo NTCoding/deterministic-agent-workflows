@@ -78,19 +78,6 @@ export function checkBashWithPlatformEvents<
   const currentPrefix = getExpectedPrefix(currentStateName, context.factory.getRegistry())
   const gate = context.applyIdentityGate('bash-check')
   if (gate !== undefined) return gate
-  if (toolName !== 'Bash') {
-    context.persistPlatformEvent({
-      type: 'bash-checked',
-      at: context.engineDeps.now(),
-      tool: toolName,
-      command,
-      allowed: true,
-    })
-    return {
-      type: 'success',
-      output: '',
-    }
-  }
 
   const exemptions = context.factory.getRegistry()[currentStateName].allowForbidden?.bash ?? []
   const bashCheckResult = checkBashCommand(command, bashForbidden, exemptions)
@@ -141,21 +128,6 @@ export function checkWriteWithPlatformEvents<
   const currentPrefix = getExpectedPrefix(currentStateName, context.factory.getRegistry())
   const gate = context.applyIdentityGate('write-check')
   if (gate !== undefined) return gate
-
-  const writeTools = new Set(['Write', 'Edit', 'NotebookEdit'])
-  if (!writeTools.has(toolName)) {
-    context.persistPlatformEvent({
-      type: 'write-checked',
-      at: context.engineDeps.now(),
-      tool: toolName,
-      filePath,
-      allowed: true,
-    })
-    return {
-      type: 'success',
-      output: '',
-    }
-  }
 
   const storePath = `${context.engineDeps.getPluginRoot()}/workflow.db`
   if (filePath === storePath) {
