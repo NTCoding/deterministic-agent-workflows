@@ -364,5 +364,5 @@ function resolveOpenCodeDatabasePath(configured?: string): string {
 function resolveWorkflowEventsDatabasePath(): string {
   const configured = process.env['WORKFLOW_EVENTS_DB']
   if (configured !== undefined && configured !== '') return configured
-  return join(homedir(), '.workflow-events.db')
+  return join(homedir(), 'ai-workflow-database', '.workflow-events.db')
 }
