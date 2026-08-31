@@ -76,6 +76,15 @@ const idleCheckedSchema = z.object({
   reason: nonEmptyStringSchema.optional(),
 })
 
+const stoppingCheckedSchema = z.object({
+  type: z.literal('stopping-checked'),
+  at: nonEmptyStringSchema,
+  action: z.enum(['stop', 'question']),
+  tool: nonEmptyStringSchema.optional(),
+  allowed: z.boolean(),
+  reason: nonEmptyStringSchema.optional(),
+})
+
 const identityVerifiedSchema = z.object({
   type: z.literal('identity-verified'),
   at: nonEmptyStringSchema,
@@ -107,6 +116,7 @@ export const engineEventSchema = z.discriminatedUnion('type', [
   bashCheckedSchema,
   pluginReadCheckedSchema,
   idleCheckedSchema,
+  stoppingCheckedSchema,
   identityVerifiedSchema,
   contextRequestedSchema,
   reviewRecordedEventSchema,
@@ -120,6 +130,7 @@ const platformOwnedEventTypesExcludedFromWorkflowState = new Set<string>([
   'bash-checked',
   'plugin-read-checked',
   'idle-checked',
+  'stopping-checked',
   'identity-verified',
   'context-requested',
 ])
@@ -149,6 +160,8 @@ export type BashCheckedEvent = z.infer<typeof bashCheckedSchema>
 export type PluginReadCheckedEvent = z.infer<typeof pluginReadCheckedSchema>
 /** @riviere-role value-object */
 export type IdleCheckedEvent = z.infer<typeof idleCheckedSchema>
+/** @riviere-role value-object */
+export type StoppingCheckedEvent = z.infer<typeof stoppingCheckedSchema>
 /** @riviere-role value-object */
 export type IdentityVerifiedEvent = z.infer<typeof identityVerifiedSchema>
 /** @riviere-role value-object */

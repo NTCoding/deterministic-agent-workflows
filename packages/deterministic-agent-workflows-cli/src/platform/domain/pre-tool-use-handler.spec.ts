@@ -27,13 +27,19 @@ function createEngine() {
     void args
     return success
   })
+  const checkStopping = vi.fn((...args: unknown[]) => {
+    void args
+    return success
+  })
   return {
     engine: {
       transaction: vi.fn(() => success),
       checkBash,
+      checkStopping,
       checkWrite,
     },
     checkBash,
+    checkStopping,
     checkWrite,
   }
 }
@@ -111,6 +117,25 @@ describe('createPreToolUseHandler', () => {
     const result = createHandler()(engine, 'session-1', 'workflow', { operation: 'record-issue' })
 
     expect(result).toStrictEqual(success)
+    expect(checkWrite).not.toHaveBeenCalled()
+  })
+
+  it('routes the configured question tool through stopping policy', () => {
+    const {
+      engine,
+      checkStopping,
+      checkWrite,
+    } = createEngine()
+    const handler = createPreToolUseHandler<TestWorkflow, TestState, unknown>({
+      bashForbidden: { commands: [] },
+      isWriteAllowed: () => true,
+      questionToolName: 'AskUserQuestion',
+    })
+
+    const result = handler(engine, 'session-1', 'AskUserQuestion', {})
+
+    expect(result).toStrictEqual(success)
+    expect(checkStopping).toHaveBeenCalledWith('session-1', 'question', 'AskUserQuestion')
     expect(checkWrite).not.toHaveBeenCalled()
   })
 

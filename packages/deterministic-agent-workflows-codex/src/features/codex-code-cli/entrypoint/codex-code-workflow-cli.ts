@@ -13,10 +13,7 @@ import type {
   TranscriptReader,
   WorkflowEngineDeps,
 } from '@nt-ai-lab/deterministic-agent-workflow-engine'
-import {
-  reduceWorkflowStateFromStoredEvents,
-  WorkflowEngine,
-} from '@nt-ai-lab/deterministic-agent-workflow-engine'
+import { WorkflowEngine } from '@nt-ai-lab/deterministic-agent-workflow-engine'
 import {
   createPreToolUseHandler,
   createWorkflowRunner,
@@ -36,6 +33,7 @@ import {
 } from '../../../platform/infra/external-clients/codex/codex-hook-schemas'
 
 const EMPTY_TRANSCRIPT_READER: TranscriptReader = { readMessages: () => [] }
+const CODEX_QUESTION_TOOL = 'request_user_input'
 
 function requireNonEmptyString(value: string | undefined, name: string): string {
   if (value === undefined) throw new TypeError(`${name} must be a non-empty string.`)
@@ -183,7 +181,7 @@ function handleHookInvocation<
     case 'SessionStart': return startSession(config, engine, parsed.session_id, parsed.transcript_path, parsed.cwd, now)
     case 'PreToolUse': return checkToolUse(config, engine, raw)
     case 'SubagentStart': return registerSubagent(engine, raw)
-    case 'Stop': return preventUnsupportedStop(config, engineDeps, parsed.session_id)
+    case 'Stop': return preventUnsupportedStop(engine, parsed.session_id)
   }
 }
 
@@ -224,9 +222,14 @@ function checkToolUse<
     exitCode: 0
   }
   const handler = resolvePreToolUseHandler(config)
-  if (handler === undefined) return {
-    output: '',
-    exitCode: 0
+  if (handler === undefined) {
+    if (input.tool_name === CODEX_QUESTION_TOOL) {
+      return toHookResult(engine.checkStopping(input.session_id, 'question', input.tool_name))
+    }
+    return {
+      output: '',
+      exitCode: 0
+    }
   }
   if (input.tool_name === 'apply_patch') return checkPatchPaths(handler, engine, input.session_id, input.tool_input)
   return toHookResult(handler(engine, input.session_id, input.tool_name, input.tool_input))
@@ -251,6 +254,7 @@ function resolvePreToolUseHandler<
   return createPreToolUseHandler({
     bashForbidden: config.bashForbidden,
     isWriteAllowed: config.isWriteAllowed,
+    questionToolName: CODEX_QUESTION_TOOL,
     customGates: config.customGates,
   })
 }
@@ -314,24 +318,20 @@ function preventUnsupportedStop<
   TDeps,
   TStateName extends string,
   TOperation extends string,
->(config: CodexWorkflowCliConfig<TWorkflow, TState, TDeps, TStateName, TOperation>, engineDeps: WorkflowEngineDeps, sessionId: string): RunnerResult {
-  const stored = engineDeps.store.readEvents(sessionId)
-  if (!engineDeps.store.hasSessionStarted(sessionId)) return {
+>(engine: WorkflowEngine<TWorkflow, TState, TDeps, TStateName, TOperation>, sessionId: string): RunnerResult {
+  if (!engine.hasSessionStarted(sessionId)) return {
     output: '',
     exitCode: 0
   }
-  const state = reduceWorkflowStateFromStoredEvents(config.workflowDefinition, stored)
-  if (config.workflowDefinition.getRegistry()[state.currentStateMachineState].allowIdle === true) return {
-    output: '',
-    exitCode: 0
-  }
-  return {
+  const result = engine.checkStopping(sessionId, 'stop')
+  if (result.type === 'blocked') return {
     output: JSON.stringify({
       decision: 'block',
-      reason: `Workflow state ${state.currentStateMachineState} does not allow stopping.`
+      reason: result.output,
     }),
     exitCode: 0,
   }
+  return toRunnerResult(result)
 }
 
 function toHookResult(result: EngineResult): RunnerResult {

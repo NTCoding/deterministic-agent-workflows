@@ -394,6 +394,16 @@ try {
   } catch {
     bashBlocked = true
   }
+  let questionBlocked = false
+  try {
+    await beforeHook({
+      tool: 'question',
+      sessionID: 'session-1',
+      callID: 'question-1',
+    }, { args: {} })
+  } catch {
+    questionBlocked = true
+  }
 
   await hooks.tool.workflow.execute({
     operation: 'transition',
@@ -415,16 +425,18 @@ try {
   })
   const identityStatus = readLatestIdentityStatus(workflowEventsPath, 'session-1')
 
-  let allowed = true
-  try {
-    await beforeHook({
-      tool: 'write',
-      sessionID: 'session-1',
-      callID: 'c2' 
-    }, { args: { filePath: 'src/a.ts' } })
-  } catch {
-    allowed = false
-  }
+  const writeError = await captureWorkflowError(() => beforeHook({
+    tool: 'write',
+    sessionID: 'session-1',
+    callID: 'c2'
+  }, { args: { filePath: 'src/a.ts' } }))
+  const allowed = writeError === undefined
+  const questionError = await captureWorkflowError(() => beforeHook({
+    tool: 'question',
+    sessionID: 'session-1',
+    callID: 'question-2',
+  }, { args: {} }))
+  const questionAllowed = questionError === undefined
   const writeCheckCount = readWriteCheckCount(workflowEventsPath, 'session-1', 'write')
   const applyPatchWriteCheckCount = readWriteCheckCount(workflowEventsPath, 'session-1', 'apply_patch')
 
@@ -467,7 +479,9 @@ try {
     || !blocked
     || !applyPatchBlocked
     || !bashBlocked
+    || !questionBlocked
     || !allowed
+    || !questionAllowed
     || !recordIssueOutput.includes('record-issue')
     || !blockedTransitionOutput.includes('BLOCKED')
     || !stateAfterRecordingIssue.issueNumbers.includes(410)
@@ -490,7 +504,9 @@ try {
       blocked,
       applyPatchBlocked,
       bashBlocked,
+      questionBlocked,
       allowed,
+      questionAllowed,
       recordIssueOutput,
       blockedTransitionOutput,
       stateAfterRecordingIssue,

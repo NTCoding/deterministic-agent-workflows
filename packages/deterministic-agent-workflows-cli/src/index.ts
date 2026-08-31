@@ -24,6 +24,7 @@ export type {
 export {
   formatContextInjection,
   formatDenyDecision,
+  formatStopDenyDecision,
 } from './platform/infra/cli/presentation/hook-output'
 export { createWorkflowCli } from './features/workflow-cli/entrypoint/workflow-cli'
 export type {

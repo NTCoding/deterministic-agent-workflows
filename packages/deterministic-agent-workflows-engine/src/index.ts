@@ -76,6 +76,7 @@ export type {
   BashCheckedEvent,
   PluginReadCheckedEvent,
   IdleCheckedEvent,
+  StoppingCheckedEvent,
   IdentityVerifiedEvent,
   ContextRequestedEvent,
   ReviewRecordedEvent,
@@ -115,6 +116,7 @@ export type {
   WorkflowEventStore,
   WorkflowEngineDeps,
 } from './platform/domain/workflow-engine-types'
+export type { StoppingAction } from './platform/domain/workflow-engine-platform-operations'
 
 export type {
   TranscriptMessage, TranscriptReader 

@@ -16,7 +16,7 @@ export type CodexWorkflowCliConfig<
   TDeps,
   TStateName extends string = string,
   TOperation extends string = string,
-> = WorkflowRunnerConfig<TWorkflow, TState, TDeps, TStateName, TOperation> & {
+> = Omit<WorkflowRunnerConfig<TWorkflow, TState, TDeps, TStateName, TOperation>, 'questionToolName'> & {
   readonly buildWorkflowDeps: (platform: PlatformContext) => TDeps
   readonly processDeps: ProcessDeps
   readonly workflowCommand: string

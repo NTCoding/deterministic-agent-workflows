@@ -1,7 +1,9 @@
 import { checkIdentity } from './identity-verification'
 import {
   checkBashWithPlatformEvents,
+  checkStopAllowed,
   checkWriteWithPlatformEvents,
+  type StoppingAction,
   writeJournalWithPlatformEvents,
 } from './workflow-engine-platform-operations'
 import {
@@ -210,6 +212,12 @@ export class WorkflowEngine<
     this.requireSession(sessionId)
     const workflow = this.rehydrateFromEvents(sessionId)
     return checkWriteWithPlatformEvents(this.platformOperationContext(sessionId, workflow), toolName, filePath, isWriteAllowed)
+  }
+
+  checkStopping(sessionId: string, action: StoppingAction, tool?: string): EngineResult {
+    this.requireSession(sessionId)
+    const workflow = this.rehydrateFromEvents(sessionId)
+    return checkStopAllowed(this.platformOperationContext(sessionId, workflow), action, tool)
   }
 
   getState(sessionId: string): EngineResult {

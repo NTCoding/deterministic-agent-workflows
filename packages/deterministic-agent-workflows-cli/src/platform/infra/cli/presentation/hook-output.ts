@@ -10,6 +10,14 @@ export function formatDenyDecision(reason: string): string {
 }
 
 /** @riviere-role cli-output-formatter */
+export function formatStopDenyDecision(reason: string): string {
+  return JSON.stringify({
+    decision: 'block',
+    reason,
+  })
+}
+
+/** @riviere-role cli-output-formatter */
 export function formatContextInjection(context: string): string {
   return JSON.stringify({ additionalContext: context })
 }

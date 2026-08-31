@@ -27,6 +27,53 @@ type PlatformOperationContext<
   readonly persistPlatformEvent: (event: unknown) => void
 }
 
+/** @riviere-role value-object */
+export type StoppingAction = 'stop' | 'question'
+
+/** @riviere-role domain-service */
+export function checkStopAllowed<
+  TWorkflow extends RehydratableWorkflow<TState>,
+  TState extends BaseWorkflowState<TStateName>,
+  TDeps,
+  TStateName extends string,
+  TOperation extends string,
+>(
+  context: PlatformOperationContext<TWorkflow, TState, TDeps, TStateName, TOperation>,
+  action: StoppingAction,
+  tool?: string,
+): EngineResult {
+  const gate = context.applyIdentityGate(`${action}-check`)
+  if (gate !== undefined) return gate
+
+  const state = context.workflow.getState()
+  const currentStateName = state.currentStateMachineState
+  const currentPrefix = getExpectedPrefix(currentStateName, context.factory.getRegistry())
+  const allowed = context.factory.getRegistry()[currentStateName].allowIdle === true
+  const reason = action === 'question'
+    ? `Workflow state ${currentStateName} does not allow asking user questions.`
+    : `Workflow state ${currentStateName} does not allow stopping.`
+
+  context.persistPlatformEvent({
+    type: 'stopping-checked',
+    at: context.engineDeps.now(),
+    action,
+    ...(tool === undefined ? {} : { tool }),
+    allowed,
+    ...(allowed ? {} : { reason }),
+  })
+
+  if (!allowed) {
+    return {
+      type: 'blocked',
+      output: formatOperationGateError(`${action}-check`, reason, currentPrefix),
+    }
+  }
+  return {
+    type: 'success',
+    output: '',
+  }
+}
+
 /** @riviere-role domain-service */
 export function writeJournalWithPlatformEvents<
   TWorkflow extends RehydratableWorkflow<TState>,
