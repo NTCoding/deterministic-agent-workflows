@@ -18,13 +18,9 @@ import { tool } from '@opencode-ai/plugin/tool'
 import type {
   BaseWorkflowState,
   RehydratableWorkflow,
-  WorkflowDefinition,
   WorkflowEngineDeps,
 } from '@nt-ai-lab/deterministic-agent-workflow-engine'
-import {
-  reduceWorkflowStateFromStoredEvents,
-  WorkflowEngine,
-} from '@nt-ai-lab/deterministic-agent-workflow-engine'
+import { WorkflowEngine } from '@nt-ai-lab/deterministic-agent-workflow-engine'
 import type { PlatformContext } from '@nt-ai-lab/deterministic-agent-workflow-cli'
 import {
   createPreToolUseHandler,
@@ -40,6 +36,7 @@ import type {
 import { OpenCodeTranscriptReader } from '../../../platform/infra/external-clients/opencode/opencode-transcript-reader'
 
 export const IDLE_RECOVERY_MESSAGE = 'You have stopped. You should never stop until the workflow is complete unless your current state permits stopping.'
+const OPENCODE_QUESTION_TOOL = 'question'
 
 const TRANSLATION_NOTE = [
   '> **OpenCode**: When instructions say to run a workflow command, call',
@@ -80,21 +77,6 @@ type SessionPromptClient = {
       }
     }) => unknown
   }
-}
-
-function isIdleAllowedForSession<
-  TWorkflow extends RehydratableWorkflow<TState>,
-  TState extends BaseWorkflowState<TStateName>,
-  TDeps,
-  TStateName extends string = string,
-  TOperation extends string = string,
->(
-  workflowDefinition: WorkflowDefinition<TWorkflow, TState, TDeps, TStateName, TOperation>,
-  engineDeps: WorkflowEngineDeps,
-  sessionID: string,
-): boolean {
-  const currentState = reduceWorkflowStateFromStoredEvents(workflowDefinition, engineDeps.store.readEvents(sessionID))
-  return workflowDefinition.getRegistry()[currentState.currentStateMachineState].allowIdle === true
 }
 
 async function promptIdleRecovery(client: SessionPromptClient, sessionID: string): Promise<void> {
@@ -178,10 +160,12 @@ export function createOpenCodeWorkflowPlugin<
       ? createPreToolUseHandler({
         bashForbidden: config.bashForbidden,
         isWriteAllowed: config.isWriteAllowed,
+        questionToolName: OPENCODE_QUESTION_TOOL,
       })
       : createPreToolUseHandler({
         bashForbidden: config.bashForbidden,
         isWriteAllowed: config.isWriteAllowed,
+        questionToolName: OPENCODE_QUESTION_TOOL,
         customGates: config.customGates,
       })
     const eventHook = createSessionIdleEventHook({
@@ -196,8 +180,8 @@ export function createOpenCodeWorkflowPlugin<
         const {
           engineDeps, workflowDeps 
         } = buildEngineContext(sessionID)
-        void workflowDeps
-        return isIdleAllowedForSession(config.workflowDefinition, engineDeps, sessionID)
+        const engine = new WorkflowEngine(config.workflowDefinition, engineDeps, workflowDeps)
+        return engine.checkStopping(sessionID, 'stop').type === 'success'
       },
       sendIdleRecoveryPrompt: async (sessionID) => {
         if (input !== undefined && isSessionPromptClient(input.client)) {
@@ -258,12 +242,14 @@ export function createOpenCodeWorkflowPlugin<
             routes,
             bashForbidden: config.bashForbidden,
             isWriteAllowed: config.isWriteAllowed,
+            questionToolName: OPENCODE_QUESTION_TOOL,
           })
           : createWorkflowRunner({
             workflowDefinition: config.workflowDefinition,
             routes,
             bashForbidden: config.bashForbidden,
             isWriteAllowed: config.isWriteAllowed,
+            questionToolName: OPENCODE_QUESTION_TOOL,
             customGates: config.customGates,
           })
         const result = runner([operation, ...argList], engineDeps, workflowDeps, {

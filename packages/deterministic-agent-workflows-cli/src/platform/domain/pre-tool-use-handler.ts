@@ -20,7 +20,7 @@ type PreToolUseEngine<
   TDeps,
   TStateName extends string,
   TOperation extends string,
-> = Pick<WorkflowEngine<TWorkflow, TState, TDeps, TStateName, TOperation>, 'transaction' | 'checkBash' | 'checkWrite'>
+> = Pick<WorkflowEngine<TWorkflow, TState, TDeps, TStateName, TOperation>, 'transaction' | 'checkBash' | 'checkStopping' | 'checkWrite'>
 
 /** @riviere-role value-object */
 export type PreToolUseHandlerFn<
@@ -58,6 +58,7 @@ export type PreToolUseHandlerConfig<
 > = {
   readonly bashForbidden: BashForbiddenConfig
   readonly isWriteAllowed: (filePath: string, state: TState) => boolean
+  readonly questionToolName?: string
   readonly customGates?: readonly CustomPreToolUseGate<TWorkflow, TState, TStateName>[]
 }
 
@@ -79,6 +80,7 @@ export function createPreToolUseHandler<
     const gateResult = checkCustomGates(config, engine, sessionId, toolName, command, filePaths)
     if (gateResult !== undefined) return gateResult
 
+    if (toolName === config.questionToolName) return engine.checkStopping(sessionId, 'question', toolName)
     if (BASH_TOOL_NAMES.includes(toolName)) return engine.checkBash(sessionId, toolName, command, config.bashForbidden)
     if (!isWriteTool) {
       return {

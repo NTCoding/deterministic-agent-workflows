@@ -24,8 +24,9 @@
     },
     "test": {
       "executor": "nx:run-commands",
+      "dependsOn": ["build", "^build"],
       "options": {
-        "command": "node -e \"process.exit(0)\""
+        "command": "pnpm --dir packages/deterministic-agent-workflows-claude-code exec node smoke-test.mjs"
       }
     }
   }

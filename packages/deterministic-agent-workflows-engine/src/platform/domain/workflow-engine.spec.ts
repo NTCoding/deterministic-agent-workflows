@@ -310,7 +310,7 @@ function buildStoredEvent(type: string, at: string, state: string, payload: Reco
   }
 }
 
-function createEngine(): {
+function createEngine(definition = workflowDefinition): {
   readonly engine: WorkflowEngine<StrictPlanningWorkflow, PlanningState, WorkflowDeps, 'PLANNING', 'write'>
   readonly store: InMemoryWorkflowEventStore
 } {
@@ -326,7 +326,7 @@ function createEngine(): {
   }
   return {
     store,
-    engine: new WorkflowEngine(workflowDefinition, engineDeps, {}),
+    engine: new WorkflowEngine(definition, engineDeps, {}),
   }
 }
 

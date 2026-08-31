@@ -10,7 +10,9 @@ import {
 } from '../../../shell/exit-codes'
 import type { ArgParser } from '../../../platform/domain/argument-parser-types'
 import {
-  formatContextInjection, formatDenyDecision 
+  formatContextInjection,
+  formatDenyDecision,
+  formatStopDenyDecision,
 } from '../../../platform/infra/cli/presentation/hook-output'
 import {
   hookCommonInputSchema,
@@ -63,25 +65,27 @@ function resolvePreToolUseHandler<
   if (config.customGates === undefined) {
     return createPreToolUseHandler<TWorkflow, TState, TDeps, TStateName, TOperation>({
       bashForbidden: config.bashForbidden,
-      isWriteAllowed: config.isWriteAllowed 
+      isWriteAllowed: config.isWriteAllowed,
+      questionToolName: config.questionToolName,
     })
   }
   return createPreToolUseHandler<TWorkflow, TState, TDeps, TStateName, TOperation>({
     bashForbidden: config.bashForbidden,
     isWriteAllowed: config.isWriteAllowed,
+    questionToolName: config.questionToolName,
     customGates: config.customGates,
   })
 }
 
-function engineResultToRunnerResult(result: EngineResult): RunnerResult {
+function engineResultToRunnerResult(result: EngineResult, blockStop = false): RunnerResult {
   switch (result.type) {
     case 'success': return {
       output: result.output,
       exitCode: EXIT_ALLOW 
     }
     case 'blocked': return {
-      output: result.output,
-      exitCode: EXIT_BLOCK 
+      output: blockStop ? formatStopDenyDecision(result.output) : result.output,
+      exitCode: blockStop ? EXIT_ALLOW : EXIT_BLOCK,
     }
     case 'error': return {
       output: result.output,
@@ -154,7 +158,7 @@ export function createWorkflowRunner<
       output: 'No command and no stdin available',
       exitCode: EXIT_ERROR 
     }
-    return handleHook(engine, resolvedHandler, options.readStdin)
+    return handleHook(engine, resolvedHandler, config.questionToolName, options.readStdin)
   }
 }
 
@@ -282,7 +286,7 @@ function handleHook<
   TDeps,
   TStateName extends string,
   TOperation extends string,
->(engine: WorkflowEngine<TWorkflow, TState, TDeps, TStateName, TOperation>, resolvedHandler: PreToolUseHandlerFn<TWorkflow, TState, TDeps, TStateName, TOperation> | undefined, readStdin: () => string): RunnerResult {
+>(engine: WorkflowEngine<TWorkflow, TState, TDeps, TStateName, TOperation>, resolvedHandler: PreToolUseHandlerFn<TWorkflow, TState, TDeps, TStateName, TOperation> | undefined, questionToolName: string | undefined, readStdin: () => string): RunnerResult {
   const stdin = readStdin()
   const hookInput: unknown = JSON.parse(stdin)
   const commonParse = hookCommonInputSchema.safeParse(hookInput)
@@ -310,9 +314,10 @@ function handleHook<
   }
 
   switch (common.hook_event_name) {
-    case 'PreToolUse': return handlePreToolUseHook(engine, resolvedHandler, stdin)
+    case 'PreToolUse': return handlePreToolUseHook(engine, resolvedHandler, questionToolName, stdin)
     case 'SubagentStart': return handleSubagentStartHook(engine, stdin)
     case 'TeammateIdle': return handleTeammateIdleHook(engine, stdin)
+    case 'Stop': return engineResultToRunnerResult(engine.checkStopping(common.session_id, 'stop'), true)
     default: return {
       output: '',
       exitCode: EXIT_ALLOW 
@@ -326,14 +331,14 @@ function handlePreToolUseHook<
   TDeps,
   TStateName extends string,
   TOperation extends string,
->(engine: WorkflowEngine<TWorkflow, TState, TDeps, TStateName, TOperation>, resolvedHandler: PreToolUseHandlerFn<TWorkflow, TState, TDeps, TStateName, TOperation> | undefined, stdin: string): RunnerResult {
+>(engine: WorkflowEngine<TWorkflow, TState, TDeps, TStateName, TOperation>, resolvedHandler: PreToolUseHandlerFn<TWorkflow, TState, TDeps, TStateName, TOperation> | undefined, questionToolName: string | undefined, stdin: string): RunnerResult {
   const hookInput: unknown = JSON.parse(stdin)
   const toolParse = preToolUseInputSchema.safeParse(hookInput)
   if (!toolParse.success) return {
     output: `Invalid pre-tool-use input: ${toolParse.error.message}`,
     exitCode: EXIT_ERROR 
   }
-  return handlePreToolUse(engine, resolvedHandler, toolParse.data)
+  return handlePreToolUse(engine, resolvedHandler, questionToolName, toolParse.data)
 }
 
 function handlePreToolUse<
@@ -342,7 +347,17 @@ function handlePreToolUse<
   TDeps,
   TStateName extends string,
   TOperation extends string,
->(engine: WorkflowEngine<TWorkflow, TState, TDeps, TStateName, TOperation>, resolvedHandler: PreToolUseHandlerFn<TWorkflow, TState, TDeps, TStateName, TOperation> | undefined, input: PreToolUseInput): RunnerResult {
+>(engine: WorkflowEngine<TWorkflow, TState, TDeps, TStateName, TOperation>, resolvedHandler: PreToolUseHandlerFn<TWorkflow, TState, TDeps, TStateName, TOperation> | undefined, questionToolName: string | undefined, input: PreToolUseInput): RunnerResult {
+  const questionResult = input.tool_name === questionToolName
+    ? engine.checkStopping(input.session_id, 'question', input.tool_name)
+    : undefined
+  if (questionResult !== undefined) {
+    if (questionResult.type === 'blocked') return {
+      output: formatDenyDecision(questionResult.output),
+      exitCode: EXIT_BLOCK,
+    }
+    return engineResultToRunnerResult(questionResult)
+  }
   if (resolvedHandler === undefined) return {
     output: '',
     exitCode: EXIT_ALLOW 

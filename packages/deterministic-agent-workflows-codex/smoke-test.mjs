@@ -73,7 +73,7 @@ const definition = {
       emoji: '📝', agentInstructions: '', canTransitionTo: ['DEVELOPING'], allowedWorkflowOperations: [], forbidden: { write: true },
     },
     DEVELOPING: {
-      emoji: '🛠️', agentInstructions: '', canTransitionTo: [], allowedWorkflowOperations: ['record-note'], forbidden: { write: false },
+      emoji: '🛠️', agentInstructions: '', allowIdle: true, canTransitionTo: [], allowedWorkflowOperations: ['record-note'], forbidden: { write: false },
     },
   }),
   buildTransitionContext: (state, from, to) => ({
@@ -161,6 +161,16 @@ try {
   } })
   assert.match(customGate.stdout, /private paths are forbidden/)
 
+  const blockedQuestion = invoke({ hook: {
+    session_id: 'one', transcript_path: null, cwd: root, hook_event_name: 'PreToolUse', tool_name: 'request_user_input', tool_input: {},
+  } })
+  assert.match(blockedQuestion.stdout, /permissionDecision":"deny"/)
+  assert.match(blockedQuestion.stdout, /does not allow asking user questions/)
+
+  const stop = invoke({ hook: { session_id: 'one', transcript_path: null, cwd: root, hook_event_name: 'Stop' } })
+  assert.equal(JSON.parse(stop.stdout).decision, 'block')
+  assert.match(JSON.parse(stop.stdout).reason, /Workflow state PLANNING does not allow stopping/)
+
   const transition = invoke({ args: ['transition', 'one', 'DEVELOPING'] })
   assert.equal(transition.exitCode, 0)
   assert.equal(resolvedSessionIds.at(-1), 'one')
@@ -176,6 +186,12 @@ try {
   assert.equal(allowedWrite.exitCode, 0)
   assert.equal(allowedWrite.stdout, '')
 
+  const allowedQuestion = invoke({ hook: {
+    session_id: 'one', transcript_path: null, cwd: root, hook_event_name: 'PreToolUse', tool_name: 'request_user_input', tool_input: {},
+  } })
+  assert.equal(allowedQuestion.exitCode, 0)
+  assert.equal(allowedQuestion.stdout, '')
+
   const blockedBash = invoke({ hook: {
     session_id: 'one', transcript_path: null, cwd: root, hook_event_name: 'PreToolUse', tool_name: 'Bash',
     tool_input: { command: 'git push origin main' },
@@ -186,12 +202,6 @@ try {
     session_id: 'one', transcript_path: null, cwd: root, hook_event_name: 'SubagentStart', agent_id: 'agent-1', agent_type: 'reviewer',
   } })
   assert.equal(subagent.exitCode, 0)
-
-  const stop = invoke({ hook: { session_id: 'one', transcript_path: null, cwd: root, hook_event_name: 'Stop' } })
-  assert.deepEqual(JSON.parse(stop.stdout), {
-    decision: 'block',
-    reason: 'Workflow state DEVELOPING does not allow stopping.',
-  })
 
   invoke({ hook: { session_id: 'two', transcript_path: transcriptPath, cwd: process.cwd(), hook_event_name: 'SessionStart' } })
   const isolated = invoke({ hook: {

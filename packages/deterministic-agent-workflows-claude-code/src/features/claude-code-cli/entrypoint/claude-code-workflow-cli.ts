@@ -6,6 +6,8 @@ import { createWorkflowCli } from '@nt-ai-lab/deterministic-agent-workflow-cli'
 import type { ClaudeCodeWorkflowCliConfig } from '../../../platform/domain/claude-code-workflow-cli-types'
 import { ClaudeCodeTranscriptReader } from '../../../platform/infra/external-clients/claude-code/claude-code-transcript-reader'
 
+const CLAUDE_CODE_QUESTION_TOOL = 'AskUserQuestion'
+
 /** @riviere-role cli-entrypoint */
 export function createClaudeCodeWorkflowCli<
   TWorkflow extends RehydratableWorkflow<TState>,
@@ -14,6 +16,7 @@ export function createClaudeCodeWorkflowCli<
 >(config: ClaudeCodeWorkflowCliConfig<TWorkflow, TState, TDeps>): void {
   createWorkflowCli({
     ...config,
+    questionToolName: CLAUDE_CODE_QUESTION_TOOL,
     transcriptReader: new ClaudeCodeTranscriptReader(),
   })
 }

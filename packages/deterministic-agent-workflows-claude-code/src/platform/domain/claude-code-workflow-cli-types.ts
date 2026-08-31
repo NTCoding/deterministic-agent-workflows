@@ -9,4 +9,4 @@ export type ClaudeCodeWorkflowCliConfig<
   TWorkflow extends RehydratableWorkflow<TState>,
   TState extends BaseWorkflowState,
   TDeps,
-> = Omit<WorkflowCliConfig<TWorkflow, TState, TDeps>, 'transcriptReader'>
+> = Omit<WorkflowCliConfig<TWorkflow, TState, TDeps>, 'questionToolName' | 'transcriptReader'>

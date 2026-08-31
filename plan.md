@@ -173,6 +173,9 @@ Status legend: `TODO`, `IN_PROGRESS`, `BLOCKED`, `DONE`
 ### 10) Native Codex adapter
 - [x] **DONE** Add project-configured Codex lifecycle hooks, session-scoped workflow commands, and enforcement.
 
+### 11) Prevent premature user questions
+- [x] **DONE** Treat user questions as stopping: block provider question tools unless the active state sets `allowIdle: true`.
+
 ---
 
 ## Acceptance criteria for “done”

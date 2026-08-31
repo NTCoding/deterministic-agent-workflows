@@ -38,6 +38,7 @@ export type WorkflowRunnerConfig<
   readonly routes: RouteMap<TWorkflow, TState>
   readonly bashForbidden?: BashForbiddenConfig
   readonly isWriteAllowed?: (filePath: string, state: TState) => boolean
+  readonly questionToolName?: string
   readonly customGates?: readonly CustomPreToolUseGate<TWorkflow, TState, TStateName>[]
   readonly preToolUseHandler?: PreToolUseHandlerFn<TWorkflow, TState, TDeps, TStateName, TOperation>
 }

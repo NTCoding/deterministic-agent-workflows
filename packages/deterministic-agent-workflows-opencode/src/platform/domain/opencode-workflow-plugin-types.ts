@@ -36,7 +36,7 @@ export type OpenCodeWorkflowPluginConfig<
   TDeps,
   TStateName extends string = string,
   TOperation extends string = string,
-> = PreToolUseHandlerConfig<TWorkflow, TState, TStateName> & {
+> = Omit<PreToolUseHandlerConfig<TWorkflow, TState, TStateName>, 'questionToolName'> & {
   readonly workflowDefinition: WorkflowDefinition<TWorkflow, TState, TDeps, TStateName, TOperation>
   readonly buildWorkflowDeps: (platform: PlatformContext) => TDeps
   readonly pluginRoot: string

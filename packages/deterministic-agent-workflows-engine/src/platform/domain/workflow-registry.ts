@@ -31,6 +31,7 @@ export type WorkflowStateDefinition<
 > = {
   readonly emoji: string
   readonly agentInstructions: string
+  /** Allows the agent to stop or wait for user input in this state. */
   readonly allowIdle?: boolean
   readonly canTransitionTo: readonly TStateName[]
   readonly allowedWorkflowOperations: readonly TOperation[]

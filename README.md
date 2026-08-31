@@ -101,6 +101,7 @@ export const WORKFLOW_REGISTRY = {
     forbidden: { write: true },
   },
   DEVELOPING: {
+    allowIdle: true,
     canTransitionTo: ['REVIEWING'],
     allowedWorkflowOperations: ['record-branch', 'record-implementation-progress'],
   },
@@ -122,6 +123,8 @@ export const PRE_TOOL_USE_POLICY = {
 ```
 
 That policy means a write is denied outside `DEVELOPING`.
+
+Set `allowIdle: true` on a state only when an agent may stop or wait for a user response. It is `false` by default, so OpenCode's `question`, Claude Code's `AskUserQuestion`, and Codex's `request_user_input` tools are denied until the current state explicitly allows idle.
 
 ## Workflow operations
 
@@ -253,6 +256,18 @@ createClaudeCodeWorkflowCli({
 })
 ```
 
+Configure Claude Code to run the entrypoint for session setup, protected tools, questions, and stop attempts:
+
+```json
+{
+  "hooks": {
+    "SessionStart": [{ "hooks": [{ "type": "command", "command": "node ./dist/workflow-claude.js" }] }],
+    "PreToolUse": [{ "matcher": "Bash|Write|Edit|MultiEdit|NotebookEdit|AskUserQuestion", "hooks": [{ "type": "command", "command": "node ./dist/workflow-claude.js" }] }],
+    "Stop": [{ "hooks": [{ "type": "command", "command": "node ./dist/workflow-claude.js" }] }]
+  }
+}
+```
+
 ## Codex example
 
 Create a Codex workflow entrypoint in the consumer repository. Codex starts
@@ -287,7 +302,7 @@ Compile that entrypoint, then add `.codex/hooks.json`:
 {
   "hooks": {
     "SessionStart": [{ "hooks": [{ "type": "command", "command": "node \"$(git rev-parse --show-toplevel)/dist/workflow-codex.js\"" }] }],
-    "PreToolUse": [{ "matcher": "Bash|apply_patch", "hooks": [{ "type": "command", "command": "node \"$(git rev-parse --show-toplevel)/dist/workflow-codex.js\"" }] }],
+    "PreToolUse": [{ "matcher": "Bash|apply_patch|request_user_input", "hooks": [{ "type": "command", "command": "node \"$(git rev-parse --show-toplevel)/dist/workflow-codex.js\"" }] }],
     "SubagentStart": [{ "hooks": [{ "type": "command", "command": "node \"$(git rev-parse --show-toplevel)/dist/workflow-codex.js\"" }] }],
     "Stop": [{ "hooks": [{ "type": "command", "command": "node \"$(git rev-parse --show-toplevel)/dist/workflow-codex.js\"" }] }]
   }
