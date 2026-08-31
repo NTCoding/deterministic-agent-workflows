@@ -99,7 +99,12 @@ function invoke({ args = [], hook }) {
     isWriteAllowed: () => false,
     customGates: [{
       name: 'forbid-private',
-      check: (_workflow, context) => context.filePath === 'private.txt' ? 'private paths are forbidden' : true,
+      check: (workflow, context) => {
+        if (context.toolName === 'request_user_input' && workflow.getState().currentStateMachineState === 'PLANNING') {
+          return 'planning questions are disabled by a custom gate'
+        }
+        return context.filePath === 'private.txt' ? 'private paths are forbidden' : true
+      },
     }],
     workflowCommand: 'node ./workflow-codex.mjs',
     workflowRoot: root,
@@ -165,7 +170,7 @@ try {
     session_id: 'one', transcript_path: null, cwd: root, hook_event_name: 'PreToolUse', tool_name: 'request_user_input', tool_input: {},
   } })
   assert.match(blockedQuestion.stdout, /permissionDecision":"deny"/)
-  assert.match(blockedQuestion.stdout, /does not allow asking user questions/)
+  assert.match(blockedQuestion.stdout, /planning questions are disabled by a custom gate/)
 
   const stop = invoke({ hook: { session_id: 'one', transcript_path: null, cwd: root, hook_event_name: 'Stop' } })
   assert.equal(JSON.parse(stop.stdout).decision, 'block')

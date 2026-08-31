@@ -348,21 +348,13 @@ function handlePreToolUse<
   TStateName extends string,
   TOperation extends string,
 >(engine: WorkflowEngine<TWorkflow, TState, TDeps, TStateName, TOperation>, resolvedHandler: PreToolUseHandlerFn<TWorkflow, TState, TDeps, TStateName, TOperation> | undefined, questionToolName: string | undefined, input: PreToolUseInput): RunnerResult {
-  const questionResult = input.tool_name === questionToolName
+  const result = resolvedHandler === undefined && input.tool_name === questionToolName
     ? engine.checkStopping(input.session_id, 'question', input.tool_name)
-    : undefined
-  if (questionResult !== undefined) {
-    if (questionResult.type === 'blocked') return {
-      output: formatDenyDecision(questionResult.output),
-      exitCode: EXIT_BLOCK,
-    }
-    return engineResultToRunnerResult(questionResult)
-  }
-  if (resolvedHandler === undefined) return {
+    : resolvedHandler?.(engine, input.session_id, input.tool_name, input.tool_input)
+  if (result === undefined) return {
     output: '',
     exitCode: EXIT_ALLOW 
   }
-  const result = resolvedHandler(engine, input.session_id, input.tool_name, input.tool_input)
   if (result.type === 'blocked') return {
     output: formatDenyDecision(result.output),
     exitCode: EXIT_BLOCK 

@@ -221,13 +221,15 @@ function checkToolUse<
     output: '',
     exitCode: 0
   }
-  if (input.tool_name === CODEX_QUESTION_TOOL) {
-    return toHookResult(engine.checkStopping(input.session_id, 'question', input.tool_name))
-  }
   const handler = resolvePreToolUseHandler(config)
-  if (handler === undefined) return {
-    output: '',
-    exitCode: 0
+  if (handler === undefined) {
+    if (input.tool_name === CODEX_QUESTION_TOOL) {
+      return toHookResult(engine.checkStopping(input.session_id, 'question', input.tool_name))
+    }
+    return {
+      output: '',
+      exitCode: 0
+    }
   }
   if (input.tool_name === 'apply_patch') return checkPatchPaths(handler, engine, input.session_id, input.tool_input)
   return toHookResult(handler(engine, input.session_id, input.tool_name, input.tool_input))

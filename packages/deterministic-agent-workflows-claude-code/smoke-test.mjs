@@ -71,6 +71,12 @@ function invokeQuestion(sessionId, allowIdle) {
     routes: {},
     bashForbidden: { commands: [] },
     isWriteAllowed: () => true,
+    customGates: [{
+      name: 'block-planning-questions',
+      check: (_workflow, context) => !allowIdle && context.toolName === 'AskUserQuestion'
+        ? 'planning questions are disabled by a custom gate'
+        : true,
+    }],
     buildWorkflowDeps: () => ({}),
     processDeps: {
       getEnv: (name) => ({
@@ -105,7 +111,7 @@ try {
   seedSession('blocked')
   const blocked = invokeQuestion('blocked', false)
   assert.equal(blocked.exitCode, 2)
-  assert.match(blocked.stdout, /does not allow asking user questions/)
+  assert.match(blocked.stdout, /planning questions are disabled by a custom gate/)
 
   seedSession('allowed')
   const allowed = invokeQuestion('allowed', true)
