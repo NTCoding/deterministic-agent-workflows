@@ -1,7 +1,7 @@
 import { checkIdentity } from './identity-verification'
 import {
   checkBashWithPlatformEvents,
-  checkStoppingWithPlatformEvents,
+  checkStopAllowed,
   checkWriteWithPlatformEvents,
   type StoppingAction,
   writeJournalWithPlatformEvents,
@@ -217,7 +217,7 @@ export class WorkflowEngine<
   checkStopping(sessionId: string, action: StoppingAction, tool?: string): EngineResult {
     this.requireSession(sessionId)
     const workflow = this.rehydrateFromEvents(sessionId)
-    return checkStoppingWithPlatformEvents(this.platformOperationContext(sessionId, workflow), action, tool)
+    return checkStopAllowed(this.platformOperationContext(sessionId, workflow), action, tool)
   }
 
   getState(sessionId: string): EngineResult {

@@ -31,7 +31,7 @@ type PlatformOperationContext<
 export type StoppingAction = 'stop' | 'question'
 
 /** @riviere-role domain-service */
-export function checkStoppingWithPlatformEvents<
+export function checkStopAllowed<
   TWorkflow extends RehydratableWorkflow<TState>,
   TState extends BaseWorkflowState<TStateName>,
   TDeps,
