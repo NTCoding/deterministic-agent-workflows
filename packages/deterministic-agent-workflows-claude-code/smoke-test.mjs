@@ -24,18 +24,24 @@ class Workflow {
   getState() { return this.state }
   getPendingEvents() { return [] }
   getTranscriptPath() { return this.state.transcriptPath }
-  appendEvent() {}
-  startSession() {}
+  appendEvent() { return undefined }
+  startSession() { return undefined }
   registerAgent() { return pass() }
   handleTeammateIdle() { return pass() }
 }
 
 function createDefinition(allowIdle) {
   return {
-    initialState: () => ({ currentStateMachineState: 'PLANNING', transcriptPath: '' }),
+    initialState: () => ({
+      currentStateMachineState: 'PLANNING',
+      transcriptPath: ''
+    }),
     stateSchema: z.literal('PLANNING'),
     fold: (state, event) => event.type === 'session-started'
-      ? { ...state, transcriptPath: event.transcriptPath }
+      ? {
+        ...state,
+        transcriptPath: event.transcriptPath
+      }
       : state,
     buildWorkflow: (state) => new Workflow(state),
     getRegistry: () => ({
@@ -51,15 +57,30 @@ function createDefinition(allowIdle) {
       state,
       from,
       to,
-      gitInfo: { currentBranch: 'main', workingTreeClean: true, headCommit: 'abc', changedFilesVsDefault: [], hasCommitsVsDefault: false },
+      gitInfo: {
+        currentBranch: 'main',
+        workingTreeClean: true,
+        headCommit: 'abc',
+        changedFilesVsDefault: [],
+        hasCommitsVsDefault: false
+      },
     }),
   }
 }
 
 function seedSession(sessionId) {
   createStore(databasePath).appendEvents(sessionId, [{
-    envelope: { type: 'session-started', at: '2026-08-31T00:00:00.000Z', state: 'PLANNING' },
-    payload: { transcriptPath, repository: 'test/repo', currentState: 'PLANNING', states: ['PLANNING'] },
+    envelope: {
+      type: 'session-started',
+      at: '2026-08-31T00:00:00.000Z',
+      state: 'PLANNING'
+    },
+    payload: {
+      transcriptPath,
+      repository: 'test/repo',
+      currentState: 'PLANNING',
+      states: ['PLANNING']
+    },
   }])
 }
 
@@ -87,7 +108,7 @@ function invokeQuestion(sessionId, allowIdle) {
       })[name],
       exit: (code) => { exitCode = code },
       writeStdout: (value) => { stdout += value },
-      writeStderr: () => {},
+      writeStderr: () => undefined,
       getArgv: () => ['node', 'workflow-claude.mjs'],
       readFile: (path) => path === '/dev/stdin'
         ? JSON.stringify({
@@ -100,11 +121,14 @@ function invokeQuestion(sessionId, allowIdle) {
           tool_use_id: 'question-1',
         })
         : '',
-      appendToFile: () => {},
+      appendToFile: () => undefined,
       buildStore: (path) => createStore(path),
     },
   })
-  return { stdout, exitCode }
+  return {
+    stdout,
+    exitCode
+  }
 }
 
 try {
@@ -118,5 +142,8 @@ try {
   assert.equal(allowed.exitCode, 0)
   assert.equal(allowed.stdout, '')
 } finally {
-  rmSync(root, { recursive: true, force: true })
+  rmSync(root, {
+    recursive: true,
+    force: true
+  })
 }

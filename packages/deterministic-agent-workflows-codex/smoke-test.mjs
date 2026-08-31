@@ -73,7 +73,12 @@ const definition = {
       emoji: '📝', agentInstructions: '', canTransitionTo: ['DEVELOPING'], allowedWorkflowOperations: [], forbidden: { write: true },
     },
     DEVELOPING: {
-      emoji: '🛠️', agentInstructions: '', allowIdle: true, canTransitionTo: [], allowedWorkflowOperations: ['record-note'], forbidden: { write: false },
+      emoji: '🛠️',
+      agentInstructions: '',
+      allowIdle: true,
+      canTransitionTo: [],
+      allowedWorkflowOperations: ['record-note'],
+      forbidden: { write: false },
     },
   }),
   buildTransitionContext: (state, from, to) => ({
@@ -113,7 +118,7 @@ function invoke({ args = [], hook }) {
       getEnv: (name) => name === 'HOME' ? root : name === 'WORKFLOW_EVENTS_DB' ? databasePath : undefined,
       getArgv: () => ['node', 'workflow-codex.mjs', ...args],
       readFile: (path) => path === '/dev/stdin' ? JSON.stringify(hook) : '',
-      appendToFile: () => {},
+      appendToFile: () => undefined,
       buildStore: (path) => createStore(path),
       writeStdout: (value) => { stdout += value },
       writeStderr: (value) => { stderr += value },
@@ -160,19 +165,39 @@ try {
   assert.equal(blockedWrite.exitCode, 0)
   assert.match(blockedWrite.stdout, /permissionDecision":"deny"/)
 
-  const customGate = invoke({ hook: {
-    session_id: 'one', transcript_path: null, cwd: root, hook_event_name: 'PreToolUse', tool_name: 'apply_patch',
-    tool_input: { command: '*** Begin Patch\n*** Update File: private.txt\n*** End Patch' },
-  } })
+  const customGate = invoke({
+    hook: {
+      session_id: 'one',
+      transcript_path: null,
+      cwd: root,
+      hook_event_name: 'PreToolUse',
+      tool_name: 'apply_patch',
+      tool_input: { command: '*** Begin Patch\n*** Update File: private.txt\n*** End Patch' },
+    }
+  })
   assert.match(customGate.stdout, /private paths are forbidden/)
 
-  const blockedQuestion = invoke({ hook: {
-    session_id: 'one', transcript_path: null, cwd: root, hook_event_name: 'PreToolUse', tool_name: 'request_user_input', tool_input: {},
-  } })
+  const blockedQuestion = invoke({
+    hook: {
+      session_id: 'one',
+      transcript_path: null,
+      cwd: root,
+      hook_event_name: 'PreToolUse',
+      tool_name: 'request_user_input',
+      tool_input: {},
+    }
+  })
   assert.match(blockedQuestion.stdout, /permissionDecision":"deny"/)
   assert.match(blockedQuestion.stdout, /planning questions are disabled by a custom gate/)
 
-  const stop = invoke({ hook: { session_id: 'one', transcript_path: null, cwd: root, hook_event_name: 'Stop' } })
+  const stop = invoke({
+    hook: {
+      session_id: 'one',
+      transcript_path: null,
+      cwd: root,
+      hook_event_name: 'Stop'
+    }
+  })
   assert.equal(JSON.parse(stop.stdout).decision, 'block')
   assert.match(JSON.parse(stop.stdout).reason, /Workflow state PLANNING does not allow stopping/)
 
@@ -184,10 +209,16 @@ try {
   assert.equal(customOperation.exitCode, 0)
   assert.equal(resolvedSessionIds.at(-1), 'one')
 
-  const allowedWrite = invoke({ hook: {
-    session_id: 'one', transcript_path: null, cwd: root, hook_event_name: 'PreToolUse', tool_name: 'apply_patch',
-    tool_input: { command: '*** Begin Patch\n*** Update File: src/app.ts\n*** End Patch' },
-  } })
+  const allowedWrite = invoke({
+    hook: {
+      session_id: 'one',
+      transcript_path: null,
+      cwd: root,
+      hook_event_name: 'PreToolUse',
+      tool_name: 'apply_patch',
+      tool_input: { command: '*** Begin Patch\n*** Update File: src/app.ts\n*** End Patch' },
+    }
+  })
   assert.equal(allowedWrite.exitCode, 0)
   assert.equal(allowedWrite.stdout, '')
 
