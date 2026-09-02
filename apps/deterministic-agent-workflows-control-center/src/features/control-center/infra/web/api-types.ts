@@ -11,6 +11,7 @@ export type SessionSummaryDto = {
   workflowStates: Array<string>
   status: string
   totalEvents: number
+  startedAt?: string | undefined
   firstEventAt: string
   lastEventAt: string
   durationMs: number

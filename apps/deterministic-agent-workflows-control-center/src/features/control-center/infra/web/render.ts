@@ -51,6 +51,14 @@ export function formatTimestamp(iso: string): string {
 }
 
 /** @riviere-role web-tbc */
+export function formatLocalTimestamp(iso: string): string {
+  return new Date(iso).toLocaleString(undefined, {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  })
+}
+
+/** @riviere-role web-tbc */
 export function formatTimeOnly(iso: string): string {
   if (!iso) return '-'
   const d = new Date(iso)

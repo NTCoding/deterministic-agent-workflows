@@ -177,6 +177,10 @@ Status legend: `TODO`, `IN_PROGRESS`, `BLOCKED`, `DONE`
 
 - [x] **DONE** Treat user questions as stopping: block provider question tools unless the active state sets `allowIdle: true`.
 
+### 12) Make sessions easier to find
+
+- [x] **DONE** Show a dedicated, visibly headed Started date/time column in the Control Center session list. It must share a fixed grid with every session row, be sourced from the first `session-started` event, and be formatted in the viewer's local time.
+
 ---
 
 ## Acceptance criteria for “done”

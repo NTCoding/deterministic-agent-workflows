@@ -20,6 +20,7 @@ export type SessionProjection = {
   readonly currentState: string
   readonly workflowStates: ReadonlyArray<string>
   readonly totalEvents: number
+  readonly startedAt?: string | undefined
   readonly firstEventAt: string
   readonly lastEventAt: string
   readonly activeAgents: ReadonlyArray<string>
@@ -39,6 +40,7 @@ type MutableProjection = {
   currentState: string
   workflowStates: Array<string>
   totalEvents: number
+  startedAt: string | undefined
   firstEventAt: string
   lastEventAt: string
   activeAgents: Array<string>
@@ -69,6 +71,7 @@ function createEmptyProjection(sessionId: string): MutableProjection {
     currentState: 'initial state',
     workflowStates: [],
     totalEvents: 0,
+    startedAt: undefined,
     firstEventAt: '',
     lastEventAt: '',
     activeAgents: [],
@@ -228,6 +231,9 @@ function applyEventToProjection(projection: MutableProjection, event: ParsedEven
     projection.firstEventAt = event.at
   }
   projection.lastEventAt = event.at
+  if (event.type === 'session-started') {
+    projection.startedAt ??= event.at
+  }
 
   const engineEvent = tryParseEngineEvent(event)
   if (engineEvent !== undefined) {
@@ -286,6 +292,7 @@ export function projectSessionSummary(
     workflowStates: projection.workflowStates,
     status,
     totalEvents: projection.totalEvents,
+    startedAt: projection.startedAt,
     firstEventAt: projection.firstEventAt,
     lastEventAt: projection.lastEventAt,
     durationMs,
@@ -312,6 +319,7 @@ function freezeProjection(mutable: MutableProjection): SessionProjection {
     currentState: mutable.currentState,
     workflowStates: [...mutable.workflowStates],
     totalEvents: mutable.totalEvents,
+    startedAt: mutable.startedAt,
     firstEventAt: mutable.firstEventAt,
     lastEventAt: mutable.lastEventAt,
     activeAgents: [...mutable.activeAgents],
@@ -351,6 +359,7 @@ export function createProjectionCache(): ProjectionCache {
     set(sessionId, projection) {
       const mutable: MutableProjection = {
         ...projection,
+        startedAt: projection.startedAt,
         workflowStates: [...projection.workflowStates],
         activeAgents: [...projection.activeAgents],
         permissionDenials: { ...projection.permissionDenials },
