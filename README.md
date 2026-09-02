@@ -339,7 +339,8 @@ browser. It reads `~/ai-workflow-database/.workflow-events.db` by default.
 To use another event database or port, set `WORKFLOW_EVENTS_DB` or
 `WORKFLOW_UI_PORT` before running the script.
 
-Open `http://localhost:3120`
+Open `http://localhost:3120` by default. If `WORKFLOW_UI_PORT` is set, replace
+`3120` with its value.
 
 View all sessions stored in the database:
 ![Control Center](docs/control-center.png)

@@ -9,10 +9,21 @@ import { parseArgs } from './features/control-center-cli/commands/start-control-
 
 describe('parseArgs', () => {
   it('returns defaults when no args provided', () => {
-    const args = parseArgs([])
-    expect(args.port).toBe(3120)
-    expect(args.open).toBe(false)
-    expect(args.dbPath).toBe(resolve(join(process.env['HOME'] ?? '~', 'ai-workflow-database', '.workflow-events.db')))
+    const workflowEventsDb = process.env['WORKFLOW_EVENTS_DB']
+    delete process.env['WORKFLOW_EVENTS_DB']
+
+    try {
+      const args = parseArgs([])
+      expect(args.port).toBe(3120)
+      expect(args.open).toBe(false)
+      expect(args.dbPath).toBe(resolve(join(process.env['HOME'] ?? '~', 'ai-workflow-database', '.workflow-events.db')))
+    } finally {
+      if (workflowEventsDb === undefined) {
+        delete process.env['WORKFLOW_EVENTS_DB']
+      } else {
+        process.env['WORKFLOW_EVENTS_DB'] = workflowEventsDb
+      }
+    }
   })
 
   it('parses --db flag', () => {
