@@ -25,7 +25,7 @@ export type IdleEventHookDeps = {
 
 /** @riviere-role value-object */
 export type OpenCodePlugin = (
-  input?: OpenCodePluginInput,
+  input: OpenCodePluginInput,
   options?: OpenCodePluginOptions,
 ) => Promise<Hooks>
 

@@ -20,7 +20,10 @@ import type {
   RehydratableWorkflow,
   WorkflowEngineDeps,
 } from '@nt-ai-lab/deterministic-agent-workflow-engine'
-import { WorkflowEngine } from '@nt-ai-lab/deterministic-agent-workflow-engine'
+import {
+  getWorkflowSessionId,
+  WorkflowEngine,
+} from '@nt-ai-lab/deterministic-agent-workflow-engine'
 import type { PlatformContext } from '@nt-ai-lab/deterministic-agent-workflow-cli'
 import {
   createPreToolUseHandler,
@@ -34,6 +37,7 @@ import type {
   OpenCodeWorkflowPluginConfig,
 } from '../../../platform/domain/opencode-workflow-plugin-types'
 import { OpenCodeTranscriptReader } from '../../../platform/infra/external-clients/opencode/opencode-transcript-reader'
+import { createOpenCodeSessionContext } from '../../../platform/infra/external-clients/opencode/opencode-session-context'
 
 export const IDLE_RECOVERY_MESSAGE = 'You have stopped. You should never stop until the workflow is complete unless your current state permits stopping.'
 const OPENCODE_QUESTION_TOOL = 'question'
@@ -55,31 +59,13 @@ function injectTranslationNote(content: string): string {
   return `${TRANSLATION_NOTE}${content}`
 }
 
-function isSessionPromptClient(value: unknown): value is SessionPromptClient {
-  return typeof value === 'object' && value !== null && 'session' in value
-}
-
 type OpenCodeToolExecuteBefore = NonNullable<Hooks['tool.execute.before']>
 type OpenCodeToolBeforeInput = Parameters<OpenCodeToolExecuteBefore>[0]
 type OpenCodeToolBeforeOutput = Parameters<OpenCodeToolExecuteBefore>[1]
 type OpenCodeEventHook = NonNullable<Hooks['event']>
 type OpenCodeCommandMap = NonNullable<OpenCodeConfig['command']>
 type OpenCodePluginInput = Parameters<Plugin>[0]
-type SessionPromptClient = {
-  readonly session: {
-    promptAsync: (input: {
-      readonly path: { readonly id: string }
-      readonly body: {
-        readonly parts: Array<{
-          readonly type: 'text';
-          readonly text: string
-        }>
-      }
-    }) => unknown
-  }
-}
-
-async function promptIdleRecovery(client: SessionPromptClient, sessionID: string): Promise<void> {
+async function promptIdleRecovery(client: OpenCodePluginInput['client'], sessionID: string): Promise<void> {
   await client.session.promptAsync({
     path: { id: sessionID },
     body: {
@@ -155,7 +141,12 @@ export function createOpenCodeWorkflowPlugin<
     }
   }
 
-  return async (input?: OpenCodePluginInput): Promise<Hooks> => {
+  return async (input: OpenCodePluginInput): Promise<Hooks> => {
+    const resolveWorkflowSessionId = (executingSessionId: string): Promise<string> => getWorkflowSessionId(
+      store,
+      executingSessionId,
+      createOpenCodeSessionContext(input.client, executingSessionId),
+    )
     const handler = config.customGates === undefined
       ? createPreToolUseHandler({
         bashForbidden: config.bashForbidden,
@@ -184,33 +175,32 @@ export function createOpenCodeWorkflowPlugin<
         return engine.checkStopping(sessionID, 'stop').type === 'success'
       },
       sendIdleRecoveryPrompt: async (sessionID) => {
-        if (input !== undefined && isSessionPromptClient(input.client)) {
-          await promptIdleRecovery(input.client, sessionID)
-        }
+        await promptIdleRecovery(input.client, sessionID)
       },
     })
 
     const toolExecuteBefore = async (hookInput: OpenCodeToolBeforeInput, output: OpenCodeToolBeforeOutput): Promise<void> => {
+      const sessionID = await resolveWorkflowSessionId(hookInput.sessionID)
       const {
         engineDeps, workflowDeps 
-      } = buildEngineContext(hookInput.sessionID)
+      } = buildEngineContext(sessionID)
       const engine = new WorkflowEngine(config.workflowDefinition, engineDeps, workflowDeps)
 
       if (config.routes === undefined) {
-        if (engine.hasSession(hookInput.sessionID)) {
+        if (engine.hasSession(sessionID)) {
           // Session already exists for the default non-router path.
         } else {
           const repository = getRepositoryName(process.cwd())
           if (repository === undefined) throw new TypeError('repository must be a non-empty string.')
-          engine.startSession(hookInput.sessionID, dbPath, repository)
+          engine.startSession(sessionID, dbPath, repository)
         }
-      } else if (engine.hasSessionStarted(hookInput.sessionID)) {
+      } else if (engine.hasSessionStarted(sessionID)) {
         // Routed mode only enforces tools after the session starts.
       } else {
         return
       }
 
-      const result = handler(engine, hookInput.sessionID, hookInput.tool, output.args)
+      const result = handler(engine, sessionID, hookInput.tool, output.args)
       if (result.type === 'blocked') {
         throw new TypeError(result.output)
       }
@@ -233,9 +223,10 @@ export function createOpenCodeWorkflowPlugin<
       execute: async (rawArgs, ctx) => {
         const operation = rawArgs.operation
         const argList = rawArgs.args ?? []
+        const sessionID = await resolveWorkflowSessionId(ctx.sessionID)
         const {
           engineDeps, workflowDeps 
-        } = buildEngineContext(ctx.sessionID)
+        } = buildEngineContext(sessionID)
         const runner = config.customGates === undefined
           ? createWorkflowRunner({
             workflowDefinition: config.workflowDefinition,
@@ -253,7 +244,7 @@ export function createOpenCodeWorkflowPlugin<
             customGates: config.customGates,
           })
         const result = runner([operation, ...argList], engineDeps, workflowDeps, {
-          getSessionId: () => ctx.sessionID,
+          getSessionId: () => sessionID,
           getSessionTranscriptPath: () => dbPath,
           getSessionRepository: () => getRepositoryName(ctx.worktree),
           getRepositoryRoot: () => ctx.worktree,

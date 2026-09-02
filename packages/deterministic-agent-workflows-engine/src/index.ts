@@ -114,8 +114,10 @@ export type {
   RehydratableWorkflow,
   WorkflowDefinition,
   WorkflowEventStore,
+  SessionContext,
   WorkflowEngineDeps,
 } from './platform/domain/workflow-engine-types'
+export { getWorkflowSessionId } from './platform/domain/workflow-session-id'
 export type { StoppingAction } from './platform/domain/workflow-engine-platform-operations'
 
 export type {

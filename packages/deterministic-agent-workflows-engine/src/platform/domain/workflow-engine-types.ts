@@ -78,6 +78,9 @@ export interface WorkflowEventStore {
 }
 
 /** @riviere-role value-object */
+export interface SessionContext { getMainSessionId(): Promise<string> }
+
+/** @riviere-role value-object */
 export type WorkflowEngineDeps = {
   readonly store: WorkflowEventStore
   readonly getPluginRoot: () => string
