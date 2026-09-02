@@ -2,6 +2,7 @@ import { join } from 'node:path'
 import type {
   BaseWorkflowState,
   RehydratableWorkflow,
+  SessionContext,
   WorkflowEngineDeps,
 } from '@nt-ai-lab/deterministic-agent-workflow-engine'
 import { createWorkflowRunner } from '../../workflow-runner/entrypoint/workflow-runner'
@@ -30,6 +31,7 @@ export function createWorkflowCli<
   TDeps,
 >(
   config: WorkflowCliConfig<TWorkflow, TState, TDeps>,
+  sessionContext: SessionContext,
 ): void {
   const { processDeps } = config
   const readEnvVar = buildReadEnvVar(processDeps.getEnv)
@@ -54,7 +56,7 @@ export function createWorkflowCli<
 
   const engineDeps: WorkflowEngineDeps = {
     store,
-    sessionContext: { getMainSessionId: getSessionId },
+    sessionContext,
     getPluginRoot: () => pluginRoot,
     getEnvFilePath: () => join(readEnvVar('HOME'), '.claude', 'claude.env'),
     getRepositoryName: () => getRepositoryName(process.cwd()),

@@ -14,9 +14,16 @@ export function createClaudeCodeWorkflowCli<
   TState extends BaseWorkflowState,
   TDeps,
 >(config: ClaudeCodeWorkflowCliConfig<TWorkflow, TState, TDeps>): void {
+  const getMainSessionId = (): string => {
+    const sessionId = config.processDeps.getEnv('CLAUDE_SESSION_ID')
+    if (sessionId === undefined || sessionId === '') {
+      throw new TypeError('Missing required environment variable: CLAUDE_SESSION_ID')
+    }
+    return sessionId
+  }
   createWorkflowCli({
     ...config,
     questionToolName: CLAUDE_CODE_QUESTION_TOOL,
     transcriptReader: new ClaudeCodeTranscriptReader(),
-  })
+  }, { getMainSessionId })
 }
