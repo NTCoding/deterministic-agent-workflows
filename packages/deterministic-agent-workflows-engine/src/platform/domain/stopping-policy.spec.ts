@@ -128,6 +128,7 @@ function createEngine(allowIdle: boolean): {
   const store = createStore()
   const deps: WorkflowEngineDeps = {
     store,
+    sessionContext: { getMainSessionId: () => 'test-session' },
     getPluginRoot: () => '/plugin-root',
     getEnvFilePath: () => '/plugin-root/.env',
     readFile: () => '',

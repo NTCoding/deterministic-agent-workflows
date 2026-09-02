@@ -307,6 +307,7 @@ seedOpencodeTranscript(opencodeDatabasePath, 'session-1', '🧠 PLANNING proving
 
 try {
   const promptedTexts = []
+  const sessionGetCalls = []
   const plugin = createOpenCodeWorkflowPlugin({
     workflowDefinition,
     routes,
@@ -322,6 +323,16 @@ try {
   const hooks = await plugin({
     client: {
       session: {
+        get: async ({ path }) => {
+          sessionGetCalls.push(path.id)
+          if (path.id === 'child-session-1') {
+            return { data: { id: 'child-session-1', parentID: 'session-1' } }
+          }
+          if (path.id === 'session-1') {
+            return { data: { id: 'session-1' } }
+          }
+          throw new Error(`Unknown session ${path.id}`)
+        },
         promptAsync: async ({ body }) => {
           promptedTexts.push(body.parts[0].text)
         },
@@ -444,6 +455,10 @@ try {
     operation: 'transition',
     args: ['REVIEWING']
   }, ctx)
+  const childStateOutput = await hooks.tool.workflow.execute({ operation: 'get-state' }, {
+    ...ctx,
+    sessionID: 'child-session-1',
+  })
   const reviewOutput = await hooks.tool.workflow.execute({
     operation: 'record-review',
     args: ['platform-review', JSON.stringify({
@@ -490,6 +505,8 @@ try {
     || applyPatchWriteCheckCount !== 1
     || identityStatus !== 'verified'
     || promptedTexts.length !== 1
+    || !childStateOutput.includes('"currentStateMachineState": "REVIEWING"')
+    || !sessionGetCalls.includes('child-session-1')
     || !reviewOutput.includes('"ok": true')
     || missingPayloadError !== 'record-review requires <review-type> and <review-json> arguments'
     || !invalidJsonError?.includes('Invalid review JSON')

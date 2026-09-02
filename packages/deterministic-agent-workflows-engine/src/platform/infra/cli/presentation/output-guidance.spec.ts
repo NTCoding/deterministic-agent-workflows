@@ -228,6 +228,7 @@ const transcriptReader: WorkflowEngineDeps['transcriptReader'] = {
 
 const engineDeps: WorkflowEngineDeps = {
   store: new MemoryStore(),
+  sessionContext: { getMainSessionId: () => 'test-session' },
   getPluginRoot: () => '/plugin-root',
   getEnvFilePath: () => '/plugin-root/.env',
   readFile: (path) => {

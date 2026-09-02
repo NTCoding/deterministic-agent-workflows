@@ -58,7 +58,7 @@ export class WorkflowEngine<
   ) {}
 
   startSession(sessionId: string, transcriptPath: string, repository: string): EngineResult {
-    const validSessionId = requireNonEmptyString(sessionId, 'sessionId')
+    const validSessionId = this.resolveSessionId(requireNonEmptyString(sessionId, 'sessionId'))
     const validTranscriptPath = requireNonEmptyString(transcriptPath, 'transcriptPath')
     const validRepository = requireNonEmptyString(repository, 'repository')
     if (this.engineDeps.store.hasSessionStarted(validSessionId)) {
@@ -99,6 +99,7 @@ export class WorkflowEngine<
     op: string,
     fn: (workflow: TWorkflow) => PreconditionResult,
   ): EngineResult {
+    sessionId = this.resolveSessionId(sessionId)
     this.requireSession(sessionId)
     const workflow = this.rehydrateFromEvents(sessionId)
     const registry = this.factory.getRegistry()
@@ -123,12 +124,14 @@ export class WorkflowEngine<
   }
 
   writeJournal(sessionId: string, agentName: string, content: string): EngineResult {
+    sessionId = this.resolveSessionId(sessionId)
     this.requireSession(sessionId)
     const workflow = this.rehydrateFromEvents(sessionId)
     return writeJournalWithPlatformEvents(this.platformOperationContext(sessionId, workflow), agentName, content)
   }
 
   transition(sessionId: string, target: TStateName): EngineResult {
+    sessionId = this.resolveSessionId(sessionId)
     this.requireSession(sessionId)
     const workflow = this.rehydrateFromEvents(sessionId)
     const state = workflow.getState()
@@ -198,6 +201,7 @@ export class WorkflowEngine<
     command: string,
     bashForbidden: BashForbiddenConfig,
   ): EngineResult {
+    sessionId = this.resolveSessionId(sessionId)
     this.requireSession(sessionId)
     const workflow = this.rehydrateFromEvents(sessionId)
     return checkBashWithPlatformEvents(this.platformOperationContext(sessionId, workflow), toolName, command, bashForbidden)
@@ -209,38 +213,48 @@ export class WorkflowEngine<
     filePath: string,
     isWriteAllowed: (filePath: string, state: TState) => boolean,
   ): EngineResult {
+    sessionId = this.resolveSessionId(sessionId)
     this.requireSession(sessionId)
     const workflow = this.rehydrateFromEvents(sessionId)
     return checkWriteWithPlatformEvents(this.platformOperationContext(sessionId, workflow), toolName, filePath, isWriteAllowed)
   }
 
   checkStopping(sessionId: string, action: StoppingAction, tool?: string): EngineResult {
+    sessionId = this.resolveSessionId(sessionId)
     this.requireSession(sessionId)
     const workflow = this.rehydrateFromEvents(sessionId)
     return checkStopAllowed(this.platformOperationContext(sessionId, workflow), action, tool)
   }
 
   getState(sessionId: string): EngineResult {
+    sessionId = this.resolveSessionId(sessionId)
     this.requireSession(sessionId)
     return serializeWorkflowState(this.rehydrateFromEvents(sessionId).getState())
   }
 
   persistSessionId(sessionId: string): void {
+    sessionId = this.resolveSessionId(sessionId)
     this.engineDeps.appendToFile(this.engineDeps.getEnvFilePath(), `export CLAUDE_SESSION_ID='${sessionId}'\n`)
   }
 
   hasSession(sessionId: string): boolean {
-    return this.engineDeps.store.hasSessionStarted(sessionId)
+    return this.engineDeps.store.hasSessionStarted(this.resolveSessionId(sessionId))
   }
 
   hasSessionStarted(sessionId: string): boolean {
-    return this.engineDeps.store.hasSessionStarted(sessionId)
+    return this.engineDeps.store.hasSessionStarted(this.resolveSessionId(sessionId))
   }
 
   private requireSession(sessionId: string): void {
     if (!this.engineDeps.store.hasSessionStarted(sessionId)) {
       throw new WorkflowStateError(`No session found for '${sessionId}'. Run init first.`)
     }
+  }
+
+  private resolveSessionId(executingSessionId: string): string {
+    return this.engineDeps.store.hasSessionStarted(executingSessionId)
+      ? executingSessionId
+      : this.engineDeps.sessionContext.getMainSessionId()
   }
 
   private rehydrateFromEvents(sessionId: string): TWorkflow {

@@ -34,6 +34,7 @@ import type {
   OpenCodeWorkflowPluginConfig,
 } from '../../../platform/domain/opencode-workflow-plugin-types'
 import { OpenCodeTranscriptReader } from '../../../platform/infra/external-clients/opencode/opencode-transcript-reader'
+import { createOpenCodeSessionContext } from '../../../platform/infra/external-clients/opencode/opencode-session-context'
 
 export const IDLE_RECOVERY_MESSAGE = 'You have stopped. You should never stop until the workflow is complete unless your current state permits stopping.'
 const OPENCODE_QUESTION_TOOL = 'question'
@@ -55,31 +56,24 @@ function injectTranslationNote(content: string): string {
   return `${TRANSLATION_NOTE}${content}`
 }
 
-function isSessionPromptClient(value: unknown): value is SessionPromptClient {
-  return typeof value === 'object' && value !== null && 'session' in value
-}
-
 type OpenCodeToolExecuteBefore = NonNullable<Hooks['tool.execute.before']>
 type OpenCodeToolBeforeInput = Parameters<OpenCodeToolExecuteBefore>[0]
 type OpenCodeToolBeforeOutput = Parameters<OpenCodeToolExecuteBefore>[1]
 type OpenCodeEventHook = NonNullable<Hooks['event']>
 type OpenCodeCommandMap = NonNullable<OpenCodeConfig['command']>
 type OpenCodePluginInput = Parameters<Plugin>[0]
-type SessionPromptClient = {
-  readonly session: {
-    promptAsync: (input: {
-      readonly path: { readonly id: string }
-      readonly body: {
-        readonly parts: Array<{
-          readonly type: 'text';
-          readonly text: string
-        }>
-      }
-    }) => unknown
+
+function createRunnerOptions(sessionID: string, worktree: string, dbPath: string) {
+  return {
+    getSessionId: () => sessionID,
+    getSessionTranscriptPath: () => dbPath,
+    getSessionRepository: () => getRepositoryName(worktree),
+    getRepositoryRoot: () => worktree,
+    getWorkflowEventsDbPath: () => resolveWorkflowEventsDatabasePath(),
   }
 }
 
-async function promptIdleRecovery(client: SessionPromptClient, sessionID: string): Promise<void> {
+async function promptIdleRecovery(client: OpenCodePluginInput['client'], sessionID: string): Promise<void> {
   await client.session.promptAsync({
     path: { id: sessionID },
     body: {
@@ -93,17 +87,17 @@ async function promptIdleRecovery(client: SessionPromptClient, sessionID: string
 
 /** @riviere-role cli-entrypoint */
 export function createSessionIdleEventHook(deps: IdleEventHookDeps): OpenCodeEventHook {
-  return async ({ event }): Promise<void> => {
+  return ({ event }): Promise<void> => {
     if (event.type !== 'session.idle') {
-      return
+      return Promise.resolve()
     }
-    if (!deps.hasSessionStarted(event.properties.sessionID)) {
-      return
-    }
-    if (deps.isIdleAllowed(event.properties.sessionID)) {
-      return
-    }
-    await deps.sendIdleRecoveryPrompt(event.properties.sessionID)
+    return deps.hasSessionStarted(event.properties.sessionID).then((hasSessionStarted) => {
+      if (!hasSessionStarted) return undefined
+      return deps.isIdleAllowed(event.properties.sessionID).then((isIdleAllowed) => {
+        if (isIdleAllowed) return undefined
+        return deps.sendIdleRecoveryPrompt(event.properties.sessionID)
+      })
+    })
   }
 }
 
@@ -120,10 +114,10 @@ export function createOpenCodeWorkflowPlugin<
   const store = createStore(resolveWorkflowEventsDatabasePath())
   const dbPath = resolveOpenCodeDatabasePath(config.databasePath)
 
-  function buildEngineContext(sessionID: string): {
+  function buildEngineContext(sessionID: string, input: OpenCodePluginInput): Promise<{
     engineDeps: WorkflowEngineDeps
     workflowDeps: TDeps
-  } {
+  }> {
     const transcriptReader = new OpenCodeTranscriptReader(sessionID)
     const now = () => new Date().toISOString()
     const rawReadFile = (path: string) => readFileSync(path, 'utf8')
@@ -131,31 +125,34 @@ export function createOpenCodeWorkflowPlugin<
       ? rawReadFile
       : (path: string) => injectTranslationNote(rawReadFile(path))
 
-    const engineDeps: WorkflowEngineDeps = {
-      store,
-      getPluginRoot: () => config.pluginRoot,
-      getEnvFilePath: () => join(homedir(), '.opencode', 'opencode.env'),
-      getRepositoryName: () => getRepositoryName(process.cwd()),
-      readFile,
-      appendToFile: (path, content) => appendFileSync(path, content),
-      now,
-      transcriptReader,
-    }
+    return createOpenCodeSessionContext(input.client, sessionID).then((sessionContext) => {
+      const engineDeps: WorkflowEngineDeps = {
+        store,
+        sessionContext,
+        getPluginRoot: () => config.pluginRoot,
+        getEnvFilePath: () => join(homedir(), '.opencode', 'opencode.env'),
+        getRepositoryName: () => getRepositoryName(process.cwd()),
+        readFile,
+        appendToFile: (path, content) => appendFileSync(path, content),
+        now,
+        transcriptReader,
+      }
 
-    const platformCtx: PlatformContext = {
-      getPluginRoot: () => config.pluginRoot,
-      now,
-      getSessionId: () => sessionID,
-      store,
-    }
+      const platformCtx: PlatformContext = {
+        getPluginRoot: () => config.pluginRoot,
+        now,
+        getSessionId: () => sessionID,
+        store,
+      }
 
-    return {
-      engineDeps,
-      workflowDeps: config.buildWorkflowDeps(platformCtx),
-    }
+      return {
+        engineDeps,
+        workflowDeps: config.buildWorkflowDeps(platformCtx),
+      }
+    })
   }
 
-  return async (input?: OpenCodePluginInput): Promise<Hooks> => {
+  return async (input: OpenCodePluginInput): Promise<Hooks> => {
     const handler = config.customGates === undefined
       ? createPreToolUseHandler({
         bashForbidden: config.bashForbidden,
@@ -169,31 +166,29 @@ export function createOpenCodeWorkflowPlugin<
         customGates: config.customGates,
       })
     const eventHook = createSessionIdleEventHook({
-      hasSessionStarted: (sessionID) => {
-        const {
-          engineDeps, workflowDeps 
-        } = buildEngineContext(sessionID)
+      hasSessionStarted: (sessionID) => buildEngineContext(sessionID, input).then(({
+        engineDeps,
+        workflowDeps,
+      }) => {
         const engine = new WorkflowEngine(config.workflowDefinition, engineDeps, workflowDeps)
         return engine.hasSessionStarted(sessionID)
-      },
-      isIdleAllowed: (sessionID) => {
-        const {
-          engineDeps, workflowDeps 
-        } = buildEngineContext(sessionID)
+      }),
+      isIdleAllowed: (sessionID) => buildEngineContext(sessionID, input).then(({
+        engineDeps,
+        workflowDeps,
+      }) => {
         const engine = new WorkflowEngine(config.workflowDefinition, engineDeps, workflowDeps)
         return engine.checkStopping(sessionID, 'stop').type === 'success'
-      },
+      }),
       sendIdleRecoveryPrompt: async (sessionID) => {
-        if (input !== undefined && isSessionPromptClient(input.client)) {
-          await promptIdleRecovery(input.client, sessionID)
-        }
+        await promptIdleRecovery(input.client, sessionID)
       },
     })
 
-    const toolExecuteBefore = async (hookInput: OpenCodeToolBeforeInput, output: OpenCodeToolBeforeOutput): Promise<void> => {
-      const {
-        engineDeps, workflowDeps 
-      } = buildEngineContext(hookInput.sessionID)
+    const toolExecuteBefore = (hookInput: OpenCodeToolBeforeInput, output: OpenCodeToolBeforeOutput): Promise<void> => buildEngineContext(hookInput.sessionID, input).then(({
+      engineDeps,
+      workflowDeps,
+    }) => {
       const engine = new WorkflowEngine(config.workflowDefinition, engineDeps, workflowDeps)
 
       if (config.routes === undefined) {
@@ -214,7 +209,7 @@ export function createOpenCodeWorkflowPlugin<
       if (result.type === 'blocked') {
         throw new TypeError(result.output)
       }
-    }
+    })
 
     if (config.routes === undefined) {
       return {
@@ -224,18 +219,22 @@ export function createOpenCodeWorkflowPlugin<
     }
 
     const routes = config.routes
-    const workflowTool = tool({
-      description: 'Execute a workflow operation (init, transition, record-*)',
-      args: {
-        operation: tool.schema.string().describe('operation name, e.g. "init", "transition", "record-issue"'),
-        args: tool.schema.array(tool.schema.string()).optional().describe('operation arguments'),
+    function executeWorkflowTool(
+      rawArgs: {
+        readonly operation: string
+        readonly args?: readonly string[]
       },
-      execute: async (rawArgs, ctx) => {
+      ctx: {
+        readonly sessionID: string
+        readonly worktree: string
+      },
+    ): Promise<string> {
+      return buildEngineContext(ctx.sessionID, input).then(({
+        engineDeps,
+        workflowDeps,
+      }) => {
         const operation = rawArgs.operation
         const argList = rawArgs.args ?? []
-        const {
-          engineDeps, workflowDeps 
-        } = buildEngineContext(ctx.sessionID)
         const runner = config.customGates === undefined
           ? createWorkflowRunner({
             workflowDefinition: config.workflowDefinition,
@@ -252,18 +251,20 @@ export function createOpenCodeWorkflowPlugin<
             questionToolName: OPENCODE_QUESTION_TOOL,
             customGates: config.customGates,
           })
-        const result = runner([operation, ...argList], engineDeps, workflowDeps, {
-          getSessionId: () => ctx.sessionID,
-          getSessionTranscriptPath: () => dbPath,
-          getSessionRepository: () => getRepositoryName(ctx.worktree),
-          getRepositoryRoot: () => ctx.worktree,
-          getWorkflowEventsDbPath: () => resolveWorkflowEventsDatabasePath(),
-        })
+        const result = runner([operation, ...argList], engineDeps, workflowDeps, createRunnerOptions(ctx.sessionID, ctx.worktree, dbPath))
         if (result.exitCode !== 0) {
           throw new TypeError(result.output)
         }
         return result.output
+      })
+    }
+    const workflowTool = tool({
+      description: 'Execute a workflow operation (init, transition, record-*)',
+      args: {
+        operation: tool.schema.string().describe('operation name, e.g. "init", "transition", "record-issue"'),
+        args: tool.schema.array(tool.schema.string()).optional().describe('operation arguments'),
       },
+      execute: executeWorkflowTool,
     })
 
     const commands = loadCommands(resolveCommandDirectories(config.commandDirectories), resolveCommandPrefix(config.commandPrefix))

@@ -54,6 +54,7 @@ export function createWorkflowCli<
 
   const engineDeps: WorkflowEngineDeps = {
     store,
+    sessionContext: { getMainSessionId: getSessionId },
     getPluginRoot: () => pluginRoot,
     getEnvFilePath: () => join(readEnvVar('HOME'), '.claude', 'claude.env'),
     getRepositoryName: () => getRepositoryName(process.cwd()),
