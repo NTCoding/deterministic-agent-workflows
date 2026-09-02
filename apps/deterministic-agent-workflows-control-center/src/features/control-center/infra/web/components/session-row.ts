@@ -1,6 +1,6 @@
 import type { SessionSummaryDto } from '../api-client'
 import {
-  html, esc, formatDuration, truncateId, stateCssClass, stateAbbrev 
+  html, esc, formatDuration, formatLocalTimestamp, truncateId, stateCssClass, stateAbbrev
 } from '../render'
 
 function repoShortName(repository: string): string {
@@ -21,6 +21,9 @@ function optionalText(value: string | undefined): string {
 /** @riviere-role web-tbc */
 export function renderSessionRow(session: SessionSummaryDto): string {
   const duration = formatDuration(session.durationMs)
+  const startedAt = session.startedAt === undefined
+    ? '-'
+    : formatLocalTimestamp(session.startedAt)
   const totalDenials = session.permissionDenials.write + session.permissionDenials.bash +
     session.permissionDenials.pluginRead + session.permissionDenials.idle
   const denialWarn = totalDenials > 0 ? ' warn' : ''
@@ -38,14 +41,14 @@ export function renderSessionRow(session: SessionSummaryDto): string {
   const repoData = optionalText(session.repository)
   const branchData = optionalText(session.featureBranch)
 
-  return html`<div class="session-row" data-session-id="${session.sessionId}" data-repo="${esc(repoData)}" data-branch="${esc(branchData)}" onclick="window.location.hash='/session/${session.sessionId}'">` +
-    html`<span class="session-id">${truncateId(session.sessionId)}</span>` +
-    repoHtml + branchHtml + prHtml +
-    html`<span class="session-state"><span class="ev-badge ${stateCssClass(session.currentState)}">${esc(stateAbbrev(session.currentState))}</span></span>` +
-    html`<span class="session-meta">${duration}</span>` +
-    html`<span class="session-meta">${session.totalEvents} events</span>` +
-    html`<span class="session-meta${denialWarn}">${totalDenials} denials</span>` +
-    html`<span class="session-meta">${session.activeAgents.length} agents</span>` +
+  return html`<div class="session-row" role="row" data-session-id="${session.sessionId}" data-repo="${esc(repoData)}" data-branch="${esc(branchData)}" onclick="window.location.hash='/session/${session.sessionId}'">` +
+    html`<span class="session-identity" role="cell"><span class="session-id">${truncateId(session.sessionId)}</span>${repoHtml}${branchHtml}${prHtml}</span>` +
+    html`<span class="session-state" role="cell"><span class="ev-badge ${stateCssClass(session.currentState)}">${esc(stateAbbrev(session.currentState))}</span></span>` +
+    html`<span class="session-started" role="cell"><span class="session-meta-label">Started</span>${esc(startedAt)}</span>` +
+    html`<span class="session-meta" role="cell">${duration}</span>` +
+    html`<span class="session-meta" role="cell">${session.totalEvents} events</span>` +
+    html`<span class="session-meta${denialWarn}" role="cell">${totalDenials} denials</span>` +
+    html`<span class="session-meta" role="cell">${session.activeAgents.length} agents</span>` +
     `</div>`
 }
 
@@ -54,5 +57,8 @@ export function renderSessionList(sessions: ReadonlyArray<SessionSummaryDto>): s
   if (sessions.length === 0) {
     return html`<div class="loading">No sessions found</div>`
   }
-  return html`<div class="session-list">${sessions.map(renderSessionRow).join('')}</div>`
+  const header = html`<div class="session-list-header" role="row">` +
+    html`<span role="columnheader">Session</span><span role="columnheader">State</span><span role="columnheader">Started</span><span role="columnheader">Duration</span>` +
+    html`<span role="columnheader">Events</span><span role="columnheader">Denials</span><span role="columnheader">Agents</span></div>`
+  return html`<div class="session-list" role="table">${header}${sessions.map(renderSessionRow).join('')}</div>`
 }

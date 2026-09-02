@@ -50,6 +50,7 @@ const sessionSummarySchema = z.object({
   workflowStates: z.array(z.string()),
   status: z.string(),
   totalEvents: z.number(),
+  startedAt: z.string().optional(),
   firstEventAt: z.string(),
   lastEventAt: z.string(),
   durationMs: z.number(),

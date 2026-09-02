@@ -32,6 +32,7 @@ export type SessionSummary = {
   readonly workflowStates: ReadonlyArray<string>
   readonly status: SessionStatus
   readonly totalEvents: number
+  readonly startedAt?: string | undefined
   readonly firstEventAt: string
   readonly lastEventAt: string
   readonly durationMs: number
