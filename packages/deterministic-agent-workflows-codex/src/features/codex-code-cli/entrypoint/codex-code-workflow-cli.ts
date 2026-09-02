@@ -34,7 +34,6 @@ import {
 
 const EMPTY_TRANSCRIPT_READER: TranscriptReader = { readMessages: () => [] }
 const CODEX_QUESTION_TOOL = 'request_user_input'
-type CodexEngineDeps = Omit<WorkflowEngineDeps, 'sessionContext'>
 
 function requireNonEmptyString(value: string | undefined, name: string): string {
   if (value === undefined) throw new TypeError(`${name} must be a non-empty string.`)
@@ -97,21 +96,12 @@ export function createCodexWorkflowCli<
   const databasePath = resolveDatabasePath(config.processDeps)
   const store = config.processDeps.buildStore(databasePath)
   const now = config.now ?? (() => new Date().toISOString())
-  const engineDeps: CodexEngineDeps = {
-    store,
-    getPluginRoot: () => root,
-    getEnvFilePath: () => join(root, '.codex', 'unused.env'),
-    readFile: config.processDeps.readFile,
-    appendToFile: config.processDeps.appendToFile,
-    now,
-    transcriptReader: config.transcriptReader ?? EMPTY_TRANSCRIPT_READER,
-  }
   const args = config.processDeps.getArgv().slice(2)
 
   try {
     const result = args.length === 0
-      ? handleHookInvocation(config, engineDeps, root, now)
-      : handleWorkflowCommand(config, engineDeps, root, now, args)
+      ? handleHookInvocation(config, store, root, now)
+      : handleWorkflowCommand(config, store, root, now, args)
     writeResult(config.processDeps, result)
   } catch (error: unknown) {
     config.processDeps.writeStderr(`[${now()}] ERROR: ${String(error)}\n`)
@@ -125,13 +115,14 @@ function handleWorkflowCommand<
   TDeps,
   TStateName extends string,
   TOperation extends string,
->(config: CodexWorkflowCliConfig<TWorkflow, TState, TDeps, TStateName, TOperation>, engineDeps: CodexEngineDeps, root: string, now: () => string, args: readonly string[]): RunnerResult {
+>(config: CodexWorkflowCliConfig<TWorkflow, TState, TDeps, TStateName, TOperation>, store: WorkflowEngineDeps['store'], root: string, now: () => string, args: readonly string[]): RunnerResult {
   if (args.length < 2 || args[0] === '' || args[1] === '') {
     throw new TypeError('Codex workflow commands require <operation> <session-id> [args]')
   }
   const [operation, sessionId, ...operationArgs] = args
-  const workflowDeps = buildWorkflowDeps(config, engineDeps.store, root, now, sessionId)
-  return createWorkflowRunner(config)([operation, ...operationArgs], withSessionContext(engineDeps, sessionId), workflowDeps, {
+  const engineDeps = buildEngineDeps(config, store, root, now, sessionId)
+  const workflowDeps = buildWorkflowDeps(config, store, root, now, sessionId)
+  return createWorkflowRunner(config)([operation, ...operationArgs], engineDeps, workflowDeps, {
     getSessionId: () => sessionId,
     getSessionTranscriptPath: () => resolveTranscriptPath(sessionId, null, now),
     getSessionRepository: () => getRepositoryName(process.cwd()),
@@ -173,11 +164,12 @@ function handleHookInvocation<
   TDeps,
   TStateName extends string,
   TOperation extends string,
->(config: CodexWorkflowCliConfig<TWorkflow, TState, TDeps, TStateName, TOperation>, engineDeps: CodexEngineDeps, root: string, now: () => string): RunnerResult {
+>(config: CodexWorkflowCliConfig<TWorkflow, TState, TDeps, TStateName, TOperation>, store: WorkflowEngineDeps['store'], root: string, now: () => string): RunnerResult {
   const raw = config.processDeps.readFile('/dev/stdin')
   const parsed = codexHookInputSchema.parse(JSON.parse(raw))
-  const workflowDeps = buildWorkflowDeps(config, engineDeps.store, root, now, parsed.session_id)
-  const engine = new WorkflowEngine(config.workflowDefinition, withSessionContext(engineDeps, parsed.session_id), workflowDeps)
+  const engineDeps = buildEngineDeps(config, store, root, now, parsed.session_id)
+  const workflowDeps = buildWorkflowDeps(config, store, root, now, parsed.session_id)
+  const engine = new WorkflowEngine(config.workflowDefinition, engineDeps, workflowDeps)
   switch (parsed.hook_event_name) {
     case 'SessionStart': return startSession(config, engine, parsed.session_id, parsed.transcript_path, parsed.cwd, now)
     case 'PreToolUse': return checkToolUse(config, engine, raw)
@@ -186,10 +178,22 @@ function handleHookInvocation<
   }
 }
 
-function withSessionContext(engineDeps: CodexEngineDeps, sessionId: string): WorkflowEngineDeps {
+function buildEngineDeps<
+  TWorkflow extends RehydratableWorkflow<TState>,
+  TState extends BaseWorkflowState<TStateName>,
+  TDeps,
+  TStateName extends string,
+  TOperation extends string,
+>(config: CodexWorkflowCliConfig<TWorkflow, TState, TDeps, TStateName, TOperation>, store: WorkflowEngineDeps['store'], root: string, now: () => string, sessionId: string): WorkflowEngineDeps {
   return {
-    ...engineDeps,
+    store,
     sessionContext: { getMainSessionId: () => sessionId },
+    getPluginRoot: () => root,
+    getEnvFilePath: () => join(root, '.codex', 'unused.env'),
+    readFile: config.processDeps.readFile,
+    appendToFile: config.processDeps.appendToFile,
+    now,
+    transcriptReader: config.transcriptReader ?? EMPTY_TRANSCRIPT_READER,
   }
 }
 
