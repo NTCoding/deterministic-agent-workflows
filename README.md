@@ -318,21 +318,26 @@ included because its hook transcript path is not a stable public contract.
 
 The adapter creates the SQLite event store automatically.
 
-- default path: `~/.workflow-events.db`
+- default path: `~/ai-workflow-database/.workflow-events.db`
 - override path: set `WORKFLOW_EVENTS_DB=/path/to/workflow-events.db`
 
 That is the same database the Control Center reads.
 
 ## Control Center
 
-The adapters write workflow events to `~/.workflow-events.db` by default.
+The adapters write workflow events to `~/ai-workflow-database/.workflow-events.db` by default.
 
 Start the UI:
 
 ```bash
-pnpm --filter deterministic-agent-workflows-control-center build:ui
-pnpm --filter deterministic-agent-workflows-control-center start -- --db ~/.workflow-events.db --port 3120
+./start-ui.sh
 ```
+
+The script builds the UI, starts it on port `3120`, and opens it in your
+browser. It reads `~/ai-workflow-database/.workflow-events.db` by default.
+
+To use another event database or port, set `WORKFLOW_EVENTS_DB` or
+`WORKFLOW_UI_PORT` before running the script.
 
 Open `http://localhost:3120`
 

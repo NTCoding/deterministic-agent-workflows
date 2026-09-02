@@ -1,6 +1,10 @@
 import {
   describe, it, expect 
 } from 'vitest'
+import {
+  join,
+  resolve,
+} from 'node:path'
 import { parseArgs } from './features/control-center-cli/commands/start-control-center-input'
 
 describe('parseArgs', () => {
@@ -8,7 +12,7 @@ describe('parseArgs', () => {
     const args = parseArgs([])
     expect(args.port).toBe(3120)
     expect(args.open).toBe(false)
-    expect(args.dbPath).toContain('.workflow-events.db')
+    expect(args.dbPath).toBe(resolve(join(process.env['HOME'] ?? '~', 'ai-workflow-database', '.workflow-events.db')))
   })
 
   it('parses --db flag', () => {

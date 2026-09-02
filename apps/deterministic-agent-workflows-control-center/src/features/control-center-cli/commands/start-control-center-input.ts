@@ -17,7 +17,7 @@ export function parseArgs(argv: ReadonlyArray<string>): StartControlCenterInput 
   const envDb = process.env['WORKFLOW_EVENTS_DB']
   const defaultDb = envDb !== undefined && envDb !== ''
     ? envDb
-    : join(homeDir, '.workflow-events.db')
+    : join(homeDir, 'ai-workflow-database', '.workflow-events.db')
 
   const parsed = args.reduce(
     (state, arg, index) => {
