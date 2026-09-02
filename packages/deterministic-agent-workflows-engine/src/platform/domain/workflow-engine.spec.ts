@@ -310,13 +310,19 @@ function buildStoredEvent(type: string, at: string, state: string, payload: Reco
   }
 }
 
-function createEngine(definition = workflowDefinition): {
+type TestEngine = {
   readonly engine: WorkflowEngine<StrictPlanningWorkflow, PlanningState, WorkflowDeps, 'PLANNING', 'write'>
   readonly store: InMemoryWorkflowEventStore
-} {
+}
+
+function createEngine(
+  definition = workflowDefinition,
+  sessionContext = { getMainSessionId: () => 'session-1' },
+): TestEngine {
   const store = new InMemoryWorkflowEventStore()
   const engineDeps: WorkflowEngineDeps = {
     store,
+    sessionContext,
     getPluginRoot: () => '/plugin-root',
     getEnvFilePath: () => '/plugin-root/.env',
     readFile: () => '',
@@ -331,6 +337,27 @@ function createEngine(definition = workflowDefinition): {
 }
 
 describe('WorkflowEngine platform-owned events', () => {
+  it('uses the provider main session only when the executing session has not started', () => {
+    const mainSessionRequests: string[] = []
+    const {
+      engine,
+      store,
+    } = createEngine(workflowDefinition, {
+      getMainSessionId: () => {
+        mainSessionRequests.push('main-session')
+        return 'main-session'
+      },
+    })
+
+    engine.startSession('main-session', '/sessions/session.jsonl', 'repository')
+    engine.getState('child-session')
+    engine.getState('main-session')
+
+    expect(mainSessionRequests).toStrictEqual(['main-session', 'main-session'])
+    expect(store.hasSessionStarted('main-session')).toBe(true)
+    expect(store.hasSessionStarted('child-session')).toBe(false)
+  })
+
   it.each([
     ['repository', ''],
     ['repository', '   '],

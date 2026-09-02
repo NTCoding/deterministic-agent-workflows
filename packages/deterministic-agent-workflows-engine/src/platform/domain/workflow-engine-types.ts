@@ -78,8 +78,12 @@ export interface WorkflowEventStore {
 }
 
 /** @riviere-role value-object */
+export interface SessionContext { getMainSessionId(): string }
+
+/** @riviere-role value-object */
 export type WorkflowEngineDeps = {
   readonly store: WorkflowEventStore
+  readonly sessionContext: SessionContext
   readonly getPluginRoot: () => string
   readonly getEnvFilePath: () => string
   readonly getRepositoryName?: () => string | undefined

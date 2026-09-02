@@ -18,14 +18,14 @@ type OpenCodePluginOptions = Parameters<Plugin>[1]
 
 /** @riviere-role value-object */
 export type IdleEventHookDeps = {
-  readonly hasSessionStarted: (sessionID: string) => boolean
-  readonly isIdleAllowed: (sessionID: string) => boolean
+  readonly hasSessionStarted: (sessionID: string) => Promise<boolean>
+  readonly isIdleAllowed: (sessionID: string) => Promise<boolean>
   readonly sendIdleRecoveryPrompt: (sessionID: string) => Promise<void>
 }
 
 /** @riviere-role value-object */
 export type OpenCodePlugin = (
-  input?: OpenCodePluginInput,
+  input: OpenCodePluginInput,
   options?: OpenCodePluginOptions,
 ) => Promise<Hooks>
 

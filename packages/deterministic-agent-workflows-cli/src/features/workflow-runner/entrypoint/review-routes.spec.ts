@@ -207,6 +207,7 @@ const workflowDefinition: WorkflowDefinition<ReviewRouteWorkflow, ReviewRouteSta
 function createEngineDeps(store: WorkflowEventStore): WorkflowEngineDeps {
   return {
     store,
+    sessionContext: { getMainSessionId: () => 'test-session' },
     getPluginRoot: () => '',
     getEnvFilePath: () => '',
     readFile: () => '',
