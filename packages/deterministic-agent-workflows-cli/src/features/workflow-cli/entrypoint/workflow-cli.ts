@@ -61,10 +61,6 @@ export function createWorkflowCli<
     appendToFile: processDeps.appendToFile,
     now,
     transcriptReader: config.transcriptReader,
-    sessionContext: {
-      isSubagent: async () => false,
-      getMainSessionId: async () => getSessionId(),
-    },
   }
 
   const workflowDeps = config.buildWorkflowDeps(platformCtx)

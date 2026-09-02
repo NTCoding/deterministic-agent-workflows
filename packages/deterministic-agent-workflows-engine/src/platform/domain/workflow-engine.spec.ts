@@ -314,10 +314,6 @@ function buildStoredEvent(type: string, at: string, state: string, payload: Reco
 
 function createEngine(
   definition = workflowDefinition,
-  sessionContext: SessionContext = {
-    isSubagent: async () => false,
-    getMainSessionId: async () => 'session-1',
-  },
 ): {
     readonly engine: WorkflowEngine<StrictPlanningWorkflow, PlanningState, WorkflowDeps, 'PLANNING', 'write'>
     readonly store: InMemoryWorkflowEventStore
@@ -331,7 +327,6 @@ function createEngine(
     appendToFile: () => undefined,
     now: () => '2026-01-01T00:00:00Z',
     transcriptReader: { readMessages: () => [] },
-    sessionContext,
   }
   return {
     store,
@@ -397,24 +392,26 @@ describe('WorkflowEngine platform-owned events', () => {
   })
 
   it('resolves an unstarted subagent session to its main workflow session', async () => {
-    const { engine } = createEngine(workflowDefinition, {
+    const { engine } = createEngine()
+    const sessionContext: SessionContext = {
       isSubagent: async () => true,
       getMainSessionId: async () => 'main-session',
-    })
+    }
     engine.startSession('main-session', '/transcripts/main-session.jsonl', 'test/repo')
 
-    await expect(engine.resolveSessionId('reviewer-session')).resolves.toBe('main-session')
+    await expect(engine.resolveSessionId('reviewer-session', sessionContext)).resolves.toBe('main-session')
   })
 
   it('retains a started workflow session without consulting SessionContext', async () => {
     const isSubagent = vi.fn(async () => true)
-    const { engine } = createEngine(workflowDefinition, {
+    const { engine } = createEngine()
+    const sessionContext: SessionContext = {
       isSubagent,
       getMainSessionId: async () => 'another-session',
-    })
+    }
     engine.startSession('session-1', '/transcripts/session-1.jsonl', 'test/repo')
 
-    await expect(engine.resolveSessionId('session-1')).resolves.toBe('session-1')
+    await expect(engine.resolveSessionId('session-1', sessionContext)).resolves.toBe('session-1')
     expect(isSubagent).not.toHaveBeenCalled()
   })
 

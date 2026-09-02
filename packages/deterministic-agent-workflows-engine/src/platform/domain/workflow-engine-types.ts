@@ -93,5 +93,4 @@ export type WorkflowEngineDeps = {
   readonly appendToFile: (filePath: string, content: string) => void
   readonly now: () => string
   readonly transcriptReader: TranscriptReader
-  readonly sessionContext: SessionContext
 }

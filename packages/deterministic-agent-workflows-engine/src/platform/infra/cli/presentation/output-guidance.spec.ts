@@ -242,10 +242,6 @@ const engineDeps: WorkflowEngineDeps = {
   },
   now: () => '2026-01-01T00:00:00Z',
   transcriptReader,
-  sessionContext: {
-    isSubagent: async () => false,
-    getMainSessionId: async () => 'session-1',
-  },
 }
 
 it('reinserts the current procedure when identity verification fails', () => {

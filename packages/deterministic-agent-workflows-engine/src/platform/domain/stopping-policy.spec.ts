@@ -134,10 +134,6 @@ function createEngine(allowIdle: boolean): {
     appendToFile: () => undefined,
     now: () => '2026-08-31T00:00:00.000Z',
     transcriptReader: { readMessages: () => [] },
-    sessionContext: {
-      isSubagent: async () => false,
-      getMainSessionId: async () => 'session-1',
-    },
   }
   return {
     engine: new WorkflowEngine(createDefinition(allowIdle), deps, {}),

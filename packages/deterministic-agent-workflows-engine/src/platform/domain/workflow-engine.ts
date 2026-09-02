@@ -26,6 +26,7 @@ import type { BashForbiddenConfig } from './workflow-registry'
 import type {
   EngineResult,
   RehydratableWorkflow,
+  SessionContext,
   WorkflowDefinition,
   WorkflowEngineDeps,
 } from './workflow-engine-types'
@@ -237,15 +238,15 @@ export class WorkflowEngine<
     return this.engineDeps.store.hasSessionStarted(sessionId)
   }
 
-  async resolveSessionId(executingSessionId: string): Promise<string> {
+  async resolveSessionId(executingSessionId: string, sessionContext: SessionContext): Promise<string> {
     const validSessionId = requireNonEmptyString(executingSessionId, 'sessionId')
     if (this.engineDeps.store.hasSessionStarted(validSessionId)) {
       return validSessionId
     }
-    if (!await this.engineDeps.sessionContext.isSubagent()) {
+    if (!await sessionContext.isSubagent()) {
       return validSessionId
     }
-    return requireNonEmptyString(await this.engineDeps.sessionContext.getMainSessionId(), 'mainSessionId')
+    return requireNonEmptyString(await sessionContext.getMainSessionId(), 'mainSessionId')
   }
 
   private requireSession(sessionId: string): void {

@@ -18,6 +18,7 @@ import { tool } from '@opencode-ai/plugin/tool'
 import type {
   BaseWorkflowState,
   RehydratableWorkflow,
+  SessionContext,
   WorkflowEngineDeps,
 } from '@nt-ai-lab/deterministic-agent-workflow-engine'
 import { WorkflowEngine } from '@nt-ai-lab/deterministic-agent-workflow-engine'
@@ -132,6 +133,7 @@ export function createOpenCodeWorkflowPlugin<
   function buildEngineContext(sessionID: string, client: SessionPromptClient | undefined): {
     engineDeps: WorkflowEngineDeps
     workflowDeps: TDeps
+    sessionContext: SessionContext
   } {
     const transcriptReader = new OpenCodeTranscriptReader(sessionID)
     const now = () => new Date().toISOString()
@@ -140,6 +142,7 @@ export function createOpenCodeWorkflowPlugin<
       ? rawReadFile
       : (path: string) => injectTranslationNote(rawReadFile(path))
 
+    const sessionContext = config.createSessionContext?.(sessionID) ?? createOpenCodeSessionContext(sessionID, client ?? unavailableSessionClient)
     const engineDeps: WorkflowEngineDeps = {
       store,
       getPluginRoot: () => config.pluginRoot,
@@ -149,7 +152,6 @@ export function createOpenCodeWorkflowPlugin<
       appendToFile: (path, content) => appendFileSync(path, content),
       now,
       transcriptReader,
-      sessionContext: config.createSessionContext?.(sessionID) ?? createOpenCodeSessionContext(sessionID, client ?? unavailableSessionClient),
     }
 
     const platformCtx: PlatformContext = {
@@ -162,6 +164,7 @@ export function createOpenCodeWorkflowPlugin<
     return {
       engineDeps,
       workflowDeps: config.buildWorkflowDeps(platformCtx),
+      sessionContext,
     }
   }
 
@@ -205,10 +208,10 @@ export function createOpenCodeWorkflowPlugin<
         throw new TypeError('OpenCode client session API is unavailable.')
       }
       const {
-        engineDeps, workflowDeps 
+        engineDeps, workflowDeps, sessionContext
       } = buildEngineContext(hookInput.sessionID, input.client)
       const engine = new WorkflowEngine(config.workflowDefinition, engineDeps, workflowDeps)
-      const sessionID = await engine.resolveSessionId(hookInput.sessionID)
+      const sessionID = await engine.resolveSessionId(hookInput.sessionID, sessionContext)
 
       if (config.routes === undefined) {
         if (engine.hasSession(sessionID)) {
@@ -251,10 +254,10 @@ export function createOpenCodeWorkflowPlugin<
           throw new TypeError('OpenCode client session API is unavailable.')
         }
         const {
-          engineDeps, workflowDeps 
+          engineDeps, workflowDeps, sessionContext
         } = buildEngineContext(ctx.sessionID, input.client)
         const engine = new WorkflowEngine(config.workflowDefinition, engineDeps, workflowDeps)
-        const sessionID = await engine.resolveSessionId(ctx.sessionID)
+        const sessionID = await engine.resolveSessionId(ctx.sessionID, sessionContext)
         const runner = config.customGates === undefined
           ? createWorkflowRunner({
             workflowDefinition: config.workflowDefinition,

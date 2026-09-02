@@ -183,7 +183,7 @@ Status legend: `TODO`, `IN_PROGRESS`, `BLOCKED`, `DONE`
 
 ### 13) Resolve subagent sessions centrally
 
-- [x] **DONE** Add required `SessionContext` resolution to the engine and bind OpenCode session ancestry per tool invocation.
+- [x] **DONE** Add engine `SessionContext` resolution and bind OpenCode session ancestry per tool invocation.
 
 ---
 
