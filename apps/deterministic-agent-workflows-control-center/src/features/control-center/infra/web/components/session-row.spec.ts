@@ -38,6 +38,8 @@ describe('renderSessionRow', () => {
 
     const row = renderSessionRow(makeSession(startedAt))
 
+    expect(row).toContain('class="session-row" role="row"')
+    expect(row).toContain('class="session-started" role="cell"')
     expect(row).toContain('Started')
     expect(row).toContain(formatLocalTimestamp(startedAt))
   })
@@ -50,7 +52,7 @@ describe('renderSessionRow', () => {
     const list = renderSessionList([makeSession('2026-01-02T15:04:00Z')])
 
     expect(list).toContain('class="session-list-header"')
-    expect(list).toContain('<span>Started</span>')
+    expect(list).toContain('<span role="columnheader">Started</span>')
     expect(list).toContain('class="session-started"')
   })
 })
