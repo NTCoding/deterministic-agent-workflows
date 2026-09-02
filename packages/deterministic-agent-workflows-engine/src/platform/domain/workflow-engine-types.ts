@@ -78,6 +78,12 @@ export interface WorkflowEventStore {
 }
 
 /** @riviere-role value-object */
+export interface SessionContext {
+  isSubagent(): Promise<boolean>
+  getMainSessionId(): Promise<string>
+}
+
+/** @riviere-role value-object */
 export type WorkflowEngineDeps = {
   readonly store: WorkflowEventStore
   readonly getPluginRoot: () => string
@@ -87,4 +93,5 @@ export type WorkflowEngineDeps = {
   readonly appendToFile: (filePath: string, content: string) => void
   readonly now: () => string
   readonly transcriptReader: TranscriptReader
+  readonly sessionContext: SessionContext
 }

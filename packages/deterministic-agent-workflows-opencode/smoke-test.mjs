@@ -307,6 +307,7 @@ seedOpencodeTranscript(opencodeDatabasePath, 'session-1', '🧠 PLANNING proving
 
 try {
   const promptedTexts = []
+  const sessionGetCalls = []
   const plugin = createOpenCodeWorkflowPlugin({
     workflowDefinition,
     routes,
@@ -322,6 +323,12 @@ try {
   const hooks = await plugin({
     client: {
       session: {
+        get: async ({ path }) => {
+          sessionGetCalls.push(path.id)
+          if (path.id === 'child-session-1') return { parentID: 'session-1' }
+          if (path.id === 'session-1') return { parentID: undefined }
+          throw new Error(`Unknown session ${path.id}`)
+        },
         promptAsync: async ({ body }) => {
           promptedTexts.push(body.parts[0].text)
         },
@@ -340,6 +347,7 @@ try {
   }
 
   const initOutput = await hooks.tool.workflow.execute({ operation: 'init' }, ctx)
+  const sessionGetCallsAfterInit = sessionGetCalls.length
   const beforeHook = hooks['tool.execute.before']
   await beforeHook({
     tool: 'workflow',
@@ -444,6 +452,11 @@ try {
     operation: 'transition',
     args: ['REVIEWING']
   }, ctx)
+  const parentLookupCountBeforeChild = sessionGetCalls.length
+  const childStateOutput = await hooks.tool.workflow.execute({ operation: 'get-state' }, {
+    ...ctx,
+    sessionID: 'child-session-1',
+  })
   const reviewOutput = await hooks.tool.workflow.execute({
     operation: 'record-review',
     args: ['platform-review', JSON.stringify({
@@ -491,6 +504,9 @@ try {
     || identityStatus !== 'verified'
     || promptedTexts.length !== 1
     || !reviewOutput.includes('"ok": true')
+    || !childStateOutput.includes('"currentStateMachineState": "REVIEWING"')
+    || parentLookupCountBeforeChild !== sessionGetCallsAfterInit
+    || sessionGetCalls.join(',') !== 'session-1,child-session-1,session-1'
     || missingPayloadError !== 'record-review requires <review-type> and <review-json> arguments'
     || !invalidJsonError?.includes('Invalid review JSON')
     || blockedStateError !== 'record-review is not allowed in state DEVELOPING.'
@@ -517,6 +533,10 @@ try {
       promptedTexts,
       initOutput,
       reviewOutput,
+      childStateOutput,
+      parentLookupCountBeforeChild,
+      sessionGetCallsAfterInit,
+      sessionGetCalls,
       missingPayloadError,
       invalidJsonError,
       blockedStateError,

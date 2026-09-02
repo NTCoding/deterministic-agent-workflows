@@ -8,3 +8,4 @@ export type {
   OpenCodeWorkflowPluginConfig,
 } from './platform/domain/opencode-workflow-plugin-types'
 export { OpenCodeTranscriptReader } from './platform/infra/external-clients/opencode/opencode-transcript-reader'
+export { createOpenCodeSessionContext } from './platform/infra/external-clients/opencode/opencode-session-context'

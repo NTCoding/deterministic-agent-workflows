@@ -115,6 +115,7 @@ export type {
   WorkflowDefinition,
   WorkflowEventStore,
   WorkflowEngineDeps,
+  SessionContext,
 } from './platform/domain/workflow-engine-types'
 export type { StoppingAction } from './platform/domain/workflow-engine-platform-operations'
 

@@ -181,6 +181,10 @@ Status legend: `TODO`, `IN_PROGRESS`, `BLOCKED`, `DONE`
 
 - [x] **DONE** Show a dedicated, visibly headed Started date/time column in the Control Center session list. It must share a fixed grid with every session row, be sourced from the first `session-started` event, and be formatted in the viewer's local time.
 
+### 13) Resolve subagent sessions centrally
+
+- [x] **DONE** Add required `SessionContext` resolution to the engine and bind OpenCode session ancestry per tool invocation.
+
 ---
 
 ## Acceptance criteria for “done”

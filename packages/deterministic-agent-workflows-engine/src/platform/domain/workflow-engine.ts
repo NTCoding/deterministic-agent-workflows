@@ -237,6 +237,17 @@ export class WorkflowEngine<
     return this.engineDeps.store.hasSessionStarted(sessionId)
   }
 
+  async resolveSessionId(executingSessionId: string): Promise<string> {
+    const validSessionId = requireNonEmptyString(executingSessionId, 'sessionId')
+    if (this.engineDeps.store.hasSessionStarted(validSessionId)) {
+      return validSessionId
+    }
+    if (!await this.engineDeps.sessionContext.isSubagent()) {
+      return validSessionId
+    }
+    return requireNonEmptyString(await this.engineDeps.sessionContext.getMainSessionId(), 'mainSessionId')
+  }
+
   private requireSession(sessionId: string): void {
     if (!this.engineDeps.store.hasSessionStarted(sessionId)) {
       throw new WorkflowStateError(`No session found for '${sessionId}'. Run init first.`)

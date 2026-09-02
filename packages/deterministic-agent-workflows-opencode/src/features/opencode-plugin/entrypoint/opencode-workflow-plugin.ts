@@ -34,6 +34,7 @@ import type {
   OpenCodeWorkflowPluginConfig,
 } from '../../../platform/domain/opencode-workflow-plugin-types'
 import { OpenCodeTranscriptReader } from '../../../platform/infra/external-clients/opencode/opencode-transcript-reader'
+import { createOpenCodeSessionContext } from '../../../platform/infra/external-clients/opencode/opencode-session-context'
 
 export const IDLE_RECOVERY_MESSAGE = 'You have stopped. You should never stop until the workflow is complete unless your current state permits stopping.'
 const OPENCODE_QUESTION_TOOL = 'question'
@@ -67,6 +68,7 @@ type OpenCodeCommandMap = NonNullable<OpenCodeConfig['command']>
 type OpenCodePluginInput = Parameters<Plugin>[0]
 type SessionPromptClient = {
   readonly session: {
+    get: (input: { readonly path: { readonly id: string } }) => Promise<unknown>
     promptAsync: (input: {
       readonly path: { readonly id: string }
       readonly body: {
@@ -77,6 +79,13 @@ type SessionPromptClient = {
       }
     }) => unknown
   }
+}
+
+const unavailableSessionClient: SessionPromptClient = {
+  session: {
+    get: async () => { throw new TypeError('OpenCode client session API is unavailable.') },
+    promptAsync: async () => undefined,
+  },
 }
 
 async function promptIdleRecovery(client: SessionPromptClient, sessionID: string): Promise<void> {
@@ -120,7 +129,7 @@ export function createOpenCodeWorkflowPlugin<
   const store = createStore(resolveWorkflowEventsDatabasePath())
   const dbPath = resolveOpenCodeDatabasePath(config.databasePath)
 
-  function buildEngineContext(sessionID: string): {
+  function buildEngineContext(sessionID: string, client: SessionPromptClient | undefined): {
     engineDeps: WorkflowEngineDeps
     workflowDeps: TDeps
   } {
@@ -140,6 +149,7 @@ export function createOpenCodeWorkflowPlugin<
       appendToFile: (path, content) => appendFileSync(path, content),
       now,
       transcriptReader,
+      sessionContext: config.createSessionContext?.(sessionID) ?? createOpenCodeSessionContext(sessionID, client ?? unavailableSessionClient),
     }
 
     const platformCtx: PlatformContext = {
@@ -172,14 +182,14 @@ export function createOpenCodeWorkflowPlugin<
       hasSessionStarted: (sessionID) => {
         const {
           engineDeps, workflowDeps 
-        } = buildEngineContext(sessionID)
+        } = buildEngineContext(sessionID, isSessionPromptClient(input?.client) ? input.client : undefined)
         const engine = new WorkflowEngine(config.workflowDefinition, engineDeps, workflowDeps)
         return engine.hasSessionStarted(sessionID)
       },
       isIdleAllowed: (sessionID) => {
         const {
           engineDeps, workflowDeps 
-        } = buildEngineContext(sessionID)
+        } = buildEngineContext(sessionID, isSessionPromptClient(input?.client) ? input.client : undefined)
         const engine = new WorkflowEngine(config.workflowDefinition, engineDeps, workflowDeps)
         return engine.checkStopping(sessionID, 'stop').type === 'success'
       },
@@ -191,26 +201,30 @@ export function createOpenCodeWorkflowPlugin<
     })
 
     const toolExecuteBefore = async (hookInput: OpenCodeToolBeforeInput, output: OpenCodeToolBeforeOutput): Promise<void> => {
+      if (!isSessionPromptClient(input?.client)) {
+        throw new TypeError('OpenCode client session API is unavailable.')
+      }
       const {
         engineDeps, workflowDeps 
-      } = buildEngineContext(hookInput.sessionID)
+      } = buildEngineContext(hookInput.sessionID, input.client)
       const engine = new WorkflowEngine(config.workflowDefinition, engineDeps, workflowDeps)
+      const sessionID = await engine.resolveSessionId(hookInput.sessionID)
 
       if (config.routes === undefined) {
-        if (engine.hasSession(hookInput.sessionID)) {
+        if (engine.hasSession(sessionID)) {
           // Session already exists for the default non-router path.
         } else {
           const repository = getRepositoryName(process.cwd())
           if (repository === undefined) throw new TypeError('repository must be a non-empty string.')
-          engine.startSession(hookInput.sessionID, dbPath, repository)
+          engine.startSession(sessionID, dbPath, repository)
         }
-      } else if (engine.hasSessionStarted(hookInput.sessionID)) {
+      } else if (engine.hasSessionStarted(sessionID)) {
         // Routed mode only enforces tools after the session starts.
       } else {
         return
       }
 
-      const result = handler(engine, hookInput.sessionID, hookInput.tool, output.args)
+      const result = handler(engine, sessionID, hookInput.tool, output.args)
       if (result.type === 'blocked') {
         throw new TypeError(result.output)
       }
@@ -233,9 +247,14 @@ export function createOpenCodeWorkflowPlugin<
       execute: async (rawArgs, ctx) => {
         const operation = rawArgs.operation
         const argList = rawArgs.args ?? []
+        if (!isSessionPromptClient(input?.client)) {
+          throw new TypeError('OpenCode client session API is unavailable.')
+        }
         const {
           engineDeps, workflowDeps 
-        } = buildEngineContext(ctx.sessionID)
+        } = buildEngineContext(ctx.sessionID, input.client)
+        const engine = new WorkflowEngine(config.workflowDefinition, engineDeps, workflowDeps)
+        const sessionID = await engine.resolveSessionId(ctx.sessionID)
         const runner = config.customGates === undefined
           ? createWorkflowRunner({
             workflowDefinition: config.workflowDefinition,
@@ -253,7 +272,7 @@ export function createOpenCodeWorkflowPlugin<
             customGates: config.customGates,
           })
         const result = runner([operation, ...argList], engineDeps, workflowDeps, {
-          getSessionId: () => ctx.sessionID,
+          getSessionId: () => sessionID,
           getSessionTranscriptPath: () => dbPath,
           getSessionRepository: () => getRepositoryName(ctx.worktree),
           getRepositoryRoot: () => ctx.worktree,

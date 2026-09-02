@@ -104,6 +104,10 @@ export function createCodexWorkflowCli<
     appendToFile: config.processDeps.appendToFile,
     now,
     transcriptReader: config.transcriptReader ?? EMPTY_TRANSCRIPT_READER,
+    sessionContext: {
+      isSubagent: async () => false,
+      getMainSessionId: async () => '',
+    },
   }
   const args = config.processDeps.getArgv().slice(2)
 

@@ -1,6 +1,7 @@
 import type {
   BaseWorkflowState,
   RehydratableWorkflow,
+  SessionContext,
   WorkflowDefinition,
 } from '@nt-ai-lab/deterministic-agent-workflow-engine'
 import type {
@@ -44,4 +45,5 @@ export type OpenCodeWorkflowPluginConfig<
   readonly routes?: RouteMap<TWorkflow, TState>
   readonly commandDirectories?: readonly string[]
   readonly commandPrefix?: string
+  readonly createSessionContext?: (executingSessionId: string) => SessionContext
 }
