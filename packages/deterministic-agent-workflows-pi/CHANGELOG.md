@@ -1,6 +1,6 @@
 # @nt-ai-lab/deterministic-agent-workflow-pi
 
-## Unreleased
+## 0.5.1
 
 - Start workflow state, policy enforcement, and state instructions only after the user invokes `workflow init`.
 
