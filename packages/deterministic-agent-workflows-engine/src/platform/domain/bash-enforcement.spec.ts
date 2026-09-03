@@ -64,10 +64,40 @@ describe('checkBashCommand', () => {
   it.each([
     "Invoke-Expression 'Remove-Item secret.txt'",
     'Invoke-Expression "Remove-Item secret.txt"',
+    'Invoke-Expression "Rem`ove-Item secret.txt"',
+    'Inv`oke-Expression "Rem`ove-Item secret.txt"',
     '$(Remove-Item secret.txt)',
     '& "Remove-Item" secret.txt',
   ])('blocks forbidden PowerShell commands in quoted and indirect expressions: %s', (command) => {
     expect(checkBashCommand(command, { commands: ['Remove-Item'] }, [], true)).toStrictEqual({
+      pass: false,
+      reason: "Forbidden command 'Remove-Item' in command.",
+    })
+  })
+
+  it.each([
+    'iex $generatedCommand',
+    '& ("Remove" + "-Item") secret.txt',
+    '& $generatedCommand',
+    '(& $generatedCommand grouped.txt)',
+    '&<#comment#>$generatedCommand secret.txt',
+    'Write-Output ok&&& $generatedCommand secret.txt',
+    '. $generatedCommand',
+    '. <#comment#> $generatedCommand',
+    'Write-Output ok&&. $generatedScript',
+  ])('blocks dynamic PowerShell invocation while command restrictions are active: %s', (command) => {
+    expect(checkBashCommand(command, { commands: ['Remove-Item'] }, [], true)).toStrictEqual({
+      pass: false,
+      reason: 'Indirect PowerShell invocation is forbidden while command restrictions are active.',
+    })
+  })
+
+  it('allows indirect PowerShell syntax when every command restriction is exempt', () => {
+    expect(checkBashCommand('iex $generatedCommand', { commands: ['Remove-Item'] }, ['remove-item'], true)).toStrictEqual({ pass: true })
+  })
+
+  it('normalises PowerShell escape characters before direct command matching', () => {
+    expect(checkBashCommand('Rem`ove-Item secret.txt', { commands: ['Remove-Item'] }, [], true)).toStrictEqual({
       pass: false,
       reason: "Forbidden command 'Remove-Item' in command.",
     })
