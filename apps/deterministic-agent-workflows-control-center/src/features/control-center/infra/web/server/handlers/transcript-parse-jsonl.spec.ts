@@ -22,12 +22,14 @@ class NotAToolResultError extends Error {
 }
 
 function expectToolResult(block: TranscriptContentBlock | undefined): {
+  readonly toolUseId: string;
   readonly toolName: string;
   readonly text: string;
   readonly isError: boolean
 } {
   if (block?.kind !== 'tool_result') throw new NotAToolResultError(block?.kind ?? 'undefined')
   return {
+    toolUseId: block.toolUseId,
     toolName: block.toolName,
     text: block.text,
     isError: block.isError,

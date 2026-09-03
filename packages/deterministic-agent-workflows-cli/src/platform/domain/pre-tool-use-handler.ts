@@ -6,7 +6,12 @@ import type {
 } from '@nt-ai-lab/deterministic-agent-workflow-engine'
 import type { BashForbiddenConfig } from '@nt-ai-lab/deterministic-agent-workflow-dsl'
 
-const BASH_TOOL_NAMES = ['Bash', 'bash']
+const BASH_TOOL_NAMES = [
+  // Claude Code, OpenCode, Codex, and Pi
+  'Bash', 'bash',
+  // Pi on Windows
+  'powershell',
+]
 const WRITE_TOOL_NAMES = [
   // Claude Code
   'Write', 'Edit', 'MultiEdit', 'NotebookEdit',

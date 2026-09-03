@@ -32,7 +32,7 @@ If docs or APIs force that, the repo is not ready.
 
 1. User installs:
    - `@nt-ai-lab/deterministic-agent-workflow-dsl`
-   - one adapter: `@nt-ai-lab/deterministic-agent-workflow-opencode`, `@nt-ai-lab/deterministic-agent-workflow-claude-code`, or `@nt-ai-lab/deterministic-agent-workflow-codex`
+   - one adapter: `@nt-ai-lab/deterministic-agent-workflow-opencode`, `@nt-ai-lab/deterministic-agent-workflow-claude-code`, `@nt-ai-lab/deterministic-agent-workflow-codex`, or `@nt-ai-lab/deterministic-agent-workflow-pi`
 2. User defines workflow states, transitions, and policy.
 3. User creates plugin via one high-level factory.
 4. Runtime automatically:
@@ -50,6 +50,7 @@ If docs or APIs force that, the repo is not ready.
 - Provide `createOpenCodeWorkflowPlugin(...)`.
 - Provide `createClaudeCodeWorkflowCli(...)`.
 - Provide `createCodexWorkflowCli(...)`.
+- Provide `createPiWorkflowExtension(...)`.
 - Preserve the existing consumer setup shape exactly.
 - Hide engine/event-sourcing internals behind adapter APIs.
 
@@ -65,6 +66,7 @@ If docs or APIs force that, the repo is not ready.
 ### Architecture
 - Engine stays platform-agnostic.
 - Provider-specific runtime logic stays in adapter packages.
+- Pi uses the same linear workflow event model as the other providers. Tree navigation and forks are blocked after workflow start until branch-aware event streams are designed. Ephemeral `--no-session` runs fail closed because they provide no durable transcript.
 - Event store package owns persistence implementation.
 - Role-enforcement model stays aligned with `living-architecture`.
 - If code does not fit role-enforcement conventions, stop and discuss with the user.
@@ -79,6 +81,7 @@ If docs or APIs force that, the repo is not ready.
   - `@nt-ai-lab/deterministic-agent-workflow-claude-code`
   - `@nt-ai-lab/deterministic-agent-workflow-opencode`
   - `@nt-ai-lab/deterministic-agent-workflow-codex`
+  - `@nt-ai-lab/deterministic-agent-workflow-pi`
 
 ---
 
@@ -122,7 +125,7 @@ Status legend: `TODO`, `IN_PROGRESS`, `BLOCKED`, `DONE`
 - [ ] **TODO** Keep refining the package story so normal users start from `cli` + adapter + workflow definition, not engine internals.
 - [x] **DONE** Make `engine` an advanced/core package, not the required first-touch package for normal users in README.
 - [x] **DONE** Keep `event-store` as persistence implementation package, not a required manual step for normal OpenCode adapter setup.
-- [x] **DONE** Keep provider-specific integration code inside `claude-code` and `opencode` only.
+- [x] **DONE** Keep provider-specific integration code inside its `claude-code`, `codex`, `opencode`, or `pi` adapter package.
 - [ ] **TODO** Review exports in every package and remove accidental low-level leakage from adapter-facing docs.
 
 ### 3) Align package names and publish surface
@@ -185,6 +188,11 @@ Status legend: `TODO`, `IN_PROGRESS`, `BLOCKED`, `DONE`
 
 - [x] **DONE** Add required `SessionContext` resolution to the engine and bind OpenCode session ancestry per tool invocation.
 
+### 14) Native Pi adapter
+
+- [x] **DONE** Add a Pi extension factory with automatic session start and resumption, workflow commands, tool enforcement, stopping recovery, event persistence, and Control Center transcript support.
+- [x] **DONE** Block Pi tree navigation and forks after workflow start so the linear workflow event stream cannot retain state from an abandoned branch.
+
 ---
 
 ## Acceptance criteria for “done”
@@ -194,6 +202,8 @@ This repo is only ready when all of the following are true:
 - A consumer can create an OpenCode integration with one high-level factory.
 - A consumer can create a Claude Code integration with the preserved high-level CLI wrapper.
 - A consumer can create a Codex integration with automatic lifecycle hooks and explicit session-scoped workflow commands.
+- A consumer can create a Pi integration with one high-level extension factory.
+- Pi sessions resume safely, and unsupported tree navigation and forks fail closed after workflow start.
 - The main README shows that exact usage style.
 - The README example does not mention `appendEvent`, `getPendingEvents`, `RehydratableWorkflow`, or manual event rehydration.
 - A smoke test proves:
