@@ -1,12 +1,15 @@
 {
-  "name": "@nt-ai-lab/deterministic-agent-workflow-opencode",
-  "version": "0.4.5",
+  "name": "@nt-ai-lab/deterministic-agent-workflow-pi",
+  "version": "0.5.0",
   "private": false,
   "type": "module",
+  "engines": {
+    "node": ">=22.19.0"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/NTCoding/deterministic-agent-workflows.git",
-    "directory": "packages/deterministic-agent-workflows-opencode"
+    "directory": "packages/deterministic-agent-workflows-pi"
   },
   "exports": {
     ".": "./dist/index.js"
@@ -15,11 +18,18 @@
   "files": [
     "dist"
   ],
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "^0.84.4"
+  },
   "dependencies": {
     "@nt-ai-lab/deterministic-agent-workflow-cli": "workspace:*",
     "@nt-ai-lab/deterministic-agent-workflow-engine": "workspace:*",
     "@nt-ai-lab/deterministic-agent-workflow-event-store": "workspace:*",
-    "@opencode-ai/plugin": "^1.4.3",
+    "typebox": "^1.3.7"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "^0.84.4",
+    "vitest": "^2.1.9",
     "zod": "^3.25.76"
   },
   "publishConfig": {

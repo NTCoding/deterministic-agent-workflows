@@ -23,6 +23,24 @@ const jsonlAssistantSchema = z.object({
   message: z.object({ content: z.array(z.unknown()).optional() }).optional(),
 })
 
+const piToolCallSchema = z.object({
+  type: z.literal('toolCall'),
+  id: z.string(),
+  name: z.string(),
+  arguments: z.record(z.unknown()),
+})
+
+const piAssistantSchema = z.object({
+  type: z.literal('message'),
+  id: z.string(),
+  parentId: z.string().nullable(),
+  timestamp: z.string(),
+  message: z.object({
+    role: z.literal('assistant'),
+    content: z.array(z.unknown()),
+  }),
+})
+
 const opencodeActivityRowSchema = z.object({
   m_time: z.number().nullable(),
   p_time: z.number().nullable(),
@@ -48,13 +66,20 @@ function safeParseJson(raw: string): unknown {
   }
 }
 
+function parseJsonlToolName(block: unknown): string | null {
+  const claudeToolUse = jsonlToolUseSchema.safeParse(block)
+  if (claudeToolUse.success) return claudeToolUse.data.name
+  const piToolCall = piToolCallSchema.safeParse(block)
+  return piToolCall.success ? piToolCall.data.name : null
+}
+
 function collectToolUses(content: ReadonlyArray<unknown>, timestampMs: number): ReadonlyArray<ToolCall> {
   const results: Array<ToolCall> = []
   for (const block of content) {
-    const parsed = jsonlToolUseSchema.safeParse(block)
-    if (parsed.success) {
+    const name = parseJsonlToolName(block)
+    if (name !== null) {
       results.push({
-        name: parsed.data.name,
+        name,
         timestampMs,
       })
     }
@@ -66,9 +91,14 @@ function extractToolCallsFromJsonl(path: string): ReadonlyArray<ToolCall> {
   const raw = readFileSync(path, 'utf8')
   const lines = raw.split('\n').filter((line) => line.trim().length > 0)
   return lines.flatMap((line) => {
-    const parsed = jsonlAssistantSchema.safeParse(safeParseJson(line))
-    if (!parsed.success) return []
-    return collectToolUses(parsed.data.message?.content ?? [], parseTs(parsed.data.timestamp))
+    const entry = safeParseJson(line)
+    const claudeAssistant = jsonlAssistantSchema.safeParse(entry)
+    if (claudeAssistant.success) {
+      return collectToolUses(claudeAssistant.data.message?.content ?? [], parseTs(claudeAssistant.data.timestamp))
+    }
+    const piAssistant = piAssistantSchema.safeParse(entry)
+    if (!piAssistant.success) return []
+    return collectToolUses(piAssistant.data.message.content, parseTs(piAssistant.data.timestamp))
   })
 }
 
@@ -229,8 +259,7 @@ export function buildTransitionSummary(events: readonly StoredEvent[]): Reflecti
   }, new Map())
 
   const repeatedPathCounts = transitions.slice(0, -1).reduce<Map<string, number>>((map, transition, index) => {
-    const next = transitions.at(index + 1)
-    if (next === undefined) return map
+    const next = transitions[index + 1]
     const key = [transition.from, transition.to, next.to].join('\u0000')
     map.set(key, (map.get(key) ?? 0) + 1)
     return map
@@ -243,8 +272,8 @@ export function buildTransitionSummary(events: readonly StoredEvent[]): Reflecti
         const from = parts[0]
         const to = parts[1]
         return {
-          from: typeof from === 'string' ? from : '',
-          to: typeof to === 'string' ? to : '',
+          from,
+          to,
           count,
         }
       })

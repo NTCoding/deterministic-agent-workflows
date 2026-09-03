@@ -18,6 +18,7 @@
     },
     "lint": {
       "executor": "nx:run-commands",
+      "dependsOn": ["^build"],
       "options": {
         "command": "eslint packages/deterministic-agent-workflows-cli/src --ext .ts"
       }

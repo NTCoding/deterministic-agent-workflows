@@ -30,6 +30,8 @@ pnpm add @nt-ai-lab/deterministic-agent-workflow-opencode
 pnpm add @nt-ai-lab/deterministic-agent-workflow-claude-code
 # or
 pnpm add @nt-ai-lab/deterministic-agent-workflow-codex
+# or
+pnpm add @nt-ai-lab/deterministic-agent-workflow-pi
 ```
 
 ## OpenCode example
@@ -124,7 +126,7 @@ export const PRE_TOOL_USE_POLICY = {
 
 That policy means a write is denied outside `DEVELOPING`.
 
-Set `allowIdle: true` on a state only when an agent may stop or wait for a user response. It is `false` by default, so OpenCode's `question`, Claude Code's `AskUserQuestion`, and Codex's `request_user_input` tools are denied until the current state explicitly allows idle.
+Set `allowIdle: true` on a state only when an agent may stop or wait for a user response. It is `false` by default, so OpenCode's `question`, Claude Code's `AskUserQuestion`, and Codex's `request_user_input` tools are denied until the current state explicitly allows idle. Pi applies the same policy when the agent settles, and also enforces it for a registered `question` tool.
 
 ## Workflow operations
 
@@ -313,6 +315,46 @@ Review and trust the project hooks in Codex before using them. Codex uses the
 same event store as the other adapters, so the Control Center shows sessions,
 states, transitions and denials. Codex transcript and activity parsing are not
 included because its hook transcript path is not a stable public contract.
+
+## Pi example
+
+Create `.pi/extensions/workflow.ts` in the consumer repository. Pi loads the
+extension directly and starts or resumes the workflow using its session id.
+
+```ts
+import { createPiWorkflowExtension } from '@nt-ai-lab/deterministic-agent-workflow-pi'
+import { fileURLToPath } from 'node:url'
+import { dirname, join } from 'node:path'
+
+import { WORKFLOW_DEFINITION } from '../../features/workflow/infra/persistence/workflow-definition'
+import { ROUTES, PRE_TOOL_USE_POLICY } from '../../features/workflow/entrypoint/workflow-cli'
+
+const pluginRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
+
+export default createPiWorkflowExtension({
+  workflowDefinition: WORKFLOW_DEFINITION,
+  routes: ROUTES,
+  bashForbidden: PRE_TOOL_USE_POLICY.bashForbidden,
+  isWriteAllowed: PRE_TOOL_USE_POLICY.isWriteAllowed,
+  pluginRoot,
+  buildWorkflowDeps: (platform) => ({
+    now: platform.now,
+  }),
+})
+```
+
+The extension provides both `/workflow <operation> [args]` for users and a
+`workflow` tool for the agent. It enforces Pi's `bash`, `write`, and `edit`
+calls before execution, prevents stopping in states that do not allow idle,
+and writes events and the Pi transcript path for the Control Center.
+
+Pi can navigate a branching tree within one session id, while workflow event
+streams are currently linear. To prevent abandoned branch transitions from
+remaining active, the adapter disables Pi tree navigation and session forks
+once a workflow has started, including command line forks from an active parent
+session. Normal session resumption remains supported. Pi must run with session
+persistence enabled; `--no-session` is rejected because it provides no durable
+transcript for workflow identity checks or the Control Center.
 
 ## Event store
 
