@@ -15,6 +15,7 @@ export type PiWorkflowExtension = ExtensionFactory
 
 /** @riviere-role value-object */
 export type PiInitializationStatus =
+  | { readonly type: 'inactive' }
   | { readonly type: 'initializing' }
   | { readonly type: 'ready' }
   | {
