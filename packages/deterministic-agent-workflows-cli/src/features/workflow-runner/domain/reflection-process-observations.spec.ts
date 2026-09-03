@@ -2,7 +2,6 @@ import {
   describe,
   expect,
   it,
-  vi,
 } from 'vitest'
 import type { StoredEvent } from '@nt-ai-lab/deterministic-agent-workflow-engine'
 import {
@@ -328,57 +327,6 @@ describe('buildTransitionSummary', () => {
   it('returns empty summaries when there are no valid transitions', () => {
     expect(buildTransitionSummary([])).toStrictEqual({
       transitions: [],
-      repeatedPaths: [],
-    })
-  })
-
-  it('omits a repeated path when the next transition cannot be read', () => {
-    const arrayAt = vi.spyOn(Array.prototype, 'at').mockReturnValueOnce(undefined)
-    const summary = buildTransitionSummary([
-      event('transitioned', 'now', {
-        from: 'alpha',
-        to: 'beta'
-      }),
-      event('transitioned', 'now', {
-        from: 'beta',
-        to: 'charlie'
-      }),
-    ])
-    arrayAt.mockRestore()
-
-    expect(summary).toStrictEqual({
-      transitions: [
-        {
-          from: 'alpha',
-          to: 'beta',
-          count: 1
-        },
-        {
-          from: 'beta',
-          to: 'charlie',
-          count: 1
-        },
-      ],
-      repeatedPaths: [],
-    })
-  })
-
-  it('defaults decoded states when an encoded transition key is malformed', () => {
-    const stringSplit = vi.spyOn(String.prototype, 'split').mockReturnValueOnce([])
-    const summary = buildTransitionSummary([
-      event('transitioned', 'now', {
-        from: 'alpha',
-        to: 'beta'
-      }),
-    ])
-    stringSplit.mockRestore()
-
-    expect(summary).toStrictEqual({
-      transitions: [{
-        from: '',
-        to: '',
-        count: 1,
-      }],
       repeatedPaths: [],
     })
   })

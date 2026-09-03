@@ -259,8 +259,7 @@ export function buildTransitionSummary(events: readonly StoredEvent[]): Reflecti
   }, new Map())
 
   const repeatedPathCounts = transitions.slice(0, -1).reduce<Map<string, number>>((map, transition, index) => {
-    const next = transitions.at(index + 1)
-    if (next === undefined) return map
+    const next = transitions[index + 1]
     const key = [transition.from, transition.to, next.to].join('\u0000')
     map.set(key, (map.get(key) ?? 0) + 1)
     return map
@@ -273,8 +272,8 @@ export function buildTransitionSummary(events: readonly StoredEvent[]): Reflecti
         const from = parts[0]
         const to = parts[1]
         return {
-          from: typeof from === 'string' ? from : '',
-          to: typeof to === 'string' ? to : '',
+          from,
+          to,
           count,
         }
       })

@@ -7,7 +7,9 @@ function buildCommandPattern(command: string, caseInsensitive: boolean): RegExp 
   const parts = command.trim().split(/\s+/)
   const escapedParts = parts.map((part) => part.replaceAll(/[.*+?^${}()|[\]\\]/g, '\\$&'))
   const patternBody = escapedParts.join('\\s+')
-  return new RegExp(`(?:^|\\s|&&|\\|\\||[;&|])${patternBody}(?:\\s|$|-|[;&|])`, caseInsensitive ? 'i' : undefined)
+  const leftBoundary = caseInsensitive ? '(?:^|\\s|&&|\\|\\||[;&|\'"(])' : '(?:^|\\s|&&|\\|\\||[;&|])'
+  const rightBoundary = caseInsensitive ? '(?:\\s|$|-|[;&|\'"\\)])' : '(?:\\s|$|-|[;&|])'
+  return new RegExp(`${leftBoundary}${patternBody}${rightBoundary}`, caseInsensitive ? 'i' : undefined)
 }
 
 /** @riviere-role domain-service */

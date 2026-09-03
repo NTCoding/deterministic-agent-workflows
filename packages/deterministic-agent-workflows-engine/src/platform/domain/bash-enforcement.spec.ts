@@ -61,6 +61,18 @@ describe('checkBashCommand', () => {
     expect(checkBashCommand('remove-item secret.txt', { commands: ['Remove-Item'] }, ['REMOVE-ITEM'], true)).toStrictEqual({ pass: true })
   })
 
+  it.each([
+    "Invoke-Expression 'Remove-Item secret.txt'",
+    'Invoke-Expression "Remove-Item secret.txt"',
+    '$(Remove-Item secret.txt)',
+    '& "Remove-Item" secret.txt',
+  ])('blocks forbidden PowerShell commands in quoted and indirect expressions: %s', (command) => {
+    expect(checkBashCommand(command, { commands: ['Remove-Item'] }, [], true)).toStrictEqual({
+      pass: false,
+      reason: "Forbidden command 'Remove-Item' in command.",
+    })
+  })
+
   it('matches PowerShell flags without case sensitivity', () => {
     expect(checkBashCommand('Remove-Item secret.txt -force', {
       commands: [],

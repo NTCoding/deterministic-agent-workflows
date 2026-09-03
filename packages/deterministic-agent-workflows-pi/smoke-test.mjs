@@ -313,7 +313,9 @@ try {
   assert.equal(countEvents(eventsBeforeResume, 'write-checked'), 2)
   assert.equal(countEvents(eventsBeforeResume, 'bash-checked'), 1)
   assert.equal(countEvents(eventsBeforeResume, 'stopping-checked'), 3)
-  assert.equal(eventsBeforeResume.filter((event) => event.envelope.type === 'identity-verified').every((event) => event.payload.status === 'verified'), true)
+  const identityEvents = eventsBeforeResume.filter((event) => event.envelope.type === 'identity-verified')
+  assert.ok(identityEvents.length > 0)
+  assert.equal(identityEvents.every((event) => event.payload.status === 'verified'), true)
 
   const resumedRuntime = createPiApi()
   extension(resumedRuntime.api)
