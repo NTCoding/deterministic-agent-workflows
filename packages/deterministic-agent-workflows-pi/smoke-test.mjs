@@ -231,6 +231,7 @@ try {
     type: 'session_start',
     reason: 'startup',
   }, context)
+  await runtime.commands.get('workflow').handler('init', context)
   assert.match(runtime.sentMessages[0].message.content, /Plan before editing/)
   assert.match(runtime.sentMessages[0].message.content, /call the `workflow` tool/)
   assert.deepEqual(runtime.sentMessages[0].options, { triggerTurn: false })

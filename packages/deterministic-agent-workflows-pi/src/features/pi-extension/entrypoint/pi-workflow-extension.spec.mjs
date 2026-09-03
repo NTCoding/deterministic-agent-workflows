@@ -250,6 +250,10 @@ function createHarness(manager, config, options = {}) {
   }
 }
 
+async function activate(harness) {
+  await harness.workflowCommand.handler('init', harness.runner.createCommandContext())
+}
+
 function appendWorkflowMarker(manager) {
   return manager.appendCustomMessageEntry(
     'deterministic-agent-workflow',
@@ -304,6 +308,49 @@ afterEach(() => {
 })
 
 describe('createPiWorkflowExtension', () => {
+  it('stays inactive until the workflow init command is invoked', async () => {
+    const root = createTestRoot()
+    const manager = SessionManager.create(repositoryRoot, join(root, 'sessions'))
+    const harness = createHarness(manager, createConfig(root))
+    await harness.runner.emit({
+      type: 'session_start',
+      reason: 'startup',
+    })
+
+    const workflowResult = await harness.workflowTool.execute(
+      'inactive-workflow',
+      {
+        operation: 'transition',
+        args: ['DEVELOPING']
+      },
+      undefined,
+      undefined,
+      harness.runner.createContext(),
+    )
+    const writeResult = await harness.runner.emitToolCall({
+      type: 'tool_call',
+      toolCallId: 'inactive-write',
+      toolName: 'write',
+      input: {
+        path: 'src/app.ts',
+        content: 'ordinary Pi session',
+      },
+    })
+
+    expect(harness.sentMessages).toHaveLength(0)
+    expect(workflowStarted(join(root, 'workflow-events.db'), manager.getSessionId())).toBe(false)
+    expect(workflowResult.isError).toBe(true)
+    expect(workflowResult.content[0].text).toContain('Pi workflow is inactive')
+    expect(writeResult).toBeUndefined()
+    expect(await harness.runner.emitInput('Normal Pi input.', undefined, 'interactive')).toStrictEqual({ action: 'continue' })
+    expect(await harness.runner.emit({type: 'session_before_tree',})).toBeUndefined()
+
+    await activate(harness)
+
+    expect(harness.sentMessages).toHaveLength(1)
+    expect(workflowStarted(join(root, 'workflow-events.db'), manager.getSessionId())).toBe(true)
+  })
+
   it('persists initial guidance once and retains it across a real SessionManager resume', async () => {
     const root = createTestRoot()
     const manager = SessionManager.create(repositoryRoot, join(root, 'sessions'))
@@ -312,6 +359,7 @@ describe('createPiWorkflowExtension', () => {
       type: 'session_start',
       reason: 'startup'
     })
+    await activate(initial)
     appendAssistant(manager, 'stop')
     const sessionFile = manager.getSessionFile()
     const resumedManager = SessionManager.open(sessionFile)
@@ -321,6 +369,7 @@ describe('createPiWorkflowExtension', () => {
       reason: 'resume',
       previousSessionFile: sessionFile
     })
+    await activate(resumed)
     const readyInput = await resumed.runner.emitInput('Continue.', undefined, 'interactive')
 
     expect(initial.sentMessages[0].options).toStrictEqual({ triggerTurn: false })
@@ -340,6 +389,7 @@ describe('createPiWorkflowExtension', () => {
       type: 'session_start',
       reason: 'startup'
     })
+    await activate(harness)
     const blockedInput = await harness.runner.emitInput('Continue despite failure.', undefined, 'interactive')
     const blocked = await harness.runner.emitToolCall({
       type: 'tool_call',
@@ -367,6 +417,7 @@ describe('createPiWorkflowExtension', () => {
       type: 'session_start',
       reason: 'startup'
     })
+    await activate(harness)
     const blockedInput = await harness.runner.emitInput('Continue without a session.', undefined, 'interactive')
     const blocked = await harness.runner.emitToolCall({
       type: 'tool_call',
@@ -390,6 +441,7 @@ describe('createPiWorkflowExtension', () => {
       type: 'session_start',
       reason: 'startup'
     })
+    await activate(parentHarness)
     appendAssistant(parent, 'stop')
     const child = SessionManager.forkFrom(parent.getSessionFile(), repositoryRoot, join(root, 'sessions'))
     const childHarness = createHarness(child, createConfig(root, databasePath))
@@ -397,6 +449,7 @@ describe('createPiWorkflowExtension', () => {
       type: 'session_start',
       reason: 'startup'
     })
+    await activate(childHarness)
     const blocked = await childHarness.runner.emitToolCall({
       type: 'tool_call',
       toolCallId: 'write-2',
@@ -423,6 +476,7 @@ describe('createPiWorkflowExtension', () => {
       reason: 'resume',
       previousSessionFile: manager.getSessionFile(),
     })
+    await activate(harness)
     const blockedInput = await harness.runner.emitInput('Continue from lost state.', undefined, 'rpc')
 
     expect(harness.state.shutdowns).toBe(1)
@@ -442,6 +496,7 @@ describe('createPiWorkflowExtension', () => {
       type: 'session_start',
       reason: 'startup',
     })
+    await activate(initial)
     manager.branch(preWorkflowEntryId)
     const resumed = createHarness(manager, createConfig(root, databasePath))
     await resumed.runner.emit({
@@ -449,6 +504,7 @@ describe('createPiWorkflowExtension', () => {
       reason: 'resume',
       previousSessionFile: manager.getSessionFile(),
     })
+    await activate(resumed)
 
     expect(resumed.state.shutdowns).toBe(1)
     expect(resumed.notifications[0].message).toContain('active Pi branch does not contain')
@@ -466,6 +522,7 @@ describe('createPiWorkflowExtension', () => {
       reason: 'resume',
       previousSessionFile: manager.getSessionFile(),
     })
+    await activate(harness)
 
     expect(harness.state.shutdowns).toBe(0)
     expect(harness.sentMessages).toHaveLength(1)
@@ -485,6 +542,7 @@ describe('createPiWorkflowExtension', () => {
       type: 'session_start',
       reason: 'startup',
     })
+    await activate(harness)
 
     expect(harness.state.shutdowns).toBe(1)
     expect(workflowStarted(databasePath, child.getSessionId())).toBe(false)
@@ -505,6 +563,7 @@ describe('createPiWorkflowExtension', () => {
       reason: 'fork',
       previousSessionFile: parentFile,
     })
+    await activate(initial)
     appendAssistant(child, 'stop')
     const childFile = child.getSessionFile()
     rmSync(parentFile)
@@ -516,6 +575,7 @@ describe('createPiWorkflowExtension', () => {
       reason: 'resume',
       previousSessionFile: childFile,
     })
+    await activate(resumed)
 
     expect(initial.state.shutdowns).toBe(0)
     expect(resumed.state.shutdowns).toBe(0)
@@ -530,6 +590,7 @@ describe('createPiWorkflowExtension', () => {
       type: 'session_start',
       reason: 'startup'
     })
+    await activate(harness)
     for (const stopReason of ['error', 'aborted', 'length', 'toolUse']) {
       appendAssistant(manager, stopReason)
       await harness.runner.emit({ type: 'agent_settled' })
@@ -553,6 +614,7 @@ describe('createPiWorkflowExtension', () => {
       type: 'session_start',
       reason: 'startup',
     })
+    await activate(harness)
 
     const toolResult = await harness.workflowTool.execute(
       'workflow-1',
@@ -592,6 +654,7 @@ describe('createPiWorkflowExtension', () => {
       type: 'session_start',
       reason: 'startup',
     })
+    await activate(harness)
     rmSync(databasePath)
     mkdirSync(databasePath)
     const unsafe = await harness.workflowTool.execute(
@@ -617,6 +680,7 @@ describe('createPiWorkflowExtension', () => {
       type: 'session_start',
       reason: 'startup',
     })
+    await activate(routeHarness)
     const routeId = routeManager.getSessionId()
     let routeReads = 0
     routeManager.getSessionId = () => {
@@ -638,6 +702,7 @@ describe('createPiWorkflowExtension', () => {
       type: 'session_start',
       reason: 'startup',
     })
+    await activate(toolHarness)
     const toolId = toolManager.getSessionId()
     let toolReads = 0
     toolManager.getSessionId = () => {
@@ -658,6 +723,7 @@ describe('createPiWorkflowExtension', () => {
       type: 'session_start',
       reason: 'startup',
     })
+    await activate(settlementHarness)
     const settlementId = settlementManager.getSessionId()
     let settlementReads = 0
     settlementManager.getSessionId = () => {
@@ -681,6 +747,7 @@ describe('createPiWorkflowExtension', () => {
       type: 'session_start',
       reason: 'startup',
     })
+    await activate(harness)
     await harness.runner.emit({ type: 'agent_settled' })
 
     expect(harness.sentUserMessages).toHaveLength(0)
@@ -712,6 +779,7 @@ describe('createPiWorkflowExtension', () => {
       type: 'session_start',
       reason: 'startup',
     })
+    await activate(harness)
 
     const blocked = await harness.runner.emitToolCall({
       type: 'tool_call',
@@ -746,6 +814,7 @@ describe('createPiWorkflowExtension', () => {
       type: 'session_start',
       reason: 'startup',
     })
+    await activate(harness)
     rmSync(databasePath)
     mkdirSync(databasePath)
 
@@ -769,6 +838,7 @@ describe('createPiWorkflowExtension', () => {
       type: 'session_start',
       reason: 'startup',
     })
+    await activate(emptyIdHarness)
 
     const throwingManager = SessionManager.create(repositoryRoot, join(root, 'sessions'))
     throwingManager.getSessionId = () => { throw new Error('UUID unavailable') }
@@ -793,6 +863,7 @@ describe('createPiWorkflowExtension', () => {
       type: 'session_start',
       reason: 'startup',
     })
+    await activate(mismatchedHarness)
     const emptyIdInput = await emptyIdHarness.runner.emitInput('Continue.', undefined, 'interactive')
     const mismatchedInput = await mismatchedHarness.runner.emitInput('Continue.', undefined, 'interactive')
 
@@ -814,6 +885,7 @@ describe('createPiWorkflowExtension', () => {
       type: 'session_start',
       reason: 'fork',
     })
+    await activate(missingParentHarness)
 
     const parent = SessionManager.create(repositoryRoot, join(root, 'sessions'))
     appendAssistant(parent, 'stop')
@@ -823,6 +895,7 @@ describe('createPiWorkflowExtension', () => {
       type: 'session_start',
       reason: 'startup',
     })
+    await activate(childHarness)
 
     expect(missingParentHarness.state.shutdowns).toBe(1)
     expect(childHarness.state.shutdowns).toBe(0)
@@ -842,6 +915,7 @@ describe('createPiWorkflowExtension', () => {
       type: 'session_start',
       reason: 'startup',
     })
+    await activate(activeHarness)
     const activeResult = await activeHarness.runner.emit({ type: 'session_before_fork' })
 
     expect(pendingResult).toStrictEqual({ cancel: true })
@@ -859,6 +933,7 @@ describe('createPiWorkflowExtension', () => {
       type: 'session_start',
       reason: 'startup',
     })
+    await activate(harness)
     rmSync(databasePath)
 
     expect(await harness.runner.emit({ type: 'session_before_tree' })).toStrictEqual({ cancel: true })
@@ -874,6 +949,7 @@ describe('createPiWorkflowExtension', () => {
       type: 'session_start',
       reason: 'startup',
     })
+    await activate(treeHarness)
     rmSync(treeDatabase)
     mkdirSync(treeDatabase)
     const blockedTree = await treeHarness.runner.emit({ type: 'session_before_tree' })
@@ -885,6 +961,7 @@ describe('createPiWorkflowExtension', () => {
       type: 'session_start',
       reason: 'startup',
     })
+    await activate(stopHarness)
     appendAssistant(stopManager, 'stop')
     rmSync(stopDatabase)
     mkdirSync(stopDatabase)
@@ -903,6 +980,7 @@ describe('createPiWorkflowExtension', () => {
       type: 'session_start',
       reason: 'startup',
     })
+    await activate(busyHarness)
     appendAssistant(busyManager, 'stop')
     await busyHarness.runner.emit({ type: 'agent_settled' })
 
@@ -912,6 +990,7 @@ describe('createPiWorkflowExtension', () => {
       type: 'session_start',
       reason: 'startup',
     })
+    await activate(pendingHarness)
     appendAssistant(pendingManager, 'stop')
     await pendingHarness.runner.emit({ type: 'agent_settled' })
 
@@ -940,6 +1019,7 @@ describe('createPiWorkflowExtension', () => {
       type: 'session_start',
       reason: 'startup',
     })
+    await activate(harness)
 
     expect(harness.state.shutdowns).toBe(1)
   })

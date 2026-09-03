@@ -186,7 +186,7 @@ Status legend: `TODO`, `IN_PROGRESS`, `BLOCKED`, `DONE`
 
 ### 13) Native Pi adapter
 
-- [x] **DONE** Add a Pi extension factory with automatic session start and resumption, workflow commands, tool enforcement, stopping recovery, event persistence, and Control Center transcript support.
+- [x] **DONE** Add a Pi extension factory with explicit workflow start, safe resumption of active workflows, workflow commands, tool enforcement after workflow start, stopping recovery, event persistence, and Control Center transcript support.
 - [x] **DONE** Block Pi tree navigation and forks after workflow start so the linear workflow event stream cannot retain state from an abandoned branch.
 
 ---

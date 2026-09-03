@@ -1,5 +1,3 @@
-import { readFileSync } from 'node:fs'
-import { homedir } from 'node:os'
 import { join } from 'node:path'
 import type {
   ExtensionAPI,
@@ -24,7 +22,6 @@ import { createStore } from '@nt-ai-lab/deterministic-agent-workflow-event-store
 import { Type } from 'typebox'
 import type {
   PiInitializationStatus,
-  PiSessionIdResult,
   PiWorkflowExtension,
   PiWorkflowExtensionConfig,
 } from '../../../platform/domain/pi-workflow-extension-types'
@@ -40,11 +37,20 @@ import {
   type PiAssistantSettlement,
   PiTranscriptReader,
 } from '../../../platform/infra/external-clients/pi/pi-transcript-reader'
+import {
+  notifyRouteResult,
+  readSessionId,
+  readWorkflowInstruction,
+  requireSessionFile,
+  resolveDatabasePath,
+  translationNote,
+} from './pi-workflow-extension-platform'
 
 const PI_QUESTION_TOOL = 'question'
 const DEFAULT_COMMAND_NAME = 'workflow'
 const DEFAULT_TOOL_NAME = 'workflow'
 const INITIALIZATION_PENDING_REASON = 'Pi workflow initialization has not completed safely. Tool execution is blocked.'
+const INACTIVE_WORKFLOW_REASON = 'Pi workflow is inactive. Run the workflow init command before using workflow operations.'
 
 export const PI_IDLE_RECOVERY_MESSAGE = 'You have stopped. You should never stop until the workflow is complete unless your current state permits stopping.'
 export const PI_SESSION_BRANCH_BLOCK_MESSAGE = 'Pi session tree navigation and forks are disabled while a workflow is active.'
@@ -53,61 +59,6 @@ const workflowToolParameters = Type.Object({
   operation: Type.String({ description: 'Workflow operation, for example init or transition' }),
   args: Type.Optional(Type.Array(Type.String({ description: 'One workflow operation argument' }))),
 })
-
-function translationNote(toolName: string): string {
-  return [
-    `> **Pi**: When instructions say to run a workflow command, call the \`${toolName}\` tool instead:`,
-    '> `operation: "<op>", args: ["<arg>", ...]`.',
-    '',
-    '---',
-    '',
-    '',
-  ].join('\n')
-}
-
-function resolveDatabasePath(configured: string | undefined): string {
-  if (configured !== undefined && configured !== '') return configured
-  const fromEnvironment = process.env['WORKFLOW_EVENTS_DB']
-  if (fromEnvironment !== undefined && fromEnvironment !== '') return fromEnvironment
-  return join(homedir(), 'ai-workflow-database', '.workflow-events.db')
-}
-
-function readSessionId(ctx: ExtensionContext): PiSessionIdResult {
-  try {
-    const sessionId = ctx.sessionManager.getSessionId()
-    if (sessionId.trim().length === 0) return {
-      ok: false,
-      reason: 'Pi returned an empty session UUID.',
-    }
-    return {
-      ok: true,
-      sessionId,
-    }
-  } catch (error: unknown) {
-    return {
-      ok: false,
-      reason: `Pi session UUID is unavailable: ${String(error)}`,
-    }
-  }
-}
-
-function requireSessionFile(ctx: ExtensionContext): string {
-  const sessionFile = ctx.sessionManager.getSessionFile()
-  if (sessionFile === undefined) throw new TypeError('Ephemeral Pi sessions are unsupported because no persistent transcript file is available.')
-  return sessionFile
-}
-
-function notifyRouteResult(ctx: ExtensionContext, pi: ExtensionAPI, result: RunnerResult): void {
-  if (result.exitCode !== 0) {
-    ctx.ui.notify(result.output, 'error')
-    return
-  }
-  if (result.output === '') {
-    ctx.ui.notify('Workflow operation completed.', 'info')
-    return
-  }
-  pi.sendUserMessage(result.output)
-}
 
 /** @riviere-role cli-entrypoint */
 export function createPiWorkflowExtension<
@@ -123,6 +74,7 @@ export function createPiWorkflowExtension<
   const commandName = config.commandName ?? DEFAULT_COMMAND_NAME
   const toolName = config.toolName ?? DEFAULT_TOOL_NAME
   const initializationBySession = new Map<string, PiInitializationStatus>()
+  const sessionStartsById = new Map<string, SessionStartEvent>()
   const recoveredAssistantBySession = new Map<string, string>()
   const preToolUse = createPreToolUseHandler<TWorkflow, TState, TDeps, TStateName, TOperation>({
     bashForbidden: config.bashForbidden,
@@ -157,7 +109,7 @@ export function createPiWorkflowExtension<
         getPluginRoot: () => config.pluginRoot,
         getEnvFilePath: () => join(config.pluginRoot, '.pi', 'unused.env'),
         getRepositoryName: () => getRepositoryName(ctx.cwd),
-        readFile: (path) => `${note}${readFileSync(path, 'utf8')}`,
+        readFile: (path) => readWorkflowInstruction(path, note),
         appendToFile: () => undefined,
         now,
         transcriptReader: new PiTranscriptReader(() => ctx.sessionManager.getBranch()),
@@ -193,7 +145,13 @@ export function createPiWorkflowExtension<
     if (!session.ok) return session.reason
     const status = initializationBySession.get(session.sessionId)
     if (status?.type === 'ready') return undefined
+    if (status?.type === 'inactive') return INACTIVE_WORKFLOW_REASON
     return status?.type === 'failed' ? status.reason : INITIALIZATION_PENDING_REASON
+  }
+
+  function isInactive(ctx: ExtensionContext): boolean {
+    const session = readSessionId(ctx)
+    return session.ok && initializationBySession.get(session.sessionId)?.type === 'inactive'
   }
 
   function parentSafetyFailure(event: SessionStartEvent, ctx: ExtensionContext): string | undefined {
@@ -257,7 +215,26 @@ export function createPiWorkflowExtension<
     }
   }
 
-  function runRoute(ctx: ExtensionContext, args: readonly string[]): RunnerResult {
+  function runRoute(ctx: ExtensionContext, args: readonly string[], pi: ExtensionAPI): RunnerResult {
+    if (isInactive(ctx) && args[0] === 'init') {
+      const session = readSessionId(ctx)
+      if (!session.ok) return {
+        output: session.reason,
+        exitCode: 1,
+      }
+      const event = sessionStartsById.get(session.sessionId)
+      if (event === undefined) return {
+        output: INITIALIZATION_PENDING_REASON,
+        exitCode: 1,
+      }
+      initializationBySession.set(session.sessionId, { type: 'initializing' })
+      const failure = initializeSession(event, ctx, pi, session.sessionId)
+      if (failure !== undefined) return {
+        output: markInitializationFailed(ctx, session.sessionId, failure),
+        exitCode: 1,
+      }
+      initializationBySession.set(session.sessionId, { type: 'ready' })
+    }
     const notReady = readinessFailure(ctx)
     if (notReady !== undefined) return {
       output: notReady,
@@ -292,6 +269,18 @@ export function createPiWorkflowExtension<
         ctx.shutdown()
         return
       }
+      sessionStartsById.set(session.sessionId, event)
+      try {
+        const hasPersistedWorkflow = useEngine(ctx, (engine) => engine.hasSessionStarted(session.sessionId))
+        const hasTranscriptWorkflow = hasPiWorkflowMarker(ctx.sessionManager.getEntries())
+        if (!hasPersistedWorkflow && !hasTranscriptWorkflow) {
+          initializationBySession.set(session.sessionId, { type: 'inactive' })
+          return
+        }
+      } catch (error: unknown) {
+        markInitializationFailed(ctx, session.sessionId, String(error))
+        return
+      }
       initializationBySession.set(session.sessionId, { type: 'initializing' })
       const failure = initializeSession(event, ctx, pi, session.sessionId)
       if (failure !== undefined) {
@@ -302,6 +291,7 @@ export function createPiWorkflowExtension<
     })
 
     pi.on('tool_call', (event, ctx) => {
+      if (isInactive(ctx)) return
       const notReady = readinessFailure(ctx)
       if (notReady !== undefined) return {
         block: true,
@@ -333,6 +323,7 @@ export function createPiWorkflowExtension<
     })
 
     pi.on('input', (_event, ctx) => {
+      if (isInactive(ctx)) return
       const notReady = readinessFailure(ctx)
       if (notReady === undefined) return
       ctx.ui.notify(notReady, 'error')
@@ -340,7 +331,7 @@ export function createPiWorkflowExtension<
     })
 
     pi.on('agent_settled', (_event, ctx) => {
-      if (readinessFailure(ctx) !== undefined) return
+      if (isInactive(ctx) || readinessFailure(ctx) !== undefined) return
       const session = readSessionId(ctx)
       if (!session.ok) return
       const settlement: PiAssistantSettlement | undefined = getLatestPiAssistantSettlement(ctx.sessionManager.getBranch())
@@ -364,6 +355,7 @@ export function createPiWorkflowExtension<
         ctx.shutdown()
         return { cancel: true }
       }
+      if (isInactive(ctx)) return undefined
       const notReady = readinessFailure(ctx)
       if (notReady !== undefined) {
         markInitializationFailed(ctx, session.sessionId, notReady)
@@ -383,7 +375,7 @@ export function createPiWorkflowExtension<
       parameters: workflowToolParameters,
       executionMode: 'sequential',
       async execute(_toolCallId, parameters, _signal, _onUpdate, ctx) {
-        const result = runRoute(ctx, [parameters.operation, ...(parameters.args ?? [])])
+        const result = runRoute(ctx, [parameters.operation, ...(parameters.args ?? [])], pi)
         return {
           content: [{
             type: 'text',
@@ -399,7 +391,7 @@ export function createPiWorkflowExtension<
       description: `Execute a deterministic workflow operation: /${commandName} <operation> [args]`,
       handler: async (rawArguments, ctx) => {
         try {
-          const result = runRoute(ctx, parsePiCommandArguments(rawArguments))
+          const result = runRoute(ctx, parsePiCommandArguments(rawArguments), pi)
           notifyRouteResult(ctx, pi, result)
         } catch (error: unknown) {
           ctx.ui.notify(String(error), 'error')
