@@ -39,6 +39,7 @@ const packages = [
   'packages/deterministic-agent-workflows-event-store',
   'packages/deterministic-agent-workflows-claude-code',
   'packages/deterministic-agent-workflows-opencode',
+  'packages/deterministic-agent-workflows-pi',
   'apps/deterministic-agent-workflows-control-center',
 ]
 
@@ -62,6 +63,7 @@ export const config = roleEnforcement({
     '@nt-ai-lab/deterministic-agent-workflow-event-store': 'packages/deterministic-agent-workflows-event-store/src/index.ts',
     '@nt-ai-lab/deterministic-agent-workflow-claude-code': 'packages/deterministic-agent-workflows-claude-code/src/index.ts',
     '@nt-ai-lab/deterministic-agent-workflow-opencode': 'packages/deterministic-agent-workflows-opencode/src/index.ts',
+    '@nt-ai-lab/deterministic-agent-workflow-pi': 'packages/deterministic-agent-workflows-pi/src/index.ts',
   },
 
   locations: [

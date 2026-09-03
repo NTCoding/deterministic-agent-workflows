@@ -127,7 +127,7 @@ export function checkBashWithPlatformEvents<
   if (gate !== undefined) return gate
 
   const exemptions = context.factory.getRegistry()[currentStateName].allowForbidden?.bash ?? []
-  const bashCheckResult = checkBashCommand(command, bashForbidden, exemptions)
+  const bashCheckResult = checkBashCommand(command, bashForbidden, exemptions, toolName === 'powershell')
   if (!bashCheckResult.pass) {
     const reason = `Bash command blocked in ${currentStateName}. ${bashCheckResult.reason}`
     context.persistPlatformEvent({

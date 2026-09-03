@@ -50,6 +50,56 @@ const jsonlEntrySchema = z.object({
   message: messageSchema.optional(),
   text: z.string().optional(),
 })
+const piToolCallBlockSchema = z.object({
+  type: z.literal('toolCall'),
+  id: z.string(),
+  name: z.string(),
+  arguments: z.record(z.unknown()),
+})
+const piUsageSchema = z.object({
+  input: z.number().optional(),
+  output: z.number().optional(),
+  cacheRead: z.number().optional(),
+  cacheWrite: z.number().optional(),
+})
+const piAssistantMessageSchema = z.object({
+  role: z.literal('assistant'),
+  content: z.array(z.unknown()),
+  model: z.string().optional(),
+  stopReason: z.string().optional(),
+  usage: z.unknown().optional(),
+})
+const piUserMessageSchema = z.object({
+  role: z.literal('user'),
+  content: z.union([z.string(), z.array(z.unknown())]),
+})
+const piToolResultMessageSchema = z.object({
+  role: z.literal('toolResult'),
+  toolCallId: z.string(),
+  toolName: z.string(),
+  content: z.array(z.unknown()),
+  isError: z.boolean(),
+})
+const piEntrySchema = z.object({
+  type: z.literal('message'),
+  id: z.string(),
+  parentId: z.string().nullable(),
+  timestamp: z.string(),
+  message: z.discriminatedUnion('role', [
+    piAssistantMessageSchema,
+    piUserMessageSchema,
+    piToolResultMessageSchema,
+  ]),
+})
+const piWorkflowGuidanceSchema = z.object({
+  type: z.literal('custom_message'),
+  id: z.string(),
+  parentId: z.string().nullable(),
+  timestamp: z.string(),
+  customType: z.literal('deterministic-agent-workflow'),
+  content: z.union([z.string(), z.array(z.unknown())]),
+  display: z.literal(true),
+})
 
 function parseTextBlock(block: unknown): TranscriptContentBlock | null {
   const parsed = textPartRawSchema.safeParse(block)
@@ -86,6 +136,18 @@ function parseToolUseBlock(block: unknown, toolNames: Map<string, string>): Tran
   }
 }
 
+function parsePiToolCallBlock(block: unknown, toolNames: Map<string, string>): TranscriptContentBlock | null {
+  const parsed = piToolCallBlockSchema.safeParse(block)
+  if (!parsed.success) return null
+  toolNames.set(parsed.data.id, parsed.data.name)
+  return {
+    kind: 'tool_use',
+    id: parsed.data.id,
+    name: parsed.data.name,
+    input: parsed.data.arguments,
+  }
+}
+
 function collectToolResultText(content: unknown): string {
   if (typeof content === 'string') return content
   if (!Array.isArray(content)) return ''
@@ -119,6 +181,12 @@ function parseContentBlock(block: unknown, toolNames: Map<string, string>): Tran
     ?? parseToolResultBlock(block, toolNames)
 }
 
+function parsePiContentBlock(block: unknown, toolNames: Map<string, string>): TranscriptContentBlock | null {
+  return parseTextBlock(block)
+    ?? parseThinkingBlock(block)
+    ?? parsePiToolCallBlock(block, toolNames)
+}
+
 function parseUsage(raw: unknown): TranscriptUsage | undefined {
   const parsed = usageSchema.safeParse(raw)
   if (!parsed.success) return undefined
@@ -127,6 +195,17 @@ function parseUsage(raw: unknown): TranscriptUsage | undefined {
     outputTokens: parsed.data.output_tokens ?? 0,
     cacheReadInputTokens: parsed.data.cache_read_input_tokens ?? 0,
     cacheCreationInputTokens: parsed.data.cache_creation_input_tokens ?? 0,
+  }
+}
+
+function parsePiUsage(raw: unknown): TranscriptUsage | undefined {
+  const parsed = piUsageSchema.safeParse(raw)
+  if (!parsed.success) return undefined
+  return {
+    inputTokens: parsed.data.input ?? 0,
+    outputTokens: parsed.data.output ?? 0,
+    cacheReadInputTokens: parsed.data.cacheRead ?? 0,
+    cacheCreationInputTokens: parsed.data.cacheWrite ?? 0,
   }
 }
 
@@ -170,6 +249,81 @@ function buildSystemEntry(timestamp: string, parentUuid: string | null, isSidech
     }],
     parentUuid,
     isSidechain,
+  }
+}
+
+function parsePiEntry(raw: unknown, toolNames: Map<string, string>): TranscriptEntry | null {
+  const parsed = piEntrySchema.safeParse(raw)
+  if (!parsed.success) return null
+  const entry = parsed.data
+  const base = {
+    timestamp: entry.timestamp,
+    parentUuid: entry.parentId,
+    isSidechain: false,
+    messageId: entry.id,
+  }
+  if (entry.message.role === 'toolResult') {
+    const toolCallId = entry.message.toolCallId
+    return {
+      ...base,
+      type: 'user',
+      content: [{
+        kind: 'tool_result',
+        toolUseId: toolCallId,
+        toolName: toolNames.get(toolCallId) ?? entry.message.toolName,
+        text: collectToolResultText(entry.message.content).slice(0, 4000),
+        isError: entry.message.isError,
+      }],
+    }
+  }
+  const rawContent = typeof entry.message.content === 'string'
+    ? [{
+      type: 'text',
+      text: entry.message.content,
+    }]
+    : entry.message.content
+  const content = rawContent.flatMap((block: unknown) => {
+    const contentBlock = parsePiContentBlock(block, toolNames)
+    return contentBlock === null ? [] : [contentBlock]
+  })
+  if (content.length === 0) return null
+  if (entry.message.role === 'user') return {
+    ...base,
+    type: 'user',
+    content,
+  }
+  const usage = parsePiUsage(entry.message.usage)
+  return {
+    ...base,
+    type: 'assistant',
+    content,
+    ...(entry.message.model === undefined ? {} : {model: entry.message.model,}),
+    ...(entry.message.stopReason === undefined ? {} : {stopReason: entry.message.stopReason,}),
+    ...(usage === undefined ? {} : {usage,}),
+  }
+}
+
+function parsePiWorkflowGuidance(raw: unknown): TranscriptEntry | null {
+  const parsed = piWorkflowGuidanceSchema.safeParse(raw)
+  if (!parsed.success) return null
+  const rawContent = typeof parsed.data.content === 'string'
+    ? [{
+      type: 'text',
+      text: parsed.data.content,
+    }]
+    : parsed.data.content
+  const content = rawContent.flatMap((block) => {
+    const parsedBlock = parseTextBlock(block)
+    return parsedBlock === null ? [] : [parsedBlock]
+  })
+  if (content.length === 0) return null
+  return {
+    type: 'system',
+    timestamp: parsed.data.timestamp,
+    content,
+    parentUuid: parsed.data.parentId,
+    isSidechain: false,
+    messageId: parsed.data.id,
   }
 }
 
@@ -222,6 +376,10 @@ function parseCodexResponseItem(obj: unknown): TranscriptEntry | null {
 
 function parseJsonlLine(line: string, toolNames: Map<string, string>): TranscriptEntry | null {
   const obj = safeParseJson(line)
+  const piEntry = parsePiEntry(obj, toolNames)
+  if (piEntry !== null) return piEntry
+  const piGuidance = parsePiWorkflowGuidance(obj)
+  if (piGuidance !== null) return piGuidance
   const codexEntry = parseCodexResponseItem(obj)
   if (codexEntry !== null) return codexEntry
   const parsed = jsonlEntrySchema.safeParse(obj)
