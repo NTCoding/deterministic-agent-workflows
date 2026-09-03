@@ -16,6 +16,39 @@ const jsonlAssistantSchema = z.object({
   timestamp: z.string().optional(),
   message: z.object({content: z.array(z.unknown()).optional(),}).optional(),
 })
+const piToolCallSchema = z.object({
+  type: z.literal('toolCall'),
+  id: z.string(),
+  name: z.string(),
+  arguments: z.record(z.unknown()),
+})
+const piAssistantSchema = z.object({
+  type: z.literal('message'),
+  id: z.string(),
+  parentId: z.string().nullable(),
+  timestamp: z.string(),
+  message: z.object({
+    role: z.literal('assistant'),
+    content: z.array(z.unknown()),
+  }),
+})
+const piToolResultSchema = z.object({
+  type: z.literal('message'),
+  id: z.string(),
+  parentId: z.string().nullable(),
+  timestamp: z.string(),
+  message: z.object({
+    role: z.literal('toolResult'),
+    toolCallId: z.string(),
+    toolName: z.string(),
+    content: z.array(z.unknown()),
+    isError: z.boolean(),
+  }),
+})
+const piTextBlockSchema = z.object({
+  type: z.literal('text'),
+  text: z.string(),
+})
 const opencodeActivityRowSchema = z.object({
   m_time: z.number().nullable(),
   p_time: z.number().nullable(),
@@ -41,17 +74,61 @@ function collectToolUses(content: ReadonlyArray<unknown>, ts: number): ReadonlyA
   return results
 }
 
-function extractToolCallsFromJsonlLine(line: string): ReadonlyArray<ToolCall> {
-  const parsed = jsonlAssistantSchema.safeParse(safeParseJson(line))
+function extractClaudeToolCalls(raw: unknown): ReadonlyArray<ToolCall> {
+  const parsed = jsonlAssistantSchema.safeParse(raw)
   if (!parsed.success) return []
   const content = parsed.data.message?.content ?? []
   return collectToolUses(content, parseTs(parsed.data.timestamp))
 }
 
+type PiToolResult = {
+  readonly output: string
+  readonly isError: boolean
+}
+
+function parsePiToolResult(raw: unknown): readonly [string, PiToolResult] | null {
+  const parsed = piToolResultSchema.safeParse(raw)
+  if (!parsed.success) return null
+  const output = parsed.data.message.content.flatMap((block) => {
+    const text = piTextBlockSchema.safeParse(block)
+    return text.success ? [text.data.text] : []
+  }).join('\n')
+  return [parsed.data.message.toolCallId, {
+    output,
+    isError: parsed.data.message.isError,
+  }]
+}
+
+function extractPiToolCalls(raw: unknown, results: ReadonlyMap<string, PiToolResult>): ReadonlyArray<ToolCall> {
+  const parsed = piAssistantSchema.safeParse(raw)
+  if (!parsed.success) return []
+  return parsed.data.message.content.flatMap((block) => {
+    const toolCall = piToolCallSchema.safeParse(block)
+    if (!toolCall.success) return []
+    const result = results.get(toolCall.data.id)
+    return [{
+      id: toolCall.data.id,
+      name: toolCall.data.name,
+      input: toolCall.data.arguments,
+      timestampMs: parseTs(parsed.data.timestamp),
+      ...result,
+    }]
+  })
+}
+
 /** @riviere-role web-tbc */
 export function extractToolCallsFromJsonl(path: string): ReadonlyArray<ToolCall> {
   const raw = readFileSync(path, 'utf8')
-  return raw.split('\n').filter(l => l.trim()).flatMap(extractToolCallsFromJsonlLine)
+  const lines = raw.split('\n').filter(l => l.trim())
+  const entries = lines.map(safeParseJson)
+  const results = new Map(entries.flatMap((entry) => {
+    const result = parsePiToolResult(entry)
+    return result === null ? [] : [result]
+  }))
+  return entries.flatMap((entry) => [
+    ...extractClaudeToolCalls(entry),
+    ...extractPiToolCalls(entry, results),
+  ])
 }
 
 function extractOpencodeToolCall(row: unknown): ToolCall | null {
