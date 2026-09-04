@@ -22,7 +22,10 @@ import {
   formatTransitionSuccess,
 } from '../infra/cli/presentation/output-guidance'
 import type { PreconditionResult } from './precondition-result'
-import type { BashForbiddenConfig } from './workflow-registry'
+import type {
+  BashForbiddenConfig,
+  TransitionContext,
+} from './workflow-registry'
 import type {
   EngineResult,
   RehydratableWorkflow,
@@ -50,9 +53,10 @@ export class WorkflowEngine<
   TDeps,
   TStateName extends string = string,
   TOperation extends string = string,
+  TTransitionContext extends TransitionContext<TState, TStateName> = TransitionContext<TState, TStateName>,
 > {
   constructor(
-    private readonly factory: WorkflowDefinition<TWorkflow, TState, TDeps, TStateName, TOperation>,
+    private readonly factory: WorkflowDefinition<TWorkflow, TState, TDeps, TStateName, TOperation, TTransitionContext>,
     private readonly engineDeps: WorkflowEngineDeps,
     private readonly workflowDeps: TDeps,
   ) {}
@@ -392,11 +396,11 @@ export class WorkflowEngine<
   }
 
   private checkTransitionGuard(
-    currentDef: ReturnType<WorkflowDefinition<TWorkflow, TState, TDeps, TStateName, TOperation>['getRegistry']>[TStateName],
+    currentDef: ReturnType<WorkflowDefinition<TWorkflow, TState, TDeps, TStateName, TOperation, TTransitionContext>['getRegistry']>[TStateName],
     state: TState,
     currentStateName: TStateName,
     target: TStateName,
-    registry: ReturnType<WorkflowDefinition<TWorkflow, TState, TDeps, TStateName, TOperation>['getRegistry']>,
+    registry: ReturnType<WorkflowDefinition<TWorkflow, TState, TDeps, TStateName, TOperation, TTransitionContext>['getRegistry']>,
   ): EngineResult | undefined {
     if (target === 'BLOCKED' || currentDef.transitionGuard === undefined) return undefined
     const guardResult = this.runOperationCallback(() => currentDef.transitionGuard?.(

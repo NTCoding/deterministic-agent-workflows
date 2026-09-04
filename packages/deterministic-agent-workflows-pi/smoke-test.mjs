@@ -285,7 +285,10 @@ try {
   failNextNote = true
   const recoverableOperation = await runtime.tools.get('workflow').execute(
     'workflow-recoverable',
-    { operation: 'record-note', args: ['retry after dependency repair'] },
+    {
+      operation: 'record-note',
+      args: ['retry after dependency repair'],
+    },
     undefined,
     undefined,
     context,

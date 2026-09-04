@@ -22,6 +22,9 @@ export type BashForbiddenConfig = {
   readonly flags?: readonly string[]
 }
 
+type TransitionGuard<TTransitionContext> = { check(ctx: TTransitionContext): PreconditionResult }['check']
+type TransitionEntry<TState, TTransitionContext> = { enter(state: TState, ctx: TTransitionContext): TState }['enter']
+
 /** @riviere-role value-object */
 export type WorkflowStateDefinition<
   TState,
@@ -36,8 +39,8 @@ export type WorkflowStateDefinition<
   readonly allowedWorkflowOperations: readonly TOperation[]
   readonly forbidden?: {readonly write?: boolean}
   readonly allowForbidden?: {readonly bash?: readonly string[]}
-  readonly transitionGuard?: (ctx: TTransitionContext) => PreconditionResult
-  readonly onEntry?: (state: TState, ctx: TTransitionContext) => TState
+  readonly transitionGuard?: TransitionGuard<TTransitionContext>
+  readonly onEntry?: TransitionEntry<TState, TTransitionContext>
   readonly afterEntry?: () => void
 }
 

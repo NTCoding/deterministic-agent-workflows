@@ -8,6 +8,7 @@ import type {
   BaseWorkflowState,
   EngineResult,
   RehydratableWorkflow,
+  TransitionContext,
   WorkflowEngineDeps,
 } from '@nt-ai-lab/deterministic-agent-workflow-engine'
 import { WorkflowEngine } from '@nt-ai-lab/deterministic-agent-workflow-engine'
@@ -46,8 +47,7 @@ import {
   translationNote,
 } from './pi-workflow-extension-platform'
 
-const PI_QUESTION_TOOL = 'question'
-const DEFAULT_COMMAND_NAME = 'workflow'; const DEFAULT_TOOL_NAME = 'workflow'
+const PI_QUESTION_TOOL = 'question'; const DEFAULT_COMMAND_NAME = 'workflow'; const DEFAULT_TOOL_NAME = 'workflow'
 const INITIALIZATION_PENDING_REASON = 'Pi workflow initialization has not completed safely. Tool execution is blocked.'
 const INACTIVE_WORKFLOW_REASON = 'Pi workflow is inactive. Run the workflow init command before using workflow operations.'
 
@@ -65,9 +65,9 @@ export function createPiWorkflowExtension<
   TState extends BaseWorkflowState<TStateName>,
   TDeps,
   TStateName extends string = string,
-  TOperation extends string = string,
+  TOperation extends string = string, TTransitionContext extends TransitionContext<TState, TStateName> = TransitionContext<TState, TStateName>,
 >(
-  config: PiWorkflowExtensionConfig<TWorkflow, TState, TDeps, TStateName, TOperation>,
+  config: PiWorkflowExtensionConfig<TWorkflow, TState, TDeps, TStateName, TOperation, TTransitionContext>,
 ): PiWorkflowExtension {
   const databasePath = resolveDatabasePath(config.databasePath)
   const commandName = config.commandName ?? DEFAULT_COMMAND_NAME
@@ -81,7 +81,7 @@ export function createPiWorkflowExtension<
     questionToolName: PI_QUESTION_TOOL,
     customGates: config.customGates,
   })
-  const runner = createWorkflowRunner({
+  const runner = createWorkflowRunner<TWorkflow, TState, TDeps, TStateName, TOperation, TTransitionContext>({
     workflowDefinition: config.workflowDefinition,
     routes: config.routes,
     bashForbidden: config.bashForbidden,
@@ -110,7 +110,7 @@ export function createPiWorkflowExtension<
   function useEngine<TResult>(
     ctx: ExtensionContext,
     operation: (
-      engine: WorkflowEngine<TWorkflow, TState, TDeps, TStateName, TOperation>,
+      engine: WorkflowEngine<TWorkflow, TState, TDeps, TStateName, TOperation, TTransitionContext>,
       engineDeps: WorkflowEngineDeps,
       workflowDeps: TDeps,
     ) => TResult,
@@ -127,7 +127,7 @@ export function createPiWorkflowExtension<
         store,
       }
       const workflowDeps = config.buildWorkflowDeps(platform)
-      const engine = new WorkflowEngine(config.workflowDefinition, engineDeps, workflowDeps)
+      const engine = new WorkflowEngine<TWorkflow, TState, TDeps, TStateName, TOperation, TTransitionContext>(config.workflowDefinition, engineDeps, workflowDeps)
       return operation(engine, engineDeps, workflowDeps)
     } finally {
       store.db.close()

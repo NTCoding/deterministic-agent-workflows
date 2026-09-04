@@ -2,6 +2,7 @@ import type {
   BaseWorkflowState,
   EngineResult,
   RehydratableWorkflow,
+  TransitionContext,
   WorkflowEngineDeps,
 } from '@nt-ai-lab/deterministic-agent-workflow-engine'
 import { WorkflowEngine } from '@nt-ai-lab/deterministic-agent-workflow-engine'
@@ -135,10 +136,11 @@ export function createWorkflowRunner<
   TDeps,
   TStateName extends string = string,
   TOperation extends string = string,
->(config: WorkflowRunnerConfig<TWorkflow, TState, TDeps, TStateName, TOperation>): (args: readonly string[], engineDeps: WorkflowEngineDeps, workflowDeps: TDeps, options?: RunnerOptions) => RunnerResult {
+  TTransitionContext extends TransitionContext<TState, TStateName> = TransitionContext<TState, TStateName>,
+>(config: WorkflowRunnerConfig<TWorkflow, TState, TDeps, TStateName, TOperation, TTransitionContext>): (args: readonly string[], engineDeps: WorkflowEngineDeps, workflowDeps: TDeps, options?: RunnerOptions) => RunnerResult {
   const resolvedHandler = resolvePreToolUseHandler(config)
   return (args, engineDeps, workflowDeps, options) => {
-    const engine = new WorkflowEngine(config.workflowDefinition, engineDeps, workflowDeps)
+    const engine = new WorkflowEngine<TWorkflow, TState, TDeps, TStateName, TOperation, TTransitionContext>(config.workflowDefinition, engineDeps, workflowDeps)
     if (args.length > 0) {
       return handleRoute(
         engine,

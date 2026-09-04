@@ -17,6 +17,7 @@ import type {
   WorkflowEngineDeps,
   WorkflowEventStore,
   WorkflowRegistry,
+  TransitionContext,
 } from '../../index'
 import {
   flattenStoredEvent,
@@ -32,7 +33,7 @@ type PlanningState = {
   readonly transcriptPath: string
 }
 
-type WorkflowDeps = Record<string, never>
+type WorkflowDeps = Record<string, never>; type PlanningTransitionContext = TransitionContext<PlanningState, 'PLANNING'> & { readonly repositoryId: string }
 
 type ReviewTrackingState = {
   readonly currentStateMachineState: 'REVIEWING'
@@ -44,19 +45,11 @@ type SessionStartedEvent = BaseEvent & {
   readonly transcriptPath: string
 }
 
-function isSessionStartedEvent(event: BaseEvent): event is SessionStartedEvent {
-  return event.type === 'session-started'
-}
+function isSessionStartedEvent(event: BaseEvent): event is SessionStartedEvent { return event.type === 'session-started' }
 
-function allowAgentRegistration(agentType: string, agentId: string) {
-  void agentType; void agentId
-  return pass()
-}
+function allowAgentRegistration(agentType: string, agentId: string) { void agentType; void agentId; return pass() }
 
-function allowIdleCheck(agentName: string) {
-  void agentName
-  return pass()
-}
+function allowIdleCheck(agentName: string) { void agentName; return pass() }
 
 class StrictPlanningWorkflow {
   constructor(
@@ -204,7 +197,7 @@ class InMemoryWorkflowEventStore implements WorkflowEventStore {
   }
 }
 
-const workflowDefinition: WorkflowDefinition<StrictPlanningWorkflow, PlanningState, WorkflowDeps, 'PLANNING', 'write'> = {
+const workflowDefinition: WorkflowDefinition<StrictPlanningWorkflow, PlanningState, WorkflowDeps, 'PLANNING', 'write', PlanningTransitionContext> = {
   fold(state, event) {
     if (!isSessionStartedEvent(event)) {
       throw new WorkflowStateError(`Unexpected event in fold: ${event.type}`)
@@ -232,14 +225,19 @@ const workflowDefinition: WorkflowDefinition<StrictPlanningWorkflow, PlanningSta
         canTransitionTo: [],
         allowedWorkflowOperations: ['write'],
         forbidden: { write: true },
+        transitionGuard: (context) => context.repositoryId === 'test-repository' ? pass() : {
+          pass: false,
+          reason: 'wrong repository',
+        },
       },
-    } satisfies WorkflowRegistry<PlanningState, 'PLANNING', 'write'>
+    } satisfies WorkflowRegistry<PlanningState, 'PLANNING', 'write', PlanningTransitionContext>
   },
   buildTransitionContext(state, from, to) {
     return {
       state,
       from,
       to,
+      repositoryId: 'test-repository',
       gitInfo: {
         currentBranch: 'main',
         workingTreeClean: true,
