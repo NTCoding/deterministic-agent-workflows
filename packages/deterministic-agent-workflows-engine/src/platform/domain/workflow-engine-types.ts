@@ -30,7 +30,8 @@ export type EngineResult =
   }
   | {
     readonly type: 'error';
-    readonly output: string 
+    readonly output: string
+    readonly persistence: 'not-attempted' | 'committed'
   }
 
 /** @riviere-role value-object */
@@ -51,13 +52,14 @@ export interface WorkflowDefinition<
   TDeps,
   TStateName extends string = string,
   TOperation extends string = string,
+  TTransitionContext extends TransitionContext<TState, TStateName> = TransitionContext<TState, TStateName>,
 > {
   fold(state: TState, event: BaseEvent): TState
   buildWorkflow(state: TState, deps: TDeps): TWorkflow
   stateSchema: ZodType<TStateName>
   initialState(): TState
-  getRegistry(): WorkflowRegistry<TState, TStateName, TOperation>
-  buildTransitionContext(state: TState, from: TStateName, to: TStateName, deps: TDeps): TransitionContext<TState, TStateName>
+  getRegistry(): WorkflowRegistry<TState, TStateName, TOperation, TTransitionContext>
+  buildTransitionContext(state: TState, from: TStateName, to: TStateName, deps: TDeps): TTransitionContext
   getOperationBody?(op: string, state: TState): string
   getTransitionTitle?(to: TStateName, state: TState): string
   buildTransitionEvent?(from: TStateName, to: TStateName, stateBefore: TState, stateAfter: TState, now: string): BaseEvent

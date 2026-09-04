@@ -12,6 +12,7 @@ export function serializeWorkflowState(state: unknown): EngineResult {
     return {
       type: 'error',
       output: `Failed to serialize workflow state: ${message}`,
+      persistence: 'not-attempted',
     }
   }
 }

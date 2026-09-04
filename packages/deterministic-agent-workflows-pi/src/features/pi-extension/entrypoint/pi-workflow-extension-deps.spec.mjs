@@ -50,6 +50,7 @@ import { createPiWorkflowExtension } from './pi-workflow-extension.ts'
 describe('Pi workflow engine dependencies', () => {
   it('provides operational engine and platform dependency callbacks', async () => {
     const handlers = new Map()
+    const commands = new Map()
     const platformValues = []
     const factory = createPiWorkflowExtension({
       workflowDefinition: {},
@@ -70,15 +71,12 @@ describe('Pi workflow engine dependencies', () => {
     factory({
       on: (name, handler) => handlers.set(name, handler),
       registerTool: () => undefined,
-      registerCommand: () => undefined,
+      registerCommand: (name, command) => commands.set(name, command),
       sendMessage: () => undefined,
       sendUserMessage: () => undefined,
     })
     const branch = []
-    handlers.get('session_start')({
-      type: 'session_start',
-      reason: 'startup',
-    }, {
+    const context = {
       cwd: '/repo',
       sessionManager: {
         getSessionId: () => 'session-id',
@@ -89,7 +87,12 @@ describe('Pi workflow engine dependencies', () => {
       },
       ui: { notify: () => undefined },
       shutdown: () => undefined,
-    })
+    }
+    handlers.get('session_start')({
+      type: 'session_start',
+      reason: 'startup',
+    }, context)
+    await commands.get('workflow').handler('init', context)
 
     expect(captured.engineDeps.getPluginRoot()).toBe('/plugin')
     expect(captured.engineDeps.getEnvFilePath()).toBe('/plugin/.pi/unused.env')
@@ -98,6 +101,6 @@ describe('Pi workflow engine dependencies', () => {
     expect(captured.engineDeps.readFile).toBeTypeOf('function')
     expect(captured.engineDeps.transcriptReader.readMessages()).toStrictEqual([])
     expect(captured.engineDeps.sessionContext.getMainSessionId()).toBe('session-id')
-    expect(platformValues).toHaveLength(3)
+    expect(platformValues).toHaveLength(6)
   })
 })

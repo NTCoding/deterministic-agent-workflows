@@ -2,6 +2,7 @@ import type { ExtensionFactory } from '@earendil-works/pi-coding-agent'
 import type {
   BaseWorkflowState,
   RehydratableWorkflow,
+  TransitionContext,
   WorkflowDefinition,
 } from '@nt-ai-lab/deterministic-agent-workflow-engine'
 import type {
@@ -41,8 +42,9 @@ export type PiWorkflowExtensionConfig<
   TDeps,
   TStateName extends string = string,
   TOperation extends string = string,
+  TTransitionContext extends TransitionContext<TState, TStateName> = TransitionContext<TState, TStateName>,
 > = Omit<PreToolUseHandlerConfig<TWorkflow, TState, TStateName>, 'questionToolName'> & {
-  readonly workflowDefinition: WorkflowDefinition<TWorkflow, TState, TDeps, TStateName, TOperation>
+  readonly workflowDefinition: WorkflowDefinition<TWorkflow, TState, TDeps, TStateName, TOperation, TTransitionContext>
   readonly routes: RouteMap<TWorkflow, TState>
   readonly buildWorkflowDeps: (platform: PlatformContext) => TDeps
   readonly pluginRoot: string

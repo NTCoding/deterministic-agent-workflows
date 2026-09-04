@@ -12,7 +12,6 @@ export type GitInfo = {
 /** @riviere-role value-object */
 export type TransitionContext<TState, TStateName extends string = string> = {
   readonly state: TState
-  readonly gitInfo: GitInfo
   readonly from: TStateName
   readonly to: TStateName
 }
@@ -23,11 +22,15 @@ export type BashForbiddenConfig = {
   readonly flags?: readonly string[]
 }
 
+type TransitionGuard<TTransitionContext> = { check(ctx: TTransitionContext): PreconditionResult }['check']
+type TransitionEntry<TState, TTransitionContext> = { enter(state: TState, ctx: TTransitionContext): TState }['enter']
+
 /** @riviere-role value-object */
 export type WorkflowStateDefinition<
   TState,
   TStateName extends string = string,
   TOperation extends string = string,
+  TTransitionContext extends TransitionContext<TState, TStateName> = TransitionContext<TState, TStateName>,
 > = {
   readonly emoji: string
   readonly agentInstructions: string
@@ -36,8 +39,8 @@ export type WorkflowStateDefinition<
   readonly allowedWorkflowOperations: readonly TOperation[]
   readonly forbidden?: {readonly write?: boolean}
   readonly allowForbidden?: {readonly bash?: readonly string[]}
-  readonly transitionGuard?: (ctx: TransitionContext<TState, TStateName>) => PreconditionResult
-  readonly onEntry?: (state: TState, ctx: TransitionContext<TState, TStateName>) => TState
+  readonly transitionGuard?: TransitionGuard<TTransitionContext>
+  readonly onEntry?: TransitionEntry<TState, TTransitionContext>
   readonly afterEntry?: () => void
 }
 
@@ -46,6 +49,7 @@ export type WorkflowRegistry<
   TState,
   TStateName extends string = string,
   TOperation extends string = string,
+  TTransitionContext extends TransitionContext<TState, TStateName> = TransitionContext<TState, TStateName>,
 > = {
-  readonly [K in TStateName]: WorkflowStateDefinition<TState, TStateName, TOperation>
+  readonly [K in TStateName]: WorkflowStateDefinition<TState, TStateName, TOperation, TTransitionContext>
 }

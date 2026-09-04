@@ -22,7 +22,10 @@ import {
   formatTransitionSuccess,
 } from '../infra/cli/presentation/output-guidance'
 import type { PreconditionResult } from './precondition-result'
-import type { BashForbiddenConfig } from './workflow-registry'
+import type {
+  BashForbiddenConfig,
+  TransitionContext,
+} from './workflow-registry'
 import type {
   EngineResult,
   RehydratableWorkflow,
@@ -50,9 +53,10 @@ export class WorkflowEngine<
   TDeps,
   TStateName extends string = string,
   TOperation extends string = string,
+  TTransitionContext extends TransitionContext<TState, TStateName> = TransitionContext<TState, TStateName>,
 > {
   constructor(
-    private readonly factory: WorkflowDefinition<TWorkflow, TState, TDeps, TStateName, TOperation>,
+    private readonly factory: WorkflowDefinition<TWorkflow, TState, TDeps, TStateName, TOperation, TTransitionContext>,
     private readonly engineDeps: WorkflowEngineDeps,
     private readonly workflowDeps: TDeps,
   ) {}
@@ -106,20 +110,24 @@ export class WorkflowEngine<
     const gate = this.applyIdentityGate(sessionId, workflow, op)
     if (gate !== undefined) return gate
 
-    const result = fn(workflow)
+    const result = this.runOperationCallback(() => fn(workflow))
+    if ('type' in result) return result
     this.persistEvents(sessionId, workflow)
-    const currentPrefix = getExpectedPrefix(workflow.getState().currentStateMachineState, registry)
-    if (!result.pass) {
-      return {
-        type: 'blocked',
-        output: formatOperationGateError(op, result.reason, currentPrefix) 
+    try {
+      const currentPrefix = getExpectedPrefix(workflow.getState().currentStateMachineState, registry)
+      if (!result.pass) {
+        return {
+          type: 'blocked',
+          output: formatOperationGateError(op, result.reason, currentPrefix)
+        }
       }
-    }
-
-    const body = this.factory.getOperationBody?.(op, workflow.getState()) ?? op
-    return {
-      type: 'success',
-      output: formatOperationSuccess(op, body, currentPrefix) 
+      const body = this.factory.getOperationBody?.(op, workflow.getState()) ?? op
+      return {
+        type: 'success',
+        output: formatOperationSuccess(op, body, currentPrefix)
+      }
+    } catch (error: unknown) {
+      return this.committedResponseError(error)
     }
   }
 
@@ -153,45 +161,45 @@ export class WorkflowEngine<
       }
     }
 
-    if (target !== 'BLOCKED' && currentDef.transitionGuard) {
-      const context = this.factory.buildTransitionContext(state, currentStateName, target, this.workflowDeps)
-      const guardResult = currentDef.transitionGuard(context)
-      if (!guardResult.pass) {
-        const currentProcedure = readProcedure(this.engineDeps, workflow.getState().currentStateMachineState)
-        const currentPrefix = getExpectedPrefix(currentStateName, registry)
-        return {
-          type: 'blocked',
-          output: formatTransitionError(target, guardResult.reason, currentProcedure, currentPrefix),
-        }
-      }
-    }
+    const guardResult = this.checkTransitionGuard(currentDef, state, currentStateName, target, registry)
+    if (guardResult !== undefined) return guardResult
 
     const targetDef = registry[target]
     const stateBefore = workflow.getState()
-    const context = this.factory.buildTransitionContext(stateBefore, currentStateName, target, this.workflowDeps)
-    const stateAfter = targetDef.onEntry ? targetDef.onEntry(stateBefore, context) : stateBefore
-
-    const transitionEvent = this.factory.buildTransitionEvent
-      ? this.factory.buildTransitionEvent(currentStateName, target, stateBefore, stateAfter, this.engineDeps.now())
-      : {
-        type: 'transitioned',
-        at: this.engineDeps.now(),
-        from: currentStateName,
-        to: target 
-      }
-
-    workflow.appendEvent(transitionEvent)
-    targetDef.afterEntry?.()
+    try {
+      const stateAfter = targetDef.onEntry
+        ? targetDef.onEntry(
+          stateBefore,
+          this.factory.buildTransitionContext(stateBefore, currentStateName, target, this.workflowDeps),
+        )
+        : stateBefore
+      const transitionEvent = this.factory.buildTransitionEvent
+        ? this.factory.buildTransitionEvent(currentStateName, target, stateBefore, stateAfter, this.engineDeps.now())
+        : {
+          type: 'transitioned',
+          at: this.engineDeps.now(),
+          from: currentStateName,
+          to: target
+        }
+      workflow.appendEvent(transitionEvent)
+      targetDef.afterEntry?.()
+    } catch (error: unknown) {
+      return this.uncommittedOperationError(error)
+    }
     this.persistEvents(sessionId, workflow)
 
-    const newState = workflow.getState()
-    const title = this.factory.getTransitionTitle?.(newState.currentStateMachineState, newState)
-      ?? newState.currentStateMachineState
-    const procedure = readProcedure(this.engineDeps, workflow.getState().currentStateMachineState)
-    const newPrefix = getExpectedPrefix(newState.currentStateMachineState, registry)
-    return {
-      type: 'success',
-      output: formatTransitionSuccess(title, procedure, newPrefix) 
+    try {
+      const newState = workflow.getState()
+      const title = this.factory.getTransitionTitle?.(newState.currentStateMachineState, newState)
+        ?? newState.currentStateMachineState
+      const procedure = readProcedure(this.engineDeps, workflow.getState().currentStateMachineState)
+      const newPrefix = getExpectedPrefix(newState.currentStateMachineState, registry)
+      return {
+        type: 'success',
+        output: formatTransitionSuccess(title, procedure, newPrefix)
+      }
+    } catch (error: unknown) {
+      return this.committedResponseError(error)
     }
   }
 
@@ -357,5 +365,54 @@ export class WorkflowEngine<
       },
       payload: toPayload(platformEvent),
     }])
+  }
+
+  private uncommittedOperationError(error: unknown): EngineResult {
+    return {
+      type: 'error',
+      output: `Workflow operation failed before persistence: ${this.errorMessage(error)}`,
+      persistence: 'not-attempted',
+    }
+  }
+
+  private committedResponseError(error: unknown): EngineResult {
+    return {
+      type: 'error',
+      output: `Workflow operation committed, but its response could not be completed: ${this.errorMessage(error)}`,
+      persistence: 'committed',
+    }
+  }
+
+  private errorMessage(error: unknown): string {
+    return error instanceof Error ? error.message : String(error)
+  }
+
+  private runOperationCallback(callback: () => PreconditionResult): PreconditionResult | EngineResult {
+    try {
+      return callback()
+    } catch (error: unknown) {
+      return this.uncommittedOperationError(error)
+    }
+  }
+
+  private checkTransitionGuard(
+    currentDef: ReturnType<WorkflowDefinition<TWorkflow, TState, TDeps, TStateName, TOperation, TTransitionContext>['getRegistry']>[TStateName],
+    state: TState,
+    currentStateName: TStateName,
+    target: TStateName,
+    registry: ReturnType<WorkflowDefinition<TWorkflow, TState, TDeps, TStateName, TOperation, TTransitionContext>['getRegistry']>,
+  ): EngineResult | undefined {
+    if (target === 'BLOCKED' || currentDef.transitionGuard === undefined) return undefined
+    const guardResult = this.runOperationCallback(() => currentDef.transitionGuard?.(
+      this.factory.buildTransitionContext(state, currentStateName, target, this.workflowDeps),
+    ) ?? { pass: true })
+    if ('type' in guardResult) return guardResult
+    if (guardResult.pass) return undefined
+    const currentProcedure = readProcedure(this.engineDeps, state.currentStateMachineState)
+    const currentPrefix = getExpectedPrefix(currentStateName, registry)
+    return {
+      type: 'blocked',
+      output: formatTransitionError(target, guardResult.reason, currentProcedure, currentPrefix),
+    }
   }
 }

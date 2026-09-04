@@ -1,6 +1,7 @@
 import type {
   BaseWorkflowState,
   RehydratableWorkflow,
+  TransitionContext,
   WorkflowDefinition,
 } from '@nt-ai-lab/deterministic-agent-workflow-engine'
 import type { BashForbiddenConfig } from '@nt-ai-lab/deterministic-agent-workflow-dsl'
@@ -33,8 +34,9 @@ export type WorkflowRunnerConfig<
   TDeps,
   TStateName extends string = string,
   TOperation extends string = string,
+  TTransitionContext extends TransitionContext<TState, TStateName> = TransitionContext<TState, TStateName>,
 > = {
-  readonly workflowDefinition: WorkflowDefinition<TWorkflow, TState, TDeps, TStateName, TOperation>
+  readonly workflowDefinition: WorkflowDefinition<TWorkflow, TState, TDeps, TStateName, TOperation, TTransitionContext>
   readonly routes: RouteMap<TWorkflow, TState>
   readonly bashForbidden?: BashForbiddenConfig
   readonly isWriteAllowed?: (filePath: string, state: TState) => boolean
