@@ -49,8 +49,7 @@ function isSessionStartedEvent(event: BaseEvent): event is SessionStartedEvent {
 }
 
 function allowAgentRegistration(agentType: string, agentId: string) {
-  void agentType
-  void agentId
+  void agentType; void agentId
   return pass()
 }
 
@@ -352,8 +351,15 @@ describe('WorkflowEngine platform-owned events', () => {
     engine.startSession('main-session', '/sessions/session.jsonl', 'repository')
     engine.getState('child-session')
     engine.getState('main-session')
+    const operationFailure = engine.transaction('main-session', 'write', () => {
+      throw new WorkflowStateError('consumer dependency failed')
+    })
 
     expect(mainSessionRequests).toStrictEqual(['main-session', 'main-session'])
+    expect(operationFailure).toMatchObject({
+      type: 'error',
+      persistence: 'not-attempted',
+    })
     expect(store.hasSessionStarted('main-session')).toBe(true)
     expect(store.hasSessionStarted('child-session')).toBe(false)
   })

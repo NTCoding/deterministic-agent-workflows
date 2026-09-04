@@ -671,6 +671,63 @@ describe('createPiWorkflowExtension', () => {
     expect(harness.state.shutdowns).toBe(1)
   })
 
+  it('keeps Pi active after a transaction callback fails before persistence and permits a retry', async () => {
+    const root = createTestRoot()
+    const manager = SessionManager.create(repositoryRoot, join(root, 'sessions'))
+    const config = createConfig(root)
+    let failOperation = true
+    config.routes['record-note'].handler = (workflow, note) => {
+      if (failOperation) throw new Error('dependency command failed')
+      return workflow.recordNote(note)
+    }
+    const harness = createHarness(manager, config)
+    await harness.runner.emit({
+      type: 'session_start',
+      reason: 'startup',
+    })
+    await activate(harness)
+    await harness.workflowCommand.handler('transition DEVELOPING', harness.runner.createCommandContext())
+
+    const failed = await harness.workflowTool.execute(
+      'recoverable-operation',
+      {
+        operation: 'record-note',
+        args: ['retry me'],
+      },
+      undefined,
+      undefined,
+      harness.runner.createContext(),
+    )
+    failOperation = false
+    await harness.workflowCommand.handler('record-note "retry succeeded"', harness.runner.createCommandContext())
+
+    const store = createStore(join(root, 'workflow-events.db'))
+    const eventTypes = store.readEvents(manager.getSessionId()).map((event) => event.envelope.type)
+    store.db.close()
+    expect(failed.isError).toBe(true)
+    expect(failed.content[0].text).toContain('dependency command failed')
+    expect(harness.state.shutdowns).toBe(0)
+    expect(eventTypes.filter((type) => type === 'note-recorded')).toHaveLength(1)
+  })
+
+  it('does not construct workflow dependencies for an inactive session', async () => {
+    const root = createTestRoot()
+    const manager = SessionManager.create(repositoryRoot, join(root, 'sessions'))
+    const config = createConfig(root)
+    config.buildWorkflowDeps = () => { throw new Error('dependencies unavailable') }
+    const harness = createHarness(manager, config)
+
+    await harness.runner.emit({
+      type: 'session_start',
+      reason: 'startup',
+    })
+
+    expect(harness.state.shutdowns).toBe(0)
+    await activate(harness)
+    expect(harness.state.shutdowns).toBe(1)
+    expect(harness.notifications.at(-1)?.message).toContain('dependencies unavailable')
+  })
+
   it('fails closed if a session UUID disappears during route, tool, or settlement handling', async () => {
     const root = createTestRoot()
 

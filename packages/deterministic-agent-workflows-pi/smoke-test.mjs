@@ -23,6 +23,7 @@ const pluginRoot = mkdtempSync(join(tmpdir(), 'daw-pi-smoke-'))
 const databasePath = join(pluginRoot, 'workflow-events.db')
 const sessionFile = join(pluginRoot, 'pi-session.jsonl')
 const stateSchema = z.enum(['PLANNING', 'DEVELOPING'])
+let failNextNote = false
 
 class Workflow {
   constructor(state) {
@@ -51,6 +52,7 @@ class Workflow {
   }
 
   recordNote(note) {
+    if (failNextNote) throw new Error('recoverable note dependency failure')
     this.appendEvent({
       type: 'note-recorded',
       at: '2026-09-03T12:01:00.000Z',
@@ -279,6 +281,20 @@ try {
 
   await runtime.commands.get('workflow').handler('transition DEVELOPING', context)
   assert.match(runtime.sentUserMessages[1], /Implement the approved plan/)
+
+  failNextNote = true
+  const recoverableOperation = await runtime.tools.get('workflow').execute(
+    'workflow-recoverable',
+    { operation: 'record-note', args: ['retry after dependency repair'] },
+    undefined,
+    undefined,
+    context,
+  )
+  failNextNote = false
+  assert.equal(recoverableOperation.isError, true)
+  assert.match(recoverableOperation.content[0].text, /recoverable note dependency failure/)
+  assert.equal(countEvents(readEvents(), 'note-recorded'), 0)
+  assert.equal(shutdowns.length, 0)
 
   const allowedWrite = await runtime.handlers.get('tool_call')({
     type: 'tool_call',

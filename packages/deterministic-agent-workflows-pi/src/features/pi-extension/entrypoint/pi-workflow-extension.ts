@@ -47,8 +47,7 @@ import {
 } from './pi-workflow-extension-platform'
 
 const PI_QUESTION_TOOL = 'question'
-const DEFAULT_COMMAND_NAME = 'workflow'
-const DEFAULT_TOOL_NAME = 'workflow'
+const DEFAULT_COMMAND_NAME = 'workflow'; const DEFAULT_TOOL_NAME = 'workflow'
 const INITIALIZATION_PENDING_REASON = 'Pi workflow initialization has not completed safely. Tool execution is blocked.'
 const INACTIVE_WORKFLOW_REASON = 'Pi workflow is inactive. Run the workflow init command before using workflow operations.'
 
@@ -91,6 +90,23 @@ export function createPiWorkflowExtension<
     customGates: config.customGates,
   })
 
+  function buildEngineDeps(ctx: ExtensionContext, store: ReturnType<typeof createStore>): WorkflowEngineDeps {
+    const sessionId = ctx.sessionManager.getSessionId()
+    const now = () => new Date().toISOString()
+    const note = translationNote(toolName)
+    return {
+      store,
+      getPluginRoot: () => config.pluginRoot,
+      getEnvFilePath: () => join(config.pluginRoot, '.pi', 'unused.env'),
+      getRepositoryName: () => getRepositoryName(ctx.cwd),
+      readFile: (path) => readWorkflowInstruction(path, note),
+      appendToFile: () => undefined,
+      now,
+      transcriptReader: new PiTranscriptReader(() => ctx.sessionManager.getBranch()),
+      sessionContext: { getMainSessionId: () => sessionId },
+    }
+  }
+
   function useEngine<TResult>(
     ctx: ExtensionContext,
     operation: (
@@ -101,20 +117,9 @@ export function createPiWorkflowExtension<
   ): TResult {
     const store = createStore(databasePath)
     try {
+      const engineDeps = buildEngineDeps(ctx, store)
+      const now = engineDeps.now
       const sessionId = ctx.sessionManager.getSessionId()
-      const now = () => new Date().toISOString()
-      const note = translationNote(toolName)
-      const engineDeps: WorkflowEngineDeps = {
-        store,
-        getPluginRoot: () => config.pluginRoot,
-        getEnvFilePath: () => join(config.pluginRoot, '.pi', 'unused.env'),
-        getRepositoryName: () => getRepositoryName(ctx.cwd),
-        readFile: (path) => readWorkflowInstruction(path, note),
-        appendToFile: () => undefined,
-        now,
-        transcriptReader: new PiTranscriptReader(() => ctx.sessionManager.getBranch()),
-        sessionContext: { getMainSessionId: () => sessionId },
-      }
       const platform: PlatformContext = {
         getPluginRoot: () => config.pluginRoot,
         now,
@@ -129,8 +134,23 @@ export function createPiWorkflowExtension<
     }
   }
 
+  function hasPersistedWorkflowState(sessionId: string): boolean {
+    const store = createStore(databasePath)
+    try {
+      return store.hasSessionStarted(sessionId)
+    } finally {
+      store.db.close()
+    }
+  }
   function markInitializationFailed(ctx: ExtensionContext, sessionId: string, detail: string): string {
-    const reason = `Pi workflow initialization failed: ${detail}`
+    return failSession(ctx, sessionId, `Pi workflow initialization failed: ${detail}`)
+  }
+
+  function markSafetyUnavailable(ctx: ExtensionContext, sessionId: string, detail: string): string {
+    return failSession(ctx, sessionId, `Pi workflow safety is unavailable: ${detail}`)
+  }
+
+  function failSession(ctx: ExtensionContext, sessionId: string, reason: string): string {
     initializationBySession.set(sessionId, {
       type: 'failed',
       reason,
@@ -255,7 +275,7 @@ export function createPiWorkflowExtension<
       }))
     } catch (error: unknown) {
       return {
-        output: markInitializationFailed(ctx, session.sessionId, `Workflow operation could not establish safe state: ${String(error)}`),
+        output: markSafetyUnavailable(ctx, session.sessionId, `Workflow operation could not establish safe state: ${String(error)}`),
         exitCode: 1,
       }
     }
@@ -271,7 +291,7 @@ export function createPiWorkflowExtension<
       }
       sessionStartsById.set(session.sessionId, event)
       try {
-        const hasPersistedWorkflow = useEngine(ctx, (engine) => engine.hasSessionStarted(session.sessionId))
+        const hasPersistedWorkflow = hasPersistedWorkflowState(session.sessionId)
         const hasTranscriptWorkflow = hasPiWorkflowMarker(ctx.sessionManager.getEntries())
         if (!hasPersistedWorkflow && !hasTranscriptWorkflow) {
           initializationBySession.set(session.sessionId, { type: 'inactive' })
@@ -317,7 +337,7 @@ export function createPiWorkflowExtension<
       } catch (error: unknown) {
         return {
           block: true,
-          reason: markInitializationFailed(ctx, session.sessionId, `Tool safety could not be established: ${String(error)}`),
+          reason: markSafetyUnavailable(ctx, session.sessionId, `Tool safety could not be established: ${String(error)}`),
         }
       }
     })
@@ -344,7 +364,7 @@ export function createPiWorkflowExtension<
           pi.sendUserMessage(PI_IDLE_RECOVERY_MESSAGE)
         }
       } catch (error: unknown) {
-        markInitializationFailed(ctx, session.sessionId, `Stopping safety could not be established: ${String(error)}`)
+        markSafetyUnavailable(ctx, session.sessionId, `Stopping safety could not be established: ${String(error)}`)
       }
     })
 
