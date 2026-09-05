@@ -28,14 +28,14 @@ const request = {
   }],
 }
 
-function setup(cancel: () => Promise<void>) {
+function setup(cancel: () => Promise<void>, completion: ReviewAgentRun['completion'] = new Promise(() => undefined)) {
   const directory = mkdtempSync(join(tmpdir(), 'coordinator-cancel-'))
   directories.push(directory)
   const store = createStore(join(directory, 'events.db'))
   const start = vi.fn(async (): Promise<ReviewAgentRun> => ({
     providerSessionId: 'provider-session',
     providerRunId: 'provider-run',
-    completion: new Promise(() => undefined),
+    completion,
     cancel,
   }))
   const coordinator = new ReviewCoordinator({
@@ -73,6 +73,27 @@ describe('coordinator cancellation races', () => {
     await expect(running).resolves.toMatchObject({ type: 'cancelled' })
     expect(cancel).toHaveBeenCalledOnce()
     fixture.store.db.close()
+  })
+
+  it('returns cancellation when a running provider rejects its completion during cancellation', async () => {
+    const state: { reject?: (error: Error) => void } = {}
+    const completion = new Promise<never>((_resolve, reject) => { state.reject = reject })
+    const fixture = setup(async () => { state.reject?.(new TypeError('ACP prompt was cancelled.')) }, completion)
+    try {
+      const running = fixture.coordinator.run(request, 'REVIEWING')
+      await vi.waitFor(() => expect(fixture.store.listReviewAgents('bundle')[0]?.status).toBe('running'))
+      await expect(fixture.coordinator.cancel('bundle', 'User cancelled.')).resolves.toMatchObject({ type: 'cancelled' })
+      await expect(running).resolves.toMatchObject({ type: 'cancelled' })
+      expect({
+        status: fixture.store.getReviewBundle('bundle')?.status,
+        reviews: fixture.store.listSessionReviews('workflow'),
+      }).toStrictEqual({
+        status: 'cancelled',
+        reviews: [],
+      })
+    } finally {
+      fixture.store.db.close()
+    }
   })
 
   it('records cancellation transport failures rather than reporting successful cancellation', async () => {

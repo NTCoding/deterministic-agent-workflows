@@ -70,10 +70,7 @@ await coordinator.run({
   headRevision,
   changedFiles,
   stateInstructions,
-  reviews: consumerOwnedReviewDefinitions.map((review) => ({
-    ...review,
-    version: review.definitionVersion,
-  })),
+  reviews: consumerOwnedReviewDefinitions,
 }, persistedReviewingState)
 ```
 

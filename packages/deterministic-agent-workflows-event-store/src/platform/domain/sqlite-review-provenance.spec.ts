@@ -98,6 +98,29 @@ describe('public stored review provenance', () => {
     }
   })
 
+  it('migrates legacy agent rows without losing completed review data', () => {
+    const path = databasePath()
+    const store = createStore(path)
+    const completed = completeReview(store)
+    store.db.exec('ALTER TABLE review_agents DROP COLUMN review_id')
+    store.db.exec('ALTER TABLE review_agents DROP COLUMN provider_run_id')
+    store.db.exec('ALTER TABLE review_agents DROP COLUMN completion_provenance_json')
+    store.db.close()
+    const reopened = createStore(path)
+    try {
+      expect(reopened.listReviewAgents(provenance.bundleId)).toStrictEqual([{
+        bundleId: provenance.bundleId,
+        reviewType: reviewInput.reviewType,
+        status: 'completed',
+        providerSessionId: provenance.providerSessionId,
+        updatedAt: timestamp,
+      }])
+      expect(reopened.listSessionReviews('workflow-session')).toStrictEqual([completed.review])
+    } finally {
+      reopened.db.close()
+    }
+  })
+
   it('retains legacy reviews without inventing provenance', () => {
     const store = createStore(databasePath())
     try {

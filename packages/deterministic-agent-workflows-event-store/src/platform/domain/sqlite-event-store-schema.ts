@@ -53,6 +53,7 @@ export function initializeEventStoreSchema(db: SqliteDatabase): void {
   db.exec(createActiveReviewBundleIndexSql)
   db.exec(createReviewAgentsTableSql)
   ensureColumn(db, 'events', 'state', 'TEXT')
+  ensureColumn(db, 'review_agents', 'review_id', 'INTEGER')
   ensureColumn(db, 'review_agents', 'provider_run_id', 'TEXT')
   ensureColumn(db, 'review_agents', 'completion_provenance_json', 'TEXT')
 }

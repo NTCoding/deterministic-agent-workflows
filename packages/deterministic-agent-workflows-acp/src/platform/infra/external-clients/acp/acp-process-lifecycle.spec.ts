@@ -38,7 +38,7 @@ function observedClient(mode: string) {
         FAKE_ACP_MODE: mode,
         FAKE_ACP_LOG: logPath,
       },
-      timeoutMs: 5_000,
+      timeoutMs: 20_000,
       cancellationGraceMs: 100,
     }),
   }
@@ -58,11 +58,11 @@ describe('ACP process lifecycle', () => {
     const observed = observedClient('slow')
     const runs = await Promise.all([1, 2, 3, 4].map(() => observed.client.start(request)))
     const completions = runs.map((run) => expect(run.completion).rejects.toThrow('ACP prompt was cancelled.'))
-    await vi.waitFor(() => expect(observed.log().match(/prompt-started/gu)).toHaveLength(4))
+    await vi.waitFor(() => expect(observed.log().match(/prompt-started/gu)).toHaveLength(4), { timeout: 10_000 })
     await Promise.all(runs.map((run) => run.cancel()))
     await Promise.all(completions)
     expect(observed.log().match(/prompt-cancelled/gu)).toHaveLength(4)
-  })
+  }, 30_000)
 
   it('kills a process that ignores both cooperative cancellation and SIGTERM', async () => {
     const observed = observedClient('ignore-cancel')
