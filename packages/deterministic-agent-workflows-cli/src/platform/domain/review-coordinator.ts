@@ -145,28 +145,27 @@ type StartedReview = {
 type CompletedReview = StartedReview & {readonly payload: ReviewPayload}
 
 type CompletionAttempt =
-  | {
-    readonly type: 'reviews-completed';
-    readonly completions: readonly CompletedReview[]
-  }
+  | {readonly type: 'reviews-completed'}
   | {
     readonly type: 'reviews-failed';
     readonly reason: string
   }
 
-async function collectCompletions(started: readonly StartedReview[]): Promise<CompletionAttempt> {
+async function collectCompletions(
+  started: readonly StartedReview[],
+  complete: (review: CompletedReview) => void,
+): Promise<CompletionAttempt> {
   try {
-    const completions = await Promise.all(started.map(async ({
+    await Promise.all(started.map(async ({
       definition, run
-    }) => ({
-      definition,
-      run,
-      payload: reviewPayloadSchema.parse(await run.completion),
-    })))
-    return {
-      type: 'reviews-completed',
-      completions
-    }
+    }) => {
+      complete({
+        definition,
+        run,
+        payload: reviewPayloadSchema.parse(await run.completion)
+      })
+    }))
+    return { type: 'reviews-completed' }
   } catch (error) {
     return {
       type: 'reviews-failed',
@@ -308,7 +307,10 @@ export class ReviewCoordinator {
       return this.failBundle(bundle.bundleId, `Unable to start review bundle: ${String(startFailure.reason)}`)
     }
 
-    const completionAttempt = await Promise.race([collectCompletions(started), cancelled])
+    const completionAttempt = await Promise.race([
+      collectCompletions(started, (review) => this.completeReview(input, eventState, review)),
+      cancelled,
+    ])
     if (completionAttempt.type !== 'reviews-completed' && completionAttempt.type !== 'reviews-failed') {
       return completionAttempt
     }
@@ -320,37 +322,40 @@ export class ReviewCoordinator {
       return this.failBundle(bundle.bundleId, completionAttempt.reason)
     }
 
-    for (const {
-      definition, run, payload
-    } of completionAttempt.completions) {
-      this.store.completeReviewAgent(
-        bundle.bundleId,
-        definition.reviewType,
-        {
-          bundleId: bundle.bundleId,
-          providerSessionId: run.providerSessionId,
-          providerRunId: run.providerRunId,
-          baseRevision: input.baseRevision,
-          headRevision: input.headRevision,
-          exactFilesDigest: exactFilesDigest(input.changedFiles),
-          exactFiles: input.changedFiles,
-          reviewerDefinitionVersion: definition.version,
-        },
-        this.now(),
-        recordReviewInputSchema.parse({
-          ...payload,
-          reviewType: definition.reviewType,
-          pullRequestNumber: input.pullRequestNumber,
-          sourceState: eventState,
-        }),
-        eventState,
-      )
-    }
-
     return {
       type: 'completed',
       bundle: this.store.completeReviewBundle(bundle.bundleId, this.now()),
     }
+  }
+
+  private completeReview(input: ReviewBundleRequest, eventState: string, review: CompletedReview): void {
+    if (!this.executions.has(input.bundleId) || this.cancellations.has(input.bundleId) ||
+      terminalResult(this.store.getReviewBundle(input.bundleId)) !== undefined) return
+    const {
+      definition, run, payload
+    } = review
+    this.store.completeReviewAgent(
+      input.bundleId,
+      definition.reviewType,
+      {
+        bundleId: input.bundleId,
+        providerSessionId: run.providerSessionId,
+        providerRunId: run.providerRunId,
+        baseRevision: input.baseRevision,
+        headRevision: input.headRevision,
+        exactFilesDigest: exactFilesDigest(input.changedFiles),
+        exactFiles: input.changedFiles,
+        reviewerDefinitionVersion: definition.version,
+      },
+      this.now(),
+      recordReviewInputSchema.parse({
+        ...payload,
+        reviewType: definition.reviewType,
+        pullRequestNumber: input.pullRequestNumber,
+        sourceState: eventState,
+      }),
+      eventState,
+    )
   }
 
   async cancel(bundleId: string, reason: string): Promise<ReviewCoordinatorResult> {

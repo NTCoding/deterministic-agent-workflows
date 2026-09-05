@@ -100,6 +100,54 @@ describe('ReviewCoordinator', () => {
     store.db.close()
   })
 
+  it('persists an individual completed review before another provider fails', async () => {
+    const store = createTestStore()
+    const resolutions = new Map<string, (payload: ReviewPayload) => void>()
+    const rejections = new Map<string, (error: Error) => void>()
+    const cancel = vi.fn(async () => undefined)
+    const client: ReviewAgentClient = {
+      start: async (input) => ({
+        providerSessionId: `provider-${input.reviewType}`,
+        providerRunId: `run-${input.reviewType}`,
+        completion: new Promise<ReviewPayload>((resolve, reject) => {
+          resolutions.set(input.reviewType, resolve)
+          rejections.set(input.reviewType, reject)
+        }),
+        cancel,
+      }),
+      load: vi.fn(),
+      cancel: vi.fn(),
+    }
+    const coordinator = new ReviewCoordinator({
+      store,
+      client,
+      now: () => '2026-01-01T00:00:00.000Z'
+    })
+    const execution = coordinator.run(request(), 'REVIEWING')
+    await vi.waitFor(() => expect(resolutions.size).toBe(4))
+    resolutions.get('one')?.(pass())
+    await vi.waitFor(() => expect(store.listSessionReviews('session-1')).toHaveLength(1))
+    rejections.get('two')?.(new TypeError('provider disconnected'))
+    await expect(execution).resolves.toMatchObject({
+      type: 'failed',
+      reason: expect.stringContaining('provider disconnected')
+    })
+    expect({
+      reviews: store.listSessionReviews('session-1'),
+      completedStatus: store.listReviewAgents('bundle-1').find((agent) => agent.reviewType === 'one')?.status,
+      cancellations: cancel.mock.calls.length,
+    }).toMatchObject({
+      reviews: [{
+        reviewType: 'one',
+        verdict: 'PASS',
+        completionProvenance: { headRevision: 'head-sha' },
+      }],
+      completedStatus: 'completed',
+      cancellations: 3,
+    })
+    store.db.close()
+  })
+
   it('rejects a second active bundle for the same pull request', async () => {
     const store = createTestStore()
     const client: ReviewAgentClient = {
