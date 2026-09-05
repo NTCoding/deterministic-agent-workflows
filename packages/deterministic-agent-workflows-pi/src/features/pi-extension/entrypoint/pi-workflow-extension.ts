@@ -30,8 +30,6 @@ import { parsePiCommandArguments } from '../../../platform/domain/pi-command-arg
 import {
   hasPiWorkflowMarker,
   PI_WORKFLOW_MARKER_CUSTOM_TYPE,
-  type PiSessionMetadata,
-  readPiSessionMetadata,
 } from '../../../platform/infra/external-clients/pi/pi-session-file'
 import {
   getLatestPiAssistantSettlement,
@@ -46,10 +44,12 @@ import {
   resolveDatabasePath,
   translationNote,
 } from './pi-workflow-extension-platform'
-
+import {
+  createPiWorkflowSessionOwnership,
+  refreshTransferredOwnership,
+} from './pi-workflow-session-ownership'
 const PI_QUESTION_TOOL = 'question'; const DEFAULT_COMMAND_NAME = 'workflow'; const DEFAULT_TOOL_NAME = 'workflow'
 const INITIALIZATION_PENDING_REASON = 'Pi workflow initialization has not completed safely. Tool execution is blocked.'; const INACTIVE_WORKFLOW_REASON = 'Pi workflow is inactive. Run the workflow init command before using workflow operations.'
-
 export const PI_IDLE_RECOVERY_MESSAGE = formatStopPreventionMessage()
 export const PI_SESSION_BRANCH_BLOCK_MESSAGE = 'Pi session tree navigation and forks are disabled while a workflow is active.'
 
@@ -71,6 +71,7 @@ export function createPiWorkflowExtension<
   const databasePath = resolveDatabasePath(config.databasePath)
   const commandName = config.commandName ?? DEFAULT_COMMAND_NAME
   const toolName = config.toolName ?? DEFAULT_TOOL_NAME
+  const ownership = createPiWorkflowSessionOwnership(databasePath)
   const initializationBySession = new Map<string, PiInitializationStatus>()
   const sessionStartsById = new Map<string, SessionStartEvent>()
   const recoveredAssistantBySession = new Map<string, string>()
@@ -103,7 +104,7 @@ export function createPiWorkflowExtension<
       appendToFile: () => undefined,
       now,
       transcriptReader: new PiTranscriptReader(() => ctx.sessionManager.getBranch()),
-      sessionContext: { getMainSessionId: () => sessionId },
+      sessionContext: {getMainSessionId: () => ownership.delegatedParent(sessionId) ?? sessionId,},
     }
   }
 
@@ -120,6 +121,7 @@ export function createPiWorkflowExtension<
       const engineDeps = buildEngineDeps(ctx, store)
       const now = engineDeps.now
       const sessionId = ctx.sessionManager.getSessionId()
+      ownership.requireAccess(store, sessionId)
       const platform: PlatformContext = {
         getPluginRoot: () => config.pluginRoot,
         now,
@@ -134,14 +136,6 @@ export function createPiWorkflowExtension<
     }
   }
 
-  function hasPersistedWorkflowState(sessionId: string): boolean {
-    const store = createStore(databasePath)
-    try {
-      return store.hasSessionStarted(sessionId)
-    } finally {
-      store.db.close()
-    }
-  }
   function markInitializationFailed(ctx: ExtensionContext, sessionId: string, detail: string): string {
     return failSession(ctx, sessionId, `Pi workflow initialization failed: ${detail}`)
   }
@@ -169,25 +163,20 @@ export function createPiWorkflowExtension<
     return status?.type === 'failed' ? status.reason : INITIALIZATION_PENDING_REASON
   }
 
-  function isInactive(ctx: ExtensionContext): boolean {
+  function isInactive(ctx: ExtensionContext, pi: ExtensionAPI): boolean {
     const session = readSessionId(ctx)
-    return session.ok && initializationBySession.get(session.sessionId)?.type === 'inactive'
-  }
-
-  function parentSafetyFailure(event: SessionStartEvent, ctx: ExtensionContext): string | undefined {
-    const parentSessionFile = ctx.sessionManager.getHeader()?.parentSession
-    if (parentSessionFile === undefined) {
-      return event.reason === 'fork' ? 'Forked Pi session has no verifiable parent session file.' : undefined
-    }
-    const parent: PiSessionMetadata = readPiSessionMetadata(parentSessionFile)
-    const store = createStore(databasePath)
-    try {
-      return store.hasSessionStarted(parent.id) || parent.hasWorkflowMarker
-        ? `Cannot fork Pi session ${parent.id}: its workflow is active.`
-        : undefined
-    } finally {
-      store.db.close()
-    }
+    if (!session.ok) return false
+    refreshTransferredOwnership({
+      sessionId: session.sessionId,
+      initializationBySession,
+      sessionStartsById,
+      ownership,
+      initialize: (event) => initializeSession(event, ctx, pi, session.sessionId),
+      fail: (detail) => {
+        markInitializationFailed(ctx, session.sessionId, detail)
+      },
+    })
+    return initializationBySession.get(session.sessionId)?.type === 'inactive'
   }
 
   function initializeSession(event: SessionStartEvent, ctx: ExtensionContext, pi: ExtensionAPI, sessionId: string): string | undefined {
@@ -197,20 +186,26 @@ export function createPiWorkflowExtension<
       if (header?.id !== sessionId) return 'Pi session header does not match the active session UUID.'
       const activeBranchHasWorkflowMarker = hasPiWorkflowMarker(ctx.sessionManager.getBranch())
       const sessionHasWorkflowMarker = hasPiWorkflowMarker(ctx.sessionManager.getEntries())
+      const inheritedWorkflowState = ownership.usesInheritedWorkflow(sessionId)
+      const delegatedParent = ownership.delegatedParent(sessionId)
       const result = useEngine(ctx, (engine) => {
         const sqliteHasWorkflowState = engine.hasSessionStarted(sessionId)
         if (!sqliteHasWorkflowState) {
-          const parentFailure = parentSafetyFailure(event, ctx)
+          const parentFailure = ownership.parentSafetyFailure(event, ctx)
           if (parentFailure !== undefined) return {
             type: 'error' as const,
             output: parentFailure,
           }
         }
-        if (sessionHasWorkflowMarker && !activeBranchHasWorkflowMarker) return {
+        if (delegatedParent !== undefined && !sqliteHasWorkflowState) return {
+          type: 'error' as const,
+          output: `Pi parent session ${delegatedParent} has no persisted workflow.`,
+        }
+        if (!inheritedWorkflowState && sessionHasWorkflowMarker && !activeBranchHasWorkflowMarker) return {
           type: 'error' as const,
           output: `The active Pi branch does not contain this session's ${PI_WORKFLOW_MARKER_CUSTOM_TYPE} marker.`,
         }
-        if (activeBranchHasWorkflowMarker !== sqliteHasWorkflowState) return {
+        if (!inheritedWorkflowState && activeBranchHasWorkflowMarker !== sqliteHasWorkflowState) return {
           type: 'error' as const,
           output: `Pi transcript and SQLite workflow state disagree for session ${sessionId}.`,
         }
@@ -236,7 +231,7 @@ export function createPiWorkflowExtension<
   }
 
   function runRoute(ctx: ExtensionContext, args: readonly string[], pi: ExtensionAPI) {
-    if (isInactive(ctx) && args[0] === 'init') {
+    if (isInactive(ctx, pi) && args[0] === 'init') {
       const session = readSessionId(ctx)
       if (!session.ok) return {
         output: session.reason,
@@ -291,7 +286,7 @@ export function createPiWorkflowExtension<
       }
       sessionStartsById.set(session.sessionId, event)
       try {
-        const hasPersistedWorkflow = hasPersistedWorkflowState(session.sessionId)
+        const hasPersistedWorkflow = ownership.hasPersistedWorkflow(session.sessionId)
         const hasTranscriptWorkflow = hasPiWorkflowMarker(ctx.sessionManager.getEntries())
         if (!hasPersistedWorkflow && !hasTranscriptWorkflow) {
           initializationBySession.set(session.sessionId, { type: 'inactive' })
@@ -311,7 +306,7 @@ export function createPiWorkflowExtension<
     })
 
     pi.on('tool_call', (event, ctx) => {
-      if (isInactive(ctx)) return
+      if (isInactive(ctx, pi)) return
       const notReady = readinessFailure(ctx)
       if (notReady !== undefined) return {
         block: true,
@@ -343,7 +338,7 @@ export function createPiWorkflowExtension<
     })
 
     pi.on('input', (_event, ctx) => {
-      if (isInactive(ctx)) return
+      if (isInactive(ctx, pi)) return
       const notReady = readinessFailure(ctx)
       if (notReady === undefined) return
       ctx.ui.notify(notReady, 'error')
@@ -351,7 +346,7 @@ export function createPiWorkflowExtension<
     })
 
     pi.on('agent_settled', (_event, ctx) => {
-      if (isInactive(ctx) || readinessFailure(ctx) !== undefined) return
+      if (isInactive(ctx, pi) || readinessFailure(ctx) !== undefined) return
       const session = readSessionId(ctx)
       if (!session.ok) return
       const settlement: PiAssistantSettlement | undefined = getLatestPiAssistantSettlement(ctx.sessionManager.getBranch())
@@ -375,7 +370,7 @@ export function createPiWorkflowExtension<
         ctx.shutdown()
         return { cancel: true }
       }
-      if (isInactive(ctx)) return undefined
+      if (isInactive(ctx, pi)) return undefined
       const notReady = readinessFailure(ctx)
       if (notReady !== undefined) {
         markInitializationFailed(ctx, session.sessionId, notReady)

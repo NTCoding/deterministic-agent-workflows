@@ -62,6 +62,26 @@ export type {
 } from './platform/domain/review-types'
 
 export {
+  reviewAgentStatusSchema,
+  reviewBundleRequestSchema,
+  reviewBundleStatusSchema,
+  reviewCompletionProvenanceSchema,
+  reviewDefinitionSchema,
+  storedReviewAgentSchema,
+  storedReviewBundleSchema,
+} from './platform/domain/review-job-types'
+export type {
+  ReviewAgentStatus,
+  ReviewBundleRequest,
+  ReviewBundleStatus,
+  ReviewCompletionProvenance,
+  ReviewDefinition,
+  ReviewJobStore,
+  StoredReviewAgent,
+  StoredReviewBundle,
+} from './platform/domain/review-job-types'
+
+export {
   engineEventSchema,
   reviewRecordedEventSchema,
 } from './platform/domain/engine-events'
@@ -80,6 +100,17 @@ export type {
   IdentityVerifiedEvent,
   ContextRequestedEvent,
   ReviewRecordedEvent,
+  ReviewBundleRequestedEvent,
+  ReviewBundleStartedEvent,
+  ReviewAgentRequestedEvent,
+  ReviewAgentStartedEvent,
+  ReviewAgentCompletedEvent,
+  ReviewAgentFailedEvent,
+  ReviewAgentCancelledEvent,
+  ReviewBundleCompletedEvent,
+  ReviewBundleFailedEvent,
+  ReviewBundleCancelledEvent,
+  WorkflowSessionOwnerTransferredEvent,
 } from './platform/domain/engine-events'
 export { isPlatformOwnedEventExcludedFromWorkflowState } from './platform/domain/engine-events'
 
@@ -97,7 +128,7 @@ export { checkBashCommand } from './platform/domain/bash-enforcement'
 
 export type { PreconditionResult } from './platform/domain/precondition-result'
 export {
-  pass, fail 
+  pass, fail
 } from './platform/domain/precondition-result'
 
 export type {
@@ -120,7 +151,7 @@ export type {
 export type { StoppingAction } from './platform/domain/workflow-engine-platform-operations'
 
 export type {
-  TranscriptMessage, TranscriptReader 
+  TranscriptMessage, TranscriptReader
 } from './platform/infra/external-clients/transcript/transcript-reader'
 export type { IdentityCheckResult } from './platform/domain/identity-verification'
 export { checkIdentity } from './platform/domain/identity-verification'

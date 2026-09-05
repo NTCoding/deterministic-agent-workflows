@@ -7,4 +7,12 @@ export type {
   PiWorkflowExtension,
   PiWorkflowExtensionConfig,
 } from './platform/domain/pi-workflow-extension-types'
+export {
+  replaceWithFreshPiSession,
+  resolvePiMainSessionId,
+} from './platform/domain/pi-main-session'
+export type {
+  PiFreshSessionResult,
+  PiFreshSessionRuntime,
+} from './platform/domain/pi-main-session'
 export { PiTranscriptReader } from './platform/infra/external-clients/pi/pi-transcript-reader'

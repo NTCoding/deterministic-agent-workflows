@@ -23,6 +23,7 @@ It also records workflow events so the Control Center can show:
 pnpm add @nt-ai-lab/deterministic-agent-workflow-engine
 pnpm add @nt-ai-lab/deterministic-agent-workflow-dsl
 pnpm add @nt-ai-lab/deterministic-agent-workflow-cli
+pnpm add @nt-ai-lab/deterministic-agent-workflow-event-store
 
 # choose an adapter
 pnpm add @nt-ai-lab/deterministic-agent-workflow-opencode
@@ -32,7 +33,53 @@ pnpm add @nt-ai-lab/deterministic-agent-workflow-claude-code
 pnpm add @nt-ai-lab/deterministic-agent-workflow-codex
 # or
 pnpm add @nt-ai-lab/deterministic-agent-workflow-pi
+
+# add this when review agents use ACP
+pnpm add @nt-ai-lab/deterministic-agent-workflow-acp
 ```
+
+## Durable ACP review coordination
+
+Consumers own reviewer names, prompts, changed-file discovery, revisions, and the workflow state that triggers review. After persisting that state transition, pass one bundle request to the coordinator. The platform owns review lifecycle events, durable jobs, one-active-bundle enforcement, concurrent ACP execution, recovery, cancellation, and validated review persistence.
+
+```ts
+import { createAcpReviewAgentClient } from '@nt-ai-lab/deterministic-agent-workflow-acp'
+import { ReviewCoordinator } from '@nt-ai-lab/deterministic-agent-workflow-cli'
+import { createStore } from '@nt-ai-lab/deterministic-agent-workflow-event-store'
+
+const store = createStore('.workflow-events.db')
+const coordinator = new ReviewCoordinator({
+  store,
+  client: createAcpReviewAgentClient({
+    command: '/absolute/path/to/acp-agent',
+    args: [],
+    mcpServers: [],
+    timeoutMs: 15 * 60 * 1_000,
+    cancellationGraceMs: 5_000,
+  }),
+  now: () => new Date().toISOString(),
+})
+
+await coordinator.run({
+  bundleId,
+  sessionId,
+  repository,
+  workingDirectory,
+  pullRequestNumber,
+  baseRevision,
+  headRevision,
+  changedFiles,
+  stateInstructions,
+  reviews: consumerOwnedReviewDefinitions.map((review) => ({
+    ...review,
+    version: review.definitionVersion,
+  })),
+}, persistedReviewingState)
+```
+
+Each reviewer definition includes an immutable `version`. The coordinator request and completion provenance are pinned to the bundle, provider session and run, base revision, head revision, reviewer version, and a SHA-256 digest of the exact ordered changed-file list. ACP reviewers do not inherit GitHub credentials; provide only constrained MCP servers and non-credential environment values. Calling `run` again with the same bundle resumes persisted provider sessions, while another active bundle for the same pull request fails closed.
+
+The Pi package also exports `resolvePiMainSessionId`, which consumes `PI_SUBAGENT_PARENT_SESSION` inside the adapter, and `replaceWithFreshPiSession`, which uses Pi's supported `AgentSessionRuntime.newSession()` boundary, durably transfers sole workflow ownership in the configured workflow event database, and then delivers state instructions to the replacement session.
 
 ## OpenCode example
 
