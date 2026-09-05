@@ -30,12 +30,6 @@ import {
   reviewIdRowSchema,
   reviewRowsSchema,
 } from './sqlite-review-storage'
-import {
-  createSqliteWorkflowSessionOwnership,
-  registerWorkflowSessionOwner,
-  resolveWorkflowSessionAlias,
-  type SqliteWorkflowSessionOwnership,
-} from './sqlite-workflow-session-ownership'
 import { createSqliteReviewJobStore } from './sqlite-review-job-store'
 import { initializeEventStoreSchema } from './sqlite-event-store-schema'
 
@@ -60,7 +54,7 @@ const reflectionRowsSchema = z.array(z.object({
 }))
 
 /** @riviere-role value-object */
-export type SqliteEventStore = ReviewJobStore & SqliteWorkflowSessionOwnership & {
+export type SqliteEventStore = ReviewJobStore & {
   readonly readEvents: (sessionId: string) => readonly StoredEvent[]
   readonly appendEvents: (sessionId: string, events: readonly StoredEvent[]) => void
   readonly sessionExists: (sessionId: string) => boolean
@@ -84,18 +78,14 @@ export function createStore(dbPath: string): SqliteEventStore {
 
   return {
     ...reviewJobStore,
-    ...createSqliteWorkflowSessionOwnership(db),
     db,
     readEvents(sessionId: string): readonly StoredEvent[] {
-      sessionId = resolveWorkflowSessionAlias(db, sessionId)
       const rawRows = db.prepare('SELECT type, at, state, payload FROM events WHERE session_id = ? ORDER BY seq').all(sessionId)
       const rows = eventRowSchema.parse(rawRows)
       return rows.map((row, index) => buildStoredEvent(row, sessionId, index))
     },
     appendEvents(sessionId: string, events: readonly StoredEvent[]): void {
       if (events.length === 0) return
-      const requestedSessionId = sessionId
-      sessionId = resolveWorkflowSessionAlias(db, sessionId)
 
       const insert = db.prepare('INSERT INTO events (session_id, type, at, state, payload) VALUES (?, ?, ?, ?, ?)')
       db.exec('BEGIN IMMEDIATE')
@@ -109,9 +99,6 @@ export function createStore(dbPath: string): SqliteEventStore {
             JSON.stringify(event.payload),
           )
         }
-        if (events.some((event) => event.envelope.type === 'session-started')) {
-          registerWorkflowSessionOwner(db, sessionId, requestedSessionId)
-        }
         db.exec('COMMIT')
       } catch (error) {
         db.exec('ROLLBACK')
@@ -119,11 +106,9 @@ export function createStore(dbPath: string): SqliteEventStore {
       }
     },
     sessionExists(sessionId: string): boolean {
-      sessionId = resolveWorkflowSessionAlias(db, sessionId)
       return readCount(db, 'SELECT COUNT(1) AS count FROM events WHERE session_id = ?', sessionId) > 0
     },
     hasSessionStarted(sessionId: string): boolean {
-      sessionId = resolveWorkflowSessionAlias(db, sessionId)
       return readCount(
         db,
         "SELECT COUNT(1) AS count FROM events WHERE session_id = ? AND type = 'session-started'",
@@ -131,7 +116,6 @@ export function createStore(dbPath: string): SqliteEventStore {
       ) > 0
     },
     recordReflection(sessionId: string, createdAt: string, input: RecordReflectionInput): StoredReflection {
-      sessionId = resolveWorkflowSessionAlias(db, sessionId)
       const parsedInput = recordReflectionInputSchema.parse(input)
       const insert = db.prepare('INSERT INTO reflections (session_id, created_at, label, agent_name, source_state, payload_json) VALUES (?, ?, ?, ?, ?, ?)')
       db.exec('BEGIN IMMEDIATE')
@@ -163,7 +147,6 @@ export function createStore(dbPath: string): SqliteEventStore {
       }
     },
     listReflections(sessionId: string): readonly StoredReflection[] {
-      sessionId = resolveWorkflowSessionAlias(db, sessionId)
       const rawRows = db.prepare('SELECT id, session_id, created_at, label, agent_name, source_state, payload_json FROM reflections WHERE session_id = ? ORDER BY created_at DESC, id DESC').all(sessionId)
       const rows = reflectionRowsSchema.parse(rawRows)
       return rows.map((row) => {
@@ -180,7 +163,6 @@ export function createStore(dbPath: string): SqliteEventStore {
       })
     },
     recordReview(sessionId: string, createdAt: string, input: RecordReviewInput): StoredReview {
-      sessionId = resolveWorkflowSessionAlias(db, sessionId)
       const parsedInput = recordReviewInputSchema.parse(input)
       const insert = db.prepare('INSERT INTO reviews (session_id, created_at, review_type, verdict, branch, pull_request_number, source_state, payload_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
       db.exec('BEGIN IMMEDIATE')
@@ -211,7 +193,6 @@ export function createStore(dbPath: string): SqliteEventStore {
       }
     },
     recordReviewWithEvent(sessionId: string, createdAt: string, input: RecordReviewInput, eventState: string): StoredReview {
-      sessionId = resolveWorkflowSessionAlias(db, sessionId)
       const parsedInput = recordReviewInputSchema.parse(input)
       const insertReview = db.prepare('INSERT INTO reviews (session_id, created_at, review_type, verdict, branch, pull_request_number, source_state, payload_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
       const insertEvent = db.prepare('INSERT INTO events (session_id, type, at, state, payload) VALUES (?, ?, ?, ?, ?)')
@@ -254,7 +235,6 @@ export function createStore(dbPath: string): SqliteEventStore {
       }
     },
     listSessionReviews(sessionId: string): readonly StoredReview[] {
-      sessionId = resolveWorkflowSessionAlias(db, sessionId)
       const rawRows = db.prepare('SELECT id, session_id, created_at, review_type, verdict, branch, pull_request_number, source_state, payload_json FROM reviews WHERE session_id = ? ORDER BY created_at ASC, id ASC').all(sessionId)
       const rows = reviewRowsSchema.parse(rawRows)
       return rows.map(parseStoredReviewRow)

@@ -80,7 +80,7 @@ Completed bundle reviews expose `completionProvenance` on `StoredReview`, includ
 
 Cancellation waits for the ACP prompt to settle during the cooperative grace period before process termination. Processes that ignore `SIGTERM` receive `SIGKILL`. Notification, transport, and cleanup errors remain failures rather than successful cancellation. Concurrent calls on the same coordinator share the active bundle execution.
 
-The Pi package also exports `resolvePiMainSessionId`, which consumes `PI_SUBAGENT_PARENT_SESSION` inside the adapter, and `replaceWithFreshPiSession`, which uses Pi's supported `AgentSessionRuntime.newSession()` boundary, durably transfers sole workflow ownership in the configured workflow event database, and then delivers state instructions to the replacement session.
+The Pi package exports `refreshPiContextWindow(session, stateInstructions)`. Call it when the existing session is idle, with instructions rebuilt from durable workflow state. It uses Pi's persisted compaction entries to replace the active model context without generating an AI summary. The conversation, session ID, transcript, and workflow identity remain unchanged, including after reopening. It does not create a new session or transfer workflow ownership. `resolvePiMainSessionId` continues to resolve child delegation from `PI_SUBAGENT_PARENT_SESSION`.
 
 ## OpenCode example
 

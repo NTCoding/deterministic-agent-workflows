@@ -44,10 +44,7 @@ import {
   resolveDatabasePath,
   translationNote,
 } from './pi-workflow-extension-platform'
-import {
-  createPiWorkflowSessionOwnership,
-  refreshTransferredOwnership,
-} from './pi-workflow-session-ownership'
+import { createPiWorkflowSessionOwnership } from './pi-workflow-session-ownership'
 const PI_QUESTION_TOOL = 'question'; const DEFAULT_COMMAND_NAME = 'workflow'; const DEFAULT_TOOL_NAME = 'workflow'
 const INITIALIZATION_PENDING_REASON = 'Pi workflow initialization has not completed safely. Tool execution is blocked.'; const INACTIVE_WORKFLOW_REASON = 'Pi workflow is inactive. Run the workflow init command before using workflow operations.'
 export const PI_IDLE_RECOVERY_MESSAGE = formatStopPreventionMessage()
@@ -163,19 +160,9 @@ export function createPiWorkflowExtension<
     return status?.type === 'failed' ? status.reason : INITIALIZATION_PENDING_REASON
   }
 
-  function isInactive(ctx: ExtensionContext, pi: ExtensionAPI): boolean {
+  function isInactive(ctx: ExtensionContext): boolean {
     const session = readSessionId(ctx)
     if (!session.ok) return false
-    refreshTransferredOwnership({
-      sessionId: session.sessionId,
-      initializationBySession,
-      sessionStartsById,
-      ownership,
-      initialize: (event) => initializeSession(event, ctx, pi, session.sessionId),
-      fail: (detail) => {
-        markInitializationFailed(ctx, session.sessionId, detail)
-      },
-    })
     return initializationBySession.get(session.sessionId)?.type === 'inactive'
   }
 
@@ -231,7 +218,7 @@ export function createPiWorkflowExtension<
   }
 
   function runRoute(ctx: ExtensionContext, args: readonly string[], pi: ExtensionAPI) {
-    if (isInactive(ctx, pi) && args[0] === 'init') {
+    if (isInactive(ctx) && args[0] === 'init') {
       const session = readSessionId(ctx)
       if (!session.ok) return {
         output: session.reason,
@@ -306,7 +293,7 @@ export function createPiWorkflowExtension<
     })
 
     pi.on('tool_call', (event, ctx) => {
-      if (isInactive(ctx, pi)) return
+      if (isInactive(ctx)) return
       const notReady = readinessFailure(ctx)
       if (notReady !== undefined) return {
         block: true,
@@ -338,7 +325,7 @@ export function createPiWorkflowExtension<
     })
 
     pi.on('input', (_event, ctx) => {
-      if (isInactive(ctx, pi)) return
+      if (isInactive(ctx)) return
       const notReady = readinessFailure(ctx)
       if (notReady === undefined) return
       ctx.ui.notify(notReady, 'error')
@@ -346,7 +333,7 @@ export function createPiWorkflowExtension<
     })
 
     pi.on('agent_settled', (_event, ctx) => {
-      if (isInactive(ctx, pi) || readinessFailure(ctx) !== undefined) return
+      if (isInactive(ctx) || readinessFailure(ctx) !== undefined) return
       const session = readSessionId(ctx)
       if (!session.ok) return
       const settlement: PiAssistantSettlement | undefined = getLatestPiAssistantSettlement(ctx.sessionManager.getBranch())
@@ -370,7 +357,7 @@ export function createPiWorkflowExtension<
         ctx.shutdown()
         return { cancel: true }
       }
-      if (isInactive(ctx, pi)) return undefined
+      if (isInactive(ctx)) return undefined
       const notReady = readinessFailure(ctx)
       if (notReady !== undefined) {
         markInitializationFailed(ctx, session.sessionId, notReady)

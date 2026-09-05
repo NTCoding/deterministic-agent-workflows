@@ -110,7 +110,6 @@ export type {
   ReviewBundleCompletedEvent,
   ReviewBundleFailedEvent,
   ReviewBundleCancelledEvent,
-  WorkflowSessionOwnerTransferredEvent,
 } from './platform/domain/engine-events'
 export { isPlatformOwnedEventExcludedFromWorkflowState } from './platform/domain/engine-events'
 

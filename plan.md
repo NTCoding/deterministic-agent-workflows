@@ -202,7 +202,7 @@ Status legend: `TODO`, `IN_PROGRESS`, `BLOCKED`, `DONE`
 - [x] **DONE** Add provider-neutral durable review-job contracts, lifecycle events, and coordinator behavior outside the synchronous `WorkflowEngine`.
 - [x] **DONE** Add an ACP-specific adapter package with pinned SDK, supervised processes, cancellation, and recovery.
 - [x] **DONE** Add event-store persistence with a one-active-bundle invariant and atomic lifecycle/review completion.
-- [x] **DONE** Resolve Pi child workflow ownership from `PI_SUBAGENT_PARENT_SESSION` and prove a supported fresh-session boundary.
+- [x] **DONE** Resolve Pi child delegation from `PI_SUBAGENT_PARENT_SESSION` and prove a fresh context window within the same conversation.
 - [x] **DONE** Preserve the high-level consumer API and consumer-owned review definitions without leaking platform events or Living Architecture names.
 - [x] **DONE** Consolidate repository guidance into scoped `AGENTS.md` and remove the legacy instruction file and references.
 - [x] **DONE** Complete focused and full verification without changing lint or coverage configuration.
@@ -213,7 +213,8 @@ Status legend: `TODO`, `IN_PROGRESS`, `BLOCKED`, `DONE`
 - [x] **DONE** Supervise cooperative cancellation, bounded notification failures, forced process termination, and active-run cleanup.
 - [x] **DONE** Record cancellation failures and share concurrent calls on one coordinator without rewriting terminal bundles.
 - [x] **DONE** Exercise SQLite claim/completion/cancellation races on independent worker connections and roll back a failed completion event atomically.
-- [x] **DONE** Preserve an already-started child's own workflow and prove replacement with the installed Pi runtime, including old-session disposal and empty fresh context.
+- [x] **DONE** Preserve an already-started child's own workflow and prove a persisted state-only context window with the installed Pi runtime, retaining the session and full transcript.
+- [x] **DONE** Remove obsolete session ownership transfer plumbing; context refresh retains the existing session identity.
 - [ ] **IN_PROGRESS** Verify the combined diff locally and on PR 44, then inspect the complete public API before consumer integration.
 
 ---

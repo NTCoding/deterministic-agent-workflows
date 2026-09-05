@@ -191,13 +191,6 @@ const reviewBundleCancelledEventSchema = z.object({
   reason: nonEmptyStringSchema,
 })
 
-const workflowSessionOwnerTransferredEventSchema = z.object({
-  type: z.literal('workflow-session-owner-transferred'),
-  at: nonEmptyStringSchema,
-  previousOwnerSessionId: nonEmptyStringSchema,
-  ownerSessionId: nonEmptyStringSchema,
-})
-
 export const engineEventSchema = z.discriminatedUnion('type', [
   sessionStartedSchema,
   transitionedSchema,
@@ -222,7 +215,6 @@ export const engineEventSchema = z.discriminatedUnion('type', [
   reviewBundleCompletedEventSchema,
   reviewBundleFailedEventSchema,
   reviewBundleCancelledEventSchema,
-  workflowSessionOwnerTransferredEventSchema,
 ])
 
 const platformOwnedEventTypesExcludedFromWorkflowState = new Set<string>([
@@ -246,7 +238,6 @@ const platformOwnedEventTypesExcludedFromWorkflowState = new Set<string>([
   'review-bundle-completed',
   'review-bundle-failed',
   'review-bundle-cancelled',
-  'workflow-session-owner-transferred',
 ])
 
 /** @riviere-role domain-service */
@@ -302,5 +293,3 @@ export type ReviewBundleCompletedEvent = z.infer<typeof reviewBundleCompletedEve
 export type ReviewBundleFailedEvent = z.infer<typeof reviewBundleFailedEventSchema>
 /** @riviere-role value-object */
 export type ReviewBundleCancelledEvent = z.infer<typeof reviewBundleCancelledEventSchema>
-/** @riviere-role value-object */
-export type WorkflowSessionOwnerTransferredEvent = z.infer<typeof workflowSessionOwnerTransferredEventSchema>

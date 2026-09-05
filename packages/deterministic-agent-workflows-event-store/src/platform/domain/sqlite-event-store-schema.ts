@@ -12,7 +12,6 @@ import {
   createReviewsTableSql,
   createReviewsTypeVerdictIndexSql,
 } from './sqlite-review-storage'
-import { initializeWorkflowSessionOwnership } from './sqlite-workflow-session-ownership'
 
 const tableInfoRowSchema = z.array(z.object({ name: z.string() }))
 
@@ -28,7 +27,6 @@ export function initializeEventStoreSchema(db: SqliteDatabase): void {
       payload TEXT NOT NULL
     )
   `)
-  initializeWorkflowSessionOwnership(db)
   db.exec(`
     CREATE TABLE IF NOT EXISTS reflections (
       id INTEGER PRIMARY KEY AUTOINCREMENT,

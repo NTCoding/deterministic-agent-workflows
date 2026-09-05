@@ -6,12 +6,11 @@ import {
   createStore,
   type SqliteEventStore,
 } from '@nt-ai-lab/deterministic-agent-workflow-event-store'
-import type { PiInitializationStatus } from '../../../platform/domain/pi-workflow-extension-types'
 import { resolvePiMainSessionId } from '../../../platform/domain/pi-main-session'
 import { readPiSessionMetadata } from '../../../platform/infra/external-clients/pi/pi-session-file'
 
 interface PiWorkflowSessionOwnership {
-  delegatedParent(sessionId: string): string | undefined
+  delegatedParent(sessionId: string, store?: SqliteEventStore): string | undefined
   hasPersistedWorkflow(sessionId: string): boolean
   usesInheritedWorkflow(sessionId: string): boolean
   parentSafetyFailure(event: SessionStartEvent, ctx: ExtensionContext): string | undefined
@@ -22,14 +21,19 @@ interface PiWorkflowSessionOwnership {
 export function createPiWorkflowSessionOwnership(
   databasePath: string,
 ): PiWorkflowSessionOwnership {
-  const delegatedParent = (sessionId: string): string | undefined => {
-    const store = createStore(databasePath)
+  const delegatedParent = (sessionId: string, existingStore?: SqliteEventStore): string | undefined => {
+    const store = existingStore ?? createStore(databasePath)
     try {
       if (store.hasSessionStarted(sessionId)) return undefined
       const mainSessionId = resolvePiMainSessionId(sessionId)
       return mainSessionId === sessionId ? undefined : mainSessionId
     } finally {
-      store.db.close()
+      if (existingStore === undefined) store.db.close()
+    }
+  }
+  const requireParent = (store: SqliteEventStore, parentSessionId: string): void => {
+    if (!store.hasSessionStarted(parentSessionId)) {
+      throw new TypeError(`Pi parent session ${parentSessionId} has no persisted workflow.`)
     }
   }
   return {
@@ -37,14 +41,12 @@ export function createPiWorkflowSessionOwnership(
     hasPersistedWorkflow(sessionId: string): boolean {
       const store = createStore(databasePath)
       try {
-        const parentSessionId = delegatedParent(sessionId)
+        const parentSessionId = delegatedParent(sessionId, store)
         if (parentSessionId !== undefined) {
-          store.requireWorkflowSessionAccess(sessionId, parentSessionId)
+          requireParent(store, parentSessionId)
           return true
         }
-        if (!store.hasSessionStarted(sessionId)) return false
-        store.requireWorkflowSessionAccess(sessionId)
-        return true
+        return store.hasSessionStarted(sessionId)
       } finally {
         store.db.close()
       }
@@ -52,9 +54,7 @@ export function createPiWorkflowSessionOwnership(
     usesInheritedWorkflow(sessionId: string): boolean {
       const store = createStore(databasePath)
       try {
-        if (delegatedParent(sessionId) !== undefined) return true
-        if (!store.hasSessionStarted(sessionId)) return false
-        return store.requireWorkflowSessionAccess(sessionId) !== sessionId
+        return delegatedParent(sessionId, store) !== undefined
       } finally {
         store.db.close()
       }
@@ -75,40 +75,10 @@ export function createPiWorkflowSessionOwnership(
       }
     },
     requireAccess(store: SqliteEventStore, sessionId: string): void {
-      const parentSessionId = delegatedParent(sessionId)
-      if (parentSessionId !== undefined || store.hasSessionStarted(sessionId)) {
-        store.requireWorkflowSessionAccess(sessionId, parentSessionId)
+      const parentSessionId = delegatedParent(sessionId, store)
+      if (parentSessionId !== undefined) {
+        requireParent(store, parentSessionId)
       }
     },
-  }
-}
-
-interface RefreshTransferredOwnershipInput {
-  readonly sessionId: string
-  readonly initializationBySession: Map<string, PiInitializationStatus>
-  readonly sessionStartsById: Map<string, SessionStartEvent>
-  readonly ownership: PiWorkflowSessionOwnership
-  readonly initialize: (event: SessionStartEvent) => string | undefined
-  readonly fail: (detail: string) => void
-}
-
-/** @riviere-role cli-entrypoint */
-export function refreshTransferredOwnership(input: RefreshTransferredOwnershipInput): void {
-  if (input.initializationBySession.get(input.sessionId)?.type !== 'inactive') return
-  try {
-    if (!input.ownership.hasPersistedWorkflow(input.sessionId)) return
-    const event = input.sessionStartsById.get(input.sessionId)
-    if (event === undefined) throw new TypeError(
-      'Pi workflow initialization has not completed safely. Tool execution is blocked.',
-    )
-    input.initializationBySession.set(input.sessionId, { type: 'initializing' })
-    const failure = input.initialize(event)
-    if (failure !== undefined) {
-      input.fail(failure)
-      return
-    }
-    input.initializationBySession.set(input.sessionId, { type: 'ready' })
-  } catch (error: unknown) {
-    input.fail(String(error))
   }
 }
