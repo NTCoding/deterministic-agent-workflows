@@ -5,19 +5,18 @@ import type {
   ReviewJobStore,
   StoredReview,
   StoredReviewAgent,
+  ReviewCompletionProvenance,
   StoredReviewBundle,
 } from '@nt-ai-lab/deterministic-agent-workflow-engine'
 import {
-  recordReviewInputSchema,
   reviewBundleRequestSchema,
   storedReviewAgentSchema,
   storedReviewBundleSchema,
-  storedReviewSchema,
   WorkflowStateError,
 } from '@nt-ai-lab/deterministic-agent-workflow-engine'
 import type { SqliteDatabase } from '../infra/external-clients/sqlite/sqlite-runtime'
 import { updateReviewBundleLifecycle } from './sqlite-review-bundle-lifecycle'
-import { reviewIdRowSchema } from './sqlite-review-storage'
+import { completeReviewAgentTransaction } from './sqlite-review-agent-completion'
 
 export const createReviewBundlesTableSql = `
   CREATE TABLE IF NOT EXISTS review_bundles (
@@ -47,7 +46,9 @@ export const createReviewAgentsTableSql = `
     review_type TEXT NOT NULL,
     status TEXT NOT NULL,
     provider_session_id TEXT,
+    provider_run_id TEXT,
     review_id INTEGER,
+    completion_provenance_json TEXT,
     failure_reason TEXT,
     updated_at TEXT NOT NULL,
     PRIMARY KEY (bundle_id, review_type),
@@ -74,7 +75,9 @@ const reviewAgentRowSchema = z.object({
   review_type: z.string(),
   status: z.string(),
   provider_session_id: z.string().nullable(),
+  provider_run_id: z.string().nullable(),
   review_id: z.number().nullable(),
+  completion_provenance_json: z.string().nullable(),
   failure_reason: z.string().nullable(),
   updated_at: z.string(),
 })
@@ -93,6 +96,9 @@ function parseReviewBundle(row: unknown): StoredReviewBundle {
 
 function parseReviewAgent(row: unknown): StoredReviewAgent {
   const parsed = reviewAgentRowSchema.parse(row)
+  const completionProvenance: unknown = parsed.completion_provenance_json === null
+    ? undefined
+    : JSON.parse(parsed.completion_provenance_json)
   return storedReviewAgentSchema.parse({
     bundleId: parsed.bundle_id,
     reviewType: parsed.review_type,
@@ -101,7 +107,9 @@ function parseReviewAgent(row: unknown): StoredReviewAgent {
     ...(parsed.provider_session_id === null
       ? {}
       : { providerSessionId: parsed.provider_session_id }),
+    ...(parsed.provider_run_id === null ? {} : { providerRunId: parsed.provider_run_id }),
     ...(parsed.review_id === null ? {} : { reviewId: parsed.review_id }),
+    ...(completionProvenance === undefined ? {} : { completionProvenance }),
     ...(parsed.failure_reason === null ? {} : { failureReason: parsed.failure_reason }),
   })
 }
@@ -147,9 +155,9 @@ function updateBundleStatus(
   eventType: 'review-bundle-started' | 'review-bundle-completed' | 'review-bundle-failed' | 'review-bundle-cancelled',
   reason?: string,
 ): StoredReviewBundle {
-  const current = requireReviewBundle(db, bundleId)
   db.exec('BEGIN IMMEDIATE')
   try {
+    const current = requireReviewBundle(db, bundleId)
     updateReviewBundleLifecycle(db, current, status, updatedAt, eventType, reason)
     db.exec('COMMIT')
     return requireReviewBundle(db, bundleId)
@@ -252,22 +260,58 @@ export function createSqliteReviewJobStore(db: SqliteDatabase): ReviewJobStore {
       bundleId: string,
       reviewType: string,
       providerSessionId: string,
+      providerRunId: string,
       updatedAt: string,
     ): StoredReviewAgent {
-      const bundle = requireReviewBundle(db, bundleId)
-      requireReviewAgent(db, bundleId, reviewType)
       db.exec('BEGIN IMMEDIATE')
       try {
+        const bundle = requireReviewBundle(db, bundleId)
+        const agent = requireReviewAgent(db, bundleId, reviewType)
+        if (bundle.status !== 'running' || agent.status !== 'requested') {
+          throw new WorkflowStateError(
+            `Review agent ${reviewType} cannot start while bundle is ${bundle.status} and agent is ${agent.status}.`,
+          )
+        }
         db.prepare(`
           UPDATE review_agents
-          SET status = 'running', provider_session_id = ?, updated_at = ?
-          WHERE bundle_id = ? AND review_type = ?
-        `).run(providerSessionId, updatedAt, bundleId, reviewType)
+          SET status = 'running', provider_session_id = ?, provider_run_id = ?, updated_at = ?
+          WHERE bundle_id = ? AND review_type = ? AND status = 'requested'
+        `).run(providerSessionId, providerRunId, updatedAt, bundleId, reviewType)
         appendPlatformEvent(db, bundle.sessionId, 'review-agent-started', updatedAt, null, {
           bundleId,
           reviewType,
           providerSessionId,
+          providerRunId,
         })
+        db.exec('COMMIT')
+        return requireReviewAgent(db, bundleId, reviewType)
+      } catch (error) {
+        db.exec('ROLLBACK')
+        throw error
+      }
+    },
+    resumeReviewAgent(
+      bundleId: string,
+      reviewType: string,
+      providerSessionId: string,
+      providerRunId: string,
+      updatedAt: string,
+    ): StoredReviewAgent {
+      db.exec('BEGIN IMMEDIATE')
+      try {
+        const bundle = requireReviewBundle(db, bundleId)
+        const agent = requireReviewAgent(db, bundleId, reviewType)
+        if (bundle.status !== 'running' || agent.status !== 'running' ||
+          agent.providerSessionId !== providerSessionId) {
+          throw new WorkflowStateError(
+            `Review agent ${reviewType} cannot resume with provider session ${providerSessionId}.`,
+          )
+        }
+        db.prepare(`
+          UPDATE review_agents SET provider_run_id = ?, updated_at = ?
+          WHERE bundle_id = ? AND review_type = ? AND status = 'running'
+            AND provider_session_id = ?
+        `).run(providerRunId, updatedAt, bundleId, reviewType, providerSessionId)
         db.exec('COMMIT')
         return requireReviewAgent(db, bundleId, reviewType)
       } catch (error) {
@@ -278,86 +322,48 @@ export function createSqliteReviewJobStore(db: SqliteDatabase): ReviewJobStore {
     completeReviewAgent(
       bundleId: string,
       reviewType: string,
-      providerSessionId: string,
+      provenance: ReviewCompletionProvenance,
       createdAt: string,
       input: RecordReviewInput,
       eventState: string,
     ): {
         readonly agent: StoredReviewAgent;
-        readonly review: StoredReview 
+        readonly review: StoredReview
       } {
-      const bundle = requireReviewBundle(db, bundleId)
-      const parsedInput = recordReviewInputSchema.parse(input)
-      if (parsedInput.reviewType !== reviewType) {
-        throw new WorkflowStateError(
-          `Review result type ${parsedInput.reviewType} does not match ${reviewType}.`,
-        )
-      }
+      return completeReviewAgentTransaction({
+        db,
+        requireBundle: (id) => requireReviewBundle(db, id),
+        requireAgent: (id, type) => requireReviewAgent(db, id, type),
+        appendEvent: (sessionId, type, at, state, payload) =>
+          appendPlatformEvent(db, sessionId, type, at, state, payload),
+      }, bundleId, reviewType, provenance, createdAt, input, eventState)
+    },
+    completeReviewBundle(bundleId: string, updatedAt: string): StoredReviewBundle {
       db.exec('BEGIN IMMEDIATE')
       try {
-        db.prepare(`
-          INSERT INTO reviews (
-            session_id, created_at, review_type, verdict, branch,
-            pull_request_number, source_state, payload_json
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        `).run(
-          bundle.sessionId,
-          createdAt,
-          parsedInput.reviewType,
-          parsedInput.verdict,
-          parsedInput.branch ?? null,
-          parsedInput.pullRequestNumber ?? null,
-          parsedInput.sourceState ?? null,
-          JSON.stringify(parsedInput),
-        )
-        const rawId = db.prepare('SELECT last_insert_rowid() AS id').get()
-        const id = Number(reviewIdRowSchema.parse(rawId).id)
-        db.prepare(`
-          UPDATE review_agents
-          SET status = 'completed', provider_session_id = ?, review_id = ?, updated_at = ?
-          WHERE bundle_id = ? AND review_type = ?
-        `).run(providerSessionId, id, createdAt, bundleId, reviewType)
-        appendPlatformEvent(db, bundle.sessionId, 'review-recorded', createdAt, eventState, {
-          reviewId: id,
-          reviewType,
-          verdict: parsedInput.verdict,
-        })
-        appendPlatformEvent(db, bundle.sessionId, 'review-agent-completed', createdAt, eventState, {
-          bundleId,
-          reviewType,
-          providerSessionId,
-          reviewId: id,
-          verdict: parsedInput.verdict,
-        })
-        db.exec('COMMIT')
-        return {
-          agent: requireReviewAgent(db, bundleId, reviewType),
-          review: storedReviewSchema.parse({
-            id,
-            sessionId: bundle.sessionId,
-            createdAt,
-            ...parsedInput,
-          }),
+        const bundle = requireReviewBundle(db, bundleId)
+        const agents = db.prepare(
+          'SELECT * FROM review_agents WHERE bundle_id = ? ORDER BY review_type',
+        ).all(bundleId).map(parseReviewAgent)
+        if (bundle.status !== 'running' || agents.length !== bundle.reviews.length ||
+          agents.some((agent) => agent.status !== 'completed')) {
+          throw new WorkflowStateError(
+            `Cannot complete review bundle ${bundleId} from ${bundle.status} before every reviewer completes.`,
+          )
         }
+        updateReviewBundleLifecycle(
+          db,
+          bundle,
+          'completed',
+          updatedAt,
+          'review-bundle-completed',
+        )
+        db.exec('COMMIT')
+        return requireReviewBundle(db, bundleId)
       } catch (error) {
         db.exec('ROLLBACK')
         throw error
       }
-    },
-    completeReviewBundle(bundleId: string, updatedAt: string): StoredReviewBundle {
-      const agents = this.listReviewAgents(bundleId)
-      if (agents.some((agent) => agent.status !== 'completed')) {
-        throw new WorkflowStateError(
-          `Cannot complete review bundle ${bundleId} before every reviewer completes.`,
-        )
-      }
-      return updateBundleStatus(
-        db,
-        bundleId,
-        'completed',
-        updatedAt,
-        'review-bundle-completed',
-      )
     },
     failReviewBundle(bundleId: string, reason: string, updatedAt: string): StoredReviewBundle {
       return updateBundleStatus(db, bundleId, 'failed', updatedAt, 'review-bundle-failed', reason)

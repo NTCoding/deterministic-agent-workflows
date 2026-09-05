@@ -1,6 +1,12 @@
 import {
-  describe, expect, it, vi 
+  mkdtempSync, rmSync
+} from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import {
+  describe, expect, it, vi
 } from 'vitest'
+import { createStore } from '@nt-ai-lab/deterministic-agent-workflow-event-store'
 import {
   replaceWithFreshPiSession,
   resolvePiMainSessionId,
@@ -37,6 +43,27 @@ function runtimeFixture(options: {
   }
 }
 
+function workflowDatabase(): string {
+  const directory = mkdtempSync(join(tmpdir(), 'pi-owner-'))
+  const path = join(directory, 'events.db')
+  const store = createStore(path)
+  store.appendEvents('current-session', [{
+    envelope: {
+      type: 'session-started',
+      at: '2026-01-01T00:00:00.000Z',
+      state: 'PLANNING',
+    },
+    payload: {
+      transcriptPath: '/session.jsonl',
+      repository: 'owner/repository',
+      currentState: 'PLANNING',
+      states: ['PLANNING'],
+    },
+  }])
+  store.db.close()
+  return path
+}
+
 describe('resolvePiMainSessionId', () => {
   it('uses the current session for a main Pi process', () => {
     expect(resolvePiMainSessionId(' current ', {})).toBe('current')
@@ -58,15 +85,28 @@ describe('resolvePiMainSessionId', () => {
 describe('replaceWithFreshPiSession', () => {
   it('uses the supported runtime replacement API and returns the ownership change', async () => {
     const runtime = runtimeFixture()
-    const previousSession = runtime.session
-
-    await expect(replaceWithFreshPiSession(runtime, 'Enter ADDRESSING_FEEDBACK.')).resolves.toStrictEqual({
+    const path = workflowDatabase()
+    await expect(replaceWithFreshPiSession(
+      runtime,
+      'Enter ADDRESSING_FEEDBACK.',
+      path,
+    )).resolves.toStrictEqual({
       previousSessionId: 'current-session',
       sessionId: 'fresh-session',
     })
-    expect(runtime.newSession).toHaveBeenCalledOnce()
-    expect(previousSession.prompt).not.toHaveBeenCalled()
-    expect(runtime.session.prompt).toHaveBeenCalledWith('Enter ADDRESSING_FEEDBACK.')
+    const store = createStore(path)
+    expect(store.requireWorkflowSessionAccess('fresh-session')).toBe('current-session')
+    expect(() => store.requireWorkflowSessionAccess('current-session')).toThrow(
+      'not the current workflow owner',
+    )
+    expect(store.readEvents('fresh-session').at(-1)?.envelope.type).toBe(
+      'workflow-session-owner-transferred',
+    )
+    store.db.close()
+    rmSync(join(path, '..'), {
+      recursive: true,
+      force: true
+    })
   })
 
   it('rejects replacement while the current session is streaming', async () => {

@@ -1,10 +1,11 @@
+import { createHash } from 'node:crypto'
 import {
-  mkdtempSync, rmSync 
+  mkdtempSync, rmSync
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
-  afterEach, describe, expect, it 
+  afterEach, describe, expect, it
 } from 'vitest'
 import {
   engineEventSchema,
@@ -33,8 +34,24 @@ function request(bundleId: string, pullRequestNumber = 42): ReviewBundleRequest 
     stateInstructions: 'Review the change.',
     reviews: [{
       reviewType: 'custom-review',
-      instructions: 'Inspect correctness.' 
+      instructions: 'Inspect correctness.',
+      version: 'v1',
     }],
+  }
+}
+
+function provenance(overrides: Readonly<Record<string, unknown>> = {}) {
+  const exactFiles = ['src/file.ts']
+  return {
+    bundleId: 'bundle-1',
+    providerSessionId: 'provider-session',
+    providerRunId: 'provider-run',
+    baseRevision: 'base-sha',
+    headRevision: 'head-sha',
+    exactFiles,
+    exactFilesDigest: createHash('sha256').update(JSON.stringify(exactFiles)).digest('hex'),
+    reviewerDefinitionVersion: 'v1',
+    ...overrides,
   }
 }
 
@@ -42,7 +59,7 @@ afterEach(() => {
   for (const directory of directories.splice(0)) {
     rmSync(directory, {
       recursive: true,
-      force: true 
+      force: true
     })
   }
 })
@@ -83,13 +100,14 @@ describe('SQLite review job store', () => {
       'bundle-1',
       'custom-review',
       'provider-session',
+      'provider-run',
       '2026-01-01T00:00:02.000Z',
     )
 
     const result = store.completeReviewAgent(
       'bundle-1',
       'custom-review',
-      'provider-session',
+      provenance(),
       '2026-01-01T00:00:03.000Z',
       {
         reviewType: 'custom-review',
@@ -134,6 +152,7 @@ describe('SQLite review job store', () => {
       'bundle-1',
       'custom-review',
       'provider-session',
+      'provider-run',
       '2026-01-01T00:00:02.000Z',
     )
 
@@ -155,6 +174,125 @@ describe('SQLite review job store', () => {
     store.db.close()
   })
 
+  it('rejects unknown, non-running, and mismatched provider completions transactionally', () => {
+    const store = createStore(databasePath())
+    store.claimReviewBundle(request('bundle-1'), '2026-01-01T00:00:00.000Z')
+    store.markReviewBundleRunning('bundle-1', '2026-01-01T00:00:01.000Z')
+
+    const complete = (reviewType: string, completionProvenance = provenance()) =>
+      store.completeReviewAgent(
+        'bundle-1',
+        reviewType,
+        completionProvenance,
+        '2026-01-01T00:00:03.000Z',
+        {
+          reviewType,
+          verdict: 'PASS',
+          findings: []
+        },
+        'REVIEWING',
+      )
+    expect(() => complete('unknown')).toThrow('not found')
+    expect(() => complete('custom-review')).toThrow('agent is requested')
+    store.markReviewAgentRunning(
+      'bundle-1',
+      'custom-review',
+      'provider-session',
+      'provider-run',
+      '2026-01-01T00:00:02.000Z',
+    )
+    expect(() => complete('custom-review', provenance({providerSessionId: 'other-session',}))).toThrow('does not match the active run')
+    expect(() => complete('custom-review', provenance({providerRunId: 'other-run',}))).toThrow('does not match the active run')
+    store.db.close()
+  })
+
+  it('persists immutable completion provenance and rejects provenance drift or duplicates', () => {
+    const store = createStore(databasePath())
+    store.claimReviewBundle(request('bundle-1'), '2026-01-01T00:00:00.000Z')
+    store.markReviewBundleRunning('bundle-1', '2026-01-01T00:00:01.000Z')
+    store.markReviewAgentRunning(
+      'bundle-1',
+      'custom-review',
+      'provider-session',
+      'provider-run',
+      '2026-01-01T00:00:02.000Z',
+    )
+    const complete = (completionProvenance = provenance()) => store.completeReviewAgent(
+      'bundle-1',
+      'custom-review',
+      completionProvenance,
+      '2026-01-01T00:00:03.000Z',
+      {
+        reviewType: 'custom-review',
+        verdict: 'PASS',
+        findings: []
+      },
+      'REVIEWING',
+    )
+
+    expect(() => complete(provenance({ headRevision: 'other-head' }))).toThrow(
+      'provenance does not match',
+    )
+    expect(() => complete(provenance({ exactFiles: ['src/other.ts'] }))).toThrow(
+      'provenance does not match',
+    )
+    const result = complete()
+    expect(result).toMatchObject({
+      review: { id: 1 },
+      agent: { completionProvenance: provenance() },
+    })
+    expect(() => complete()).toThrow('agent is completed')
+    store.db.close()
+  })
+
+  it('rejects completion after cancellation or failure and every terminal rewrite', () => {
+    for (const terminal of ['cancelled', 'failed'] as const) {
+      const store = createStore(databasePath())
+      const bundleId = `bundle-${terminal}`
+      store.claimReviewBundle(request(bundleId), '2026-01-01T00:00:00.000Z')
+      store.markReviewBundleRunning(bundleId, '2026-01-01T00:00:01.000Z')
+      store.markReviewAgentRunning(
+        bundleId,
+        'custom-review',
+        'provider-session',
+        'provider-run',
+        '2026-01-01T00:00:02.000Z',
+      )
+      if (terminal === 'cancelled') {
+        store.cancelReviewBundle(bundleId, 'cancelled', '2026-01-01T00:00:03.000Z')
+      } else {
+        store.failReviewBundle(bundleId, 'failed', '2026-01-01T00:00:03.000Z')
+      }
+      expect(() => store.completeReviewAgent(
+        bundleId,
+        'custom-review',
+        provenance({ bundleId }),
+        '2026-01-01T00:00:04.000Z',
+        {
+          reviewType: 'custom-review',
+          verdict: 'PASS',
+          findings: []
+        },
+        'REVIEWING',
+      )).toThrow(`bundle is ${terminal}`)
+      expect(() => store.cancelReviewBundle(
+        bundleId,
+        'rewrite',
+        '2026-01-01T00:00:05.000Z',
+      )).toThrow(`cannot transition from ${terminal}`)
+      expect(() => store.failReviewBundle(
+        bundleId,
+        'rewrite',
+        '2026-01-01T00:00:05.000Z',
+      )).toThrow(`cannot transition from ${terminal}`)
+      expect(() => store.completeReviewBundle(
+        bundleId,
+        '2026-01-01T00:00:05.000Z',
+      )).toThrow(`from ${terminal}`)
+      store.db.close()
+    }
+  })
+
   it('does not persist a mismatched reviewer completion', () => {
     const store = createStore(databasePath())
     store.claimReviewBundle(request('bundle-1'), '2026-01-01T00:00:00.000Z')
@@ -162,7 +300,7 @@ describe('SQLite review job store', () => {
     expect(() => store.completeReviewAgent(
       'bundle-1',
       'custom-review',
-      'provider-session',
+      provenance(),
       '2026-01-01T00:00:01.000Z',
       {
         reviewType: 'different-review',

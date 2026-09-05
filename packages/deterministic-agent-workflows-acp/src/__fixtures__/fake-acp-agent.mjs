@@ -1,5 +1,5 @@
 import {
-  Readable, Writable 
+  Readable, Writable
 } from 'node:stream'
 import {
   agent,
@@ -9,6 +9,7 @@ import {
 } from '@agentclientprotocol/sdk'
 
 const mode = process.env.FAKE_ACP_MODE ?? 'pass'
+if (mode === 'early-exit') process.exit(17)
 let cancelPrompt
 
 const app = agent({ name: 'fake-review-agent' })
@@ -23,7 +24,7 @@ const app = agent({ name: 'fake-review-agent' })
   .onRequest(methods.agent.session.new, () => ({ sessionId: 'fake-session' }))
   .onRequest(methods.agent.session.load, () => ({}))
   .onRequest(methods.agent.session.prompt, async ({
-    params, client 
+    params, client
   }) => {
     if (mode === 'slow' || mode === 'ignore-cancel') {
       await new Promise((resolve) => {
@@ -36,7 +37,7 @@ const app = agent({ name: 'fake-review-agent' })
       : JSON.stringify({
         verdict: 'PASS',
         summary: params.prompt[0]?.text,
-        findings: [] 
+        findings: []
       })
     await client.notify(methods.client.session.update, {
       sessionId: params.sessionId,
@@ -44,7 +45,7 @@ const app = agent({ name: 'fake-review-agent' })
         sessionUpdate: 'agent_message_chunk',
         content: {
           type: 'text',
-          text: payload 
+          text: payload
         },
       },
     })

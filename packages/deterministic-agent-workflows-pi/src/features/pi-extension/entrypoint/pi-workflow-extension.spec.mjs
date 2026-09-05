@@ -439,6 +439,122 @@ describe('createPiWorkflowExtension', () => {
     expect(blocked?.reason).toContain('Ephemeral Pi sessions are unsupported')
   })
 
+  it('activates a fresh delegated child and enforces its parent workflow', async () => {
+    const root = createTestRoot()
+    const databasePath = join(root, 'workflow-events.db')
+    const parent = SessionManager.create(repositoryRoot, join(root, 'sessions'))
+    const parentHarness = createHarness(parent, createConfig(root, databasePath))
+    await parentHarness.runner.emit({
+      type: 'session_start',
+      reason: 'startup'
+    })
+    await activate(parentHarness)
+
+    const child = SessionManager.create(repositoryRoot, join(root, 'sessions'))
+    process.env.PI_SUBAGENT_PARENT_SESSION = parent.getSessionId()
+    try {
+      const childHarness = createHarness(child, createConfig(root, databasePath))
+      await childHarness.runner.emit({
+        type: 'session_start',
+        reason: 'startup'
+      })
+      const blocked = await childHarness.runner.emitToolCall({
+        type: 'tool_call',
+        toolCallId: 'delegated-write',
+        toolName: 'write',
+        input: {
+          path: 'src/app.ts',
+          content: 'unsafe'
+        },
+      })
+
+      expect(childHarness.state.shutdowns).toBe(0)
+      expect(blocked?.block).toBe(true)
+      expect(blocked?.reason).toContain("Write to 'src/app.ts' is forbidden in state PLANNING")
+      expect(workflowStarted(databasePath, parent.getSessionId())).toBe(true)
+      const store = createStore(databasePath)
+      expect(store.readEvents(parent.getSessionId()).at(-1)?.envelope.type).toBe('write-checked')
+      store.db.close()
+    } finally {
+      delete process.env.PI_SUBAGENT_PARENT_SESSION
+    }
+  })
+
+  it('fails closed when a fresh delegated child has no persisted parent workflow', async () => {
+    const root = createTestRoot()
+    const child = SessionManager.create(repositoryRoot, join(root, 'sessions'))
+    process.env.PI_SUBAGENT_PARENT_SESSION = 'absent-parent'
+    try {
+      const harness = createHarness(child, createConfig(root))
+      await harness.runner.emit({
+        type: 'session_start',
+        reason: 'startup'
+      })
+
+      expect(harness.state.shutdowns).toBe(1)
+      expect(harness.notifications[0].message).toContain(
+        'Pi parent session absent-parent has no persisted workflow',
+      )
+    } finally {
+      delete process.env.PI_SUBAGENT_PARENT_SESSION
+    }
+  })
+
+  it('rehydrates a durable ownership transfer for only the fresh owner', async () => {
+    const root = createTestRoot()
+    const databasePath = join(root, 'workflow-events.db')
+    const previous = SessionManager.create(repositoryRoot, join(root, 'sessions'))
+    const previousHarness = createHarness(previous, createConfig(root, databasePath))
+    await previousHarness.runner.emit({
+      type: 'session_start',
+      reason: 'startup'
+    })
+    await activate(previousHarness)
+
+    const fresh = SessionManager.create(repositoryRoot, join(root, 'sessions'))
+    const freshHarness = createHarness(fresh, createConfig(root, databasePath))
+    await freshHarness.runner.emit({
+      type: 'session_start',
+      reason: 'startup'
+    })
+    const store = createStore(databasePath)
+    store.transferWorkflowSessionOwnership(
+      previous.getSessionId(),
+      fresh.getSessionId(),
+      '2026-01-01T00:00:00.000Z',
+    )
+    store.db.close()
+
+    expect(await freshHarness.runner.emitInput(
+      'Continue as owner.',
+      undefined,
+      'interactive',
+    )).toStrictEqual({ action: 'continue' })
+    const freshBlocked = await freshHarness.runner.emitToolCall({
+      type: 'tool_call',
+      toolCallId: 'fresh-owner-write',
+      toolName: 'write',
+      input: {
+        path: 'src/app.ts',
+        content: 'unsafe'
+      },
+    })
+    const previousBlocked = await previousHarness.runner.emitToolCall({
+      type: 'tool_call',
+      toolCallId: 'previous-owner-write',
+      toolName: 'write',
+      input: {
+        path: 'src/app.ts',
+        content: 'unsafe'
+      },
+    })
+
+    expect(freshHarness.state.shutdowns).toBe(0)
+    expect(freshBlocked?.reason).toContain('forbidden in state PLANNING')
+    expect(previousBlocked?.reason).toContain('not the current workflow owner')
+    expect(previousHarness.state.shutdowns).toBe(1)
+  })
+
   it('blocks startup forks whose parent UUID has an active workflow', async () => {
     const root = createTestRoot()
     const databasePath = join(root, 'workflow-events.db')

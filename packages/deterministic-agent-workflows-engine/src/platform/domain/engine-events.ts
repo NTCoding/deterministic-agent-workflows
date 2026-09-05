@@ -134,6 +134,7 @@ const reviewAgentStartedEventSchema = z.object({
   bundleId: nonEmptyStringSchema,
   reviewType: nonEmptyStringSchema,
   providerSessionId: nonEmptyStringSchema,
+  providerRunId: nonEmptyStringSchema,
 })
 
 const reviewAgentCompletedEventSchema = z.object({
@@ -142,6 +143,12 @@ const reviewAgentCompletedEventSchema = z.object({
   bundleId: nonEmptyStringSchema,
   reviewType: nonEmptyStringSchema,
   providerSessionId: nonEmptyStringSchema,
+  providerRunId: nonEmptyStringSchema,
+  baseRevision: nonEmptyStringSchema,
+  headRevision: nonEmptyStringSchema,
+  exactFilesDigest: nonEmptyStringSchema,
+  exactFiles: z.array(nonEmptyStringSchema).min(1),
+  reviewerDefinitionVersion: nonEmptyStringSchema,
   reviewId: z.number().int().positive(),
   verdict: z.enum(['PASS', 'FAIL']),
 })
@@ -184,6 +191,13 @@ const reviewBundleCancelledEventSchema = z.object({
   reason: nonEmptyStringSchema,
 })
 
+const workflowSessionOwnerTransferredEventSchema = z.object({
+  type: z.literal('workflow-session-owner-transferred'),
+  at: nonEmptyStringSchema,
+  previousOwnerSessionId: nonEmptyStringSchema,
+  ownerSessionId: nonEmptyStringSchema,
+})
+
 export const engineEventSchema = z.discriminatedUnion('type', [
   sessionStartedSchema,
   transitionedSchema,
@@ -208,6 +222,7 @@ export const engineEventSchema = z.discriminatedUnion('type', [
   reviewBundleCompletedEventSchema,
   reviewBundleFailedEventSchema,
   reviewBundleCancelledEventSchema,
+  workflowSessionOwnerTransferredEventSchema,
 ])
 
 const platformOwnedEventTypesExcludedFromWorkflowState = new Set<string>([
@@ -286,3 +301,5 @@ export type ReviewBundleCompletedEvent = z.infer<typeof reviewBundleCompletedEve
 export type ReviewBundleFailedEvent = z.infer<typeof reviewBundleFailedEventSchema>
 /** @riviere-role value-object */
 export type ReviewBundleCancelledEvent = z.infer<typeof reviewBundleCancelledEventSchema>
+/** @riviere-role value-object */
+export type WorkflowSessionOwnerTransferredEvent = z.infer<typeof workflowSessionOwnerTransferredEventSchema>

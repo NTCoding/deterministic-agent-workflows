@@ -70,13 +70,16 @@ await coordinator.run({
   headRevision,
   changedFiles,
   stateInstructions,
-  reviews: consumerOwnedReviewDefinitions,
+  reviews: consumerOwnedReviewDefinitions.map((review) => ({
+    ...review,
+    version: review.definitionVersion,
+  })),
 }, persistedReviewingState)
 ```
 
-The coordinator request is pinned to a repository, pull request, working directory, base revision, head revision, and exact changed-file list. ACP reviewers do not inherit GitHub credentials; provide only constrained MCP servers and non-credential environment values. Calling `run` again with the same bundle resumes persisted provider sessions, while another active bundle for the same pull request fails closed.
+Each reviewer definition includes an immutable `version`. The coordinator request and completion provenance are pinned to the bundle, provider session and run, base revision, head revision, reviewer version, and a SHA-256 digest of the exact ordered changed-file list. ACP reviewers do not inherit GitHub credentials; provide only constrained MCP servers and non-credential environment values. Calling `run` again with the same bundle resumes persisted provider sessions, while another active bundle for the same pull request fails closed.
 
-The Pi package also exports `resolvePiMainSessionId`, which consumes `PI_SUBAGENT_PARENT_SESSION` inside the adapter, and `replaceWithFreshPiSession`, which uses Pi's supported `AgentSessionRuntime.newSession()` boundary before delivering state instructions to the replacement session.
+The Pi package also exports `resolvePiMainSessionId`, which consumes `PI_SUBAGENT_PARENT_SESSION` inside the adapter, and `replaceWithFreshPiSession`, which uses Pi's supported `AgentSessionRuntime.newSession()` boundary, durably transfers sole workflow ownership in the configured workflow event database, and then delivers state instructions to the replacement session.
 
 ## OpenCode example
 

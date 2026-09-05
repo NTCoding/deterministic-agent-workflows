@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { nonEmptyStringSchema } from './non-empty-string'
 import type {
-  RecordReviewInput, StoredReview 
+  RecordReviewInput, StoredReview
 } from './review-types'
 
 const promptLineSchema = nonEmptyStringSchema.refine(
@@ -28,6 +28,18 @@ export const reviewAgentStatusSchema = z.enum([
 export const reviewDefinitionSchema = z.object({
   reviewType: nonEmptyStringSchema,
   instructions: nonEmptyStringSchema,
+  version: nonEmptyStringSchema,
+}).strict()
+
+export const reviewCompletionProvenanceSchema = z.object({
+  bundleId: nonEmptyStringSchema,
+  providerSessionId: nonEmptyStringSchema,
+  providerRunId: nonEmptyStringSchema,
+  baseRevision: promptLineSchema,
+  headRevision: promptLineSchema,
+  exactFilesDigest: z.string().regex(/^[a-f\d]{64}$/u),
+  exactFiles: z.array(promptLineSchema).min(1),
+  reviewerDefinitionVersion: nonEmptyStringSchema,
 }).strict()
 
 const reviewBundleRequestObjectSchema = z.object({
@@ -76,7 +88,9 @@ export const storedReviewAgentSchema = z.object({
   reviewType: nonEmptyStringSchema,
   status: reviewAgentStatusSchema,
   providerSessionId: nonEmptyStringSchema.optional(),
+  providerRunId: nonEmptyStringSchema.optional(),
   reviewId: z.number().int().positive().optional(),
+  completionProvenance: reviewCompletionProvenanceSchema.optional(),
   failureReason: nonEmptyStringSchema.optional(),
   updatedAt: nonEmptyStringSchema,
 }).strict()
@@ -87,6 +101,8 @@ export type ReviewBundleStatus = z.infer<typeof reviewBundleStatusSchema>
 export type ReviewAgentStatus = z.infer<typeof reviewAgentStatusSchema>
 /** @riviere-role value-object */
 export type ReviewDefinition = z.infer<typeof reviewDefinitionSchema>
+/** @riviere-role value-object */
+export type ReviewCompletionProvenance = z.infer<typeof reviewCompletionProvenanceSchema>
 /** @riviere-role value-object */
 export type ReviewBundleRequest = z.infer<typeof reviewBundleRequestSchema>
 /** @riviere-role value-object */
@@ -105,18 +121,26 @@ export interface ReviewJobStore {
     bundleId: string,
     reviewType: string,
     providerSessionId: string,
+    providerRunId: string,
+    updatedAt: string,
+  ): StoredReviewAgent
+  resumeReviewAgent(
+    bundleId: string,
+    reviewType: string,
+    providerSessionId: string,
+    providerRunId: string,
     updatedAt: string,
   ): StoredReviewAgent
   completeReviewAgent(
     bundleId: string,
     reviewType: string,
-    providerSessionId: string,
+    provenance: ReviewCompletionProvenance,
     createdAt: string,
     input: RecordReviewInput,
     eventState: string,
   ): {
     readonly agent: StoredReviewAgent;
-    readonly review: StoredReview 
+    readonly review: StoredReview
   }
   completeReviewBundle(bundleId: string, updatedAt: string): StoredReviewBundle
   failReviewBundle(bundleId: string, reason: string, updatedAt: string): StoredReviewBundle

@@ -1,6 +1,7 @@
 import {
-  spawn, type ChildProcessWithoutNullStreams 
+  spawn, type ChildProcessWithoutNullStreams
 } from 'node:child_process'
+import { randomUUID } from 'node:crypto'
 import {
   client,
   methods,
@@ -39,6 +40,7 @@ type ActiveProcess = {
   readonly outputBySession: Map<string, string>
   readonly stderr: () => string
   readonly capabilities: InitializeResponse['agentCapabilities']
+  readonly processFailure: Promise<never>
 }
 
 function createTimeout<T>(milliseconds: number, message: string): {
@@ -101,6 +103,23 @@ async function openProcess(
     stdio: ['pipe', 'pipe', 'pipe'],
   })
   const stderrChunks: string[] = []
+  const processExit = new Promise<{
+    readonly code: number | null;
+    readonly signal: NodeJS.Signals | null
+  }>(
+    (resolve) => child.once('exit', (code, signal) => resolve({
+      code,
+      signal
+    })),
+  )
+  const processFailure = new Promise<never>((_resolve, reject) => {
+    child.once('error', (error) => reject(
+      new AcpProtocolError(`ACP process failed: ${String(error)}`),
+    ))
+    child.once('exit', (code, signal) => reject(new AcpProtocolError(
+      `ACP process exited before protocol completion (code ${String(code)}, signal ${String(signal)}). stderr: ${stderrChunks.join('').trim()}`,
+    )))
+  })
   child.stderr.setEncoding('utf8')
   child.stderr.on('data', (chunk: string) => {
     stderrChunks.push(chunk)
@@ -142,15 +161,23 @@ async function openProcess(
   const stream = ndJsonStream(output, input)
   const connection = app.connect(stream)
   const context = connection.agent
+  const initializationTimeout = createTimeout<never>(
+    config.timeoutMs,
+    `ACP initialization timed out after ${String(config.timeoutMs)}ms.`,
+  )
   try {
-    const initialization = await context.request(methods.agent.initialize, {
-      protocolVersion: PROTOCOL_VERSION,
-      clientCapabilities: {},
-      clientInfo: {
-        name: 'deterministic-agent-workflow',
-        version: '0.1.0',
-      },
-    })
+    const initialization = await Promise.race([
+      context.request(methods.agent.initialize, {
+        protocolVersion: PROTOCOL_VERSION,
+        clientCapabilities: {},
+        clientInfo: {
+          name: 'deterministic-agent-workflow',
+          version: '0.1.0',
+        },
+      }),
+      processFailure,
+      initializationTimeout.promise,
+    ])
     if (initialization.protocolVersion !== PROTOCOL_VERSION) {
       throw new AcpProtocolError(
         `Unsupported ACP protocol version ${String(initialization.protocolVersion)}; expected ${String(PROTOCOL_VERSION)}.`,
@@ -163,29 +190,56 @@ async function openProcess(
       outputBySession,
       stderr: () => stderrChunks.join(''),
       capabilities: initialization.agentCapabilities,
+      processFailure,
     }
   } catch (error) {
-    connection.close()
-    child.kill('SIGTERM')
+    const exit = await Promise.race([
+      processExit,
+      new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), 25)),
+    ])
+    await stopProcess({
+      child,
+      connection
+    }, config.cancellationGraceMs)
+    if (exit !== undefined) {
+      throw new AcpProtocolError(
+        `ACP process exited before protocol completion (code ${String(exit.code)}, signal ${String(exit.signal)}). stderr: ${stderrChunks.join('').trim()}`,
+      )
+    }
     throw error
+  } finally {
+    initializationTimeout.clear()
   }
 }
 
-async function stopProcess(active: ActiveProcess, graceMs: number): Promise<void> {
-  active.connection.close()
-  if (active.child.exitCode !== null || active.child.signalCode !== null) return
-  active.child.kill('SIGTERM')
-  const exited = new Promise<void>((resolve) => {
-    active.child.once('exit', () => resolve())
-  })
-  const grace = createTimeout<void>(graceMs, 'ACP process did not stop after SIGTERM.')
-  try {
-    await Promise.race([exited, grace.promise])
-  } catch {
-    active.child.kill('SIGKILL')
-  } finally {
-    grace.clear()
+async function stopProcess(
+  active: Pick<ActiveProcess, 'child' | 'connection'>,
+  graceMs: number,
+): Promise<void> {
+  const closeError: unknown = (() => {
+    try {
+      active.connection.close()
+      return undefined
+    } catch (error) {
+      return error
+    }
+  })()
+  if (active.child.exitCode === null && active.child.signalCode === null) {
+    const exited = new Promise<void>((resolve) => {
+      active.child.once('close', () => resolve())
+    })
+    active.child.kill('SIGTERM')
+    const grace = createTimeout<void>(graceMs, 'ACP process did not stop after SIGTERM.')
+    try {
+      await Promise.race([exited, grace.promise])
+    } catch {
+      active.child.kill('SIGKILL')
+      await exited
+    } finally {
+      grace.clear()
+    }
   }
+  if (closeError !== undefined) throw closeError
 }
 
 function promptCompletion(
@@ -205,10 +259,11 @@ function promptCompletion(
           sessionId,
           prompt: [{
             type: 'text',
-            text: prompt 
+            text: prompt
           }],
         }),
         timeout.promise,
+        active.processFailure,
       ])
       if (response.stopReason === 'cancelled') {
         throw new AcpProtocolError('ACP prompt was cancelled.')
@@ -236,10 +291,17 @@ function createRun(
 ): ReviewAgentRun {
   return {
     providerSessionId: sessionId,
+    providerRunId: randomUUID(),
     completion: promptCompletion(active, sessionId, input.prompt, config),
     async cancel(): Promise<void> {
-      await active.context.notify(methods.agent.session.cancel, { sessionId })
-      await stopProcess(active, config.cancellationGraceMs)
+      try {
+        await Promise.race([
+          active.context.notify(methods.agent.session.cancel, { sessionId }),
+          active.processFailure,
+        ])
+      } finally {
+        await stopProcess(active, config.cancellationGraceMs)
+      }
     },
   }
 }
@@ -251,26 +313,40 @@ async function openSession(
   config: AcpReviewAgentClientConfig,
 ): Promise<string> {
   const mcpServers = [...(config.mcpServers ?? [])]
+  const timeout = createTimeout<never>(
+    config.timeoutMs,
+    `ACP session open timed out after ${String(config.timeoutMs)}ms.`,
+  )
   try {
     if (loadSessionId === undefined) {
-      const session = await active.context.request(methods.agent.session.new, {
-        cwd: input.workingDirectory,
-        mcpServers,
-      })
+      const session = await Promise.race([
+        active.context.request(methods.agent.session.new, {
+          cwd: input.workingDirectory,
+          mcpServers,
+        }),
+        active.processFailure,
+        timeout.promise,
+      ])
       return session.sessionId
     }
     if (active.capabilities?.loadSession !== true) {
       throw new AcpProtocolError('ACP agent does not advertise session/load support.')
     }
-    await active.context.request(methods.agent.session.load, {
-      cwd: input.workingDirectory,
-      mcpServers,
-      sessionId: loadSessionId,
-    })
+    await Promise.race([
+      active.context.request(methods.agent.session.load, {
+        cwd: input.workingDirectory,
+        mcpServers,
+        sessionId: loadSessionId,
+      }),
+      active.processFailure,
+      timeout.promise,
+    ])
     return loadSessionId
   } catch (error) {
     await stopProcess(active, config.cancellationGraceMs)
     throw error
+  } finally {
+    timeout.clear()
   }
 }
 
@@ -297,6 +373,10 @@ export function createAcpReviewAgentClient(
   ): Promise<ReviewAgentRun> {
     const active = await openProcess(config, input.workingDirectory)
     const sessionId = await openSession(active, input, loadSessionId, config)
+    if (activeBySession.has(sessionId)) {
+      await stopProcess(active, config.cancellationGraceMs)
+      throw new AcpProtocolError(`ACP provider session ${sessionId} is already active.`)
+    }
     activeBySession.set(sessionId, active)
     const run = createRun(active, sessionId, input, config)
     void run.completion.then(
@@ -312,9 +392,18 @@ export function createAcpReviewAgentClient(
     async cancel(providerSessionId: string): Promise<void> {
       const active = activeBySession.get(providerSessionId)
       if (active === undefined) return
-      await active.context.notify(methods.agent.session.cancel, { sessionId: providerSessionId })
-      await stopProcess(active, config.cancellationGraceMs)
-      activeBySession.delete(providerSessionId)
+      try {
+        await Promise.race([
+          active.context.notify(methods.agent.session.cancel, { sessionId: providerSessionId }),
+          active.processFailure,
+        ])
+      } finally {
+        try {
+          await stopProcess(active, config.cancellationGraceMs)
+        } finally {
+          activeBySession.delete(providerSessionId)
+        }
+      }
     },
   }
 }

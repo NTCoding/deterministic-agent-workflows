@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import {
   recordReviewInputSchema,
   reviewBundleRequestSchema,
@@ -25,6 +26,7 @@ export interface ReviewAgentRequest {
 /** @riviere-role value-object */
 export interface ReviewAgentRun {
   readonly providerSessionId: string
+  readonly providerRunId: string
   readonly completion: Promise<ReviewPayload>
   cancel(): Promise<void>
 }
@@ -105,11 +107,11 @@ function terminalResult(
 ): ReviewCoordinatorResult | undefined {
   if (bundle?.status === 'completed') return {
     type: 'completed',
-    bundle 
+    bundle
   }
   if (bundle?.status === 'cancelled') return {
     type: 'cancelled',
-    bundle 
+    bundle
   }
   if (bundle?.status === 'failed') return {
     type: 'failed',
@@ -145,17 +147,17 @@ type CompletedReview = StartedReview & {readonly payload: ReviewPayload}
 type CompletionAttempt =
   | {
     readonly ok: true;
-    readonly completions: readonly CompletedReview[] 
+    readonly completions: readonly CompletedReview[]
   }
   | {
     readonly ok: false;
-    readonly reason: string 
+    readonly reason: string
   }
 
 async function collectCompletions(started: readonly StartedReview[]): Promise<CompletionAttempt> {
   try {
     const completions = await Promise.all(started.map(async ({
-      definition, run 
+      definition, run
     }) => ({
       definition,
       run,
@@ -163,15 +165,19 @@ async function collectCompletions(started: readonly StartedReview[]): Promise<Co
     })))
     return {
       ok: true,
-      completions 
+      completions
     }
   } catch (error) {
     await Promise.allSettled(started.map(({ run }) => run.cancel()))
     return {
       ok: false,
-      reason: `Review agent failed: ${String(error)}` 
+      reason: `Review agent failed: ${String(error)}`
     }
   }
+}
+
+function exactFilesDigest(files: readonly string[]): string {
+  return createHash('sha256').update(JSON.stringify(files)).digest('hex')
 }
 
 function buildAgentRequest(
@@ -231,7 +237,7 @@ export class ReviewCoordinator {
         : await this.client.load(request, stored.providerSessionId)
       return {
         definition,
-        run 
+        run
       }
     }))
     const startFailure = starts.find(
@@ -251,14 +257,26 @@ export class ReviewCoordinator {
     }
 
     for (const {
-      definition, run 
+      definition, run
     } of started) {
-      this.store.markReviewAgentRunning(
-        bundle.bundleId,
-        definition.reviewType,
-        run.providerSessionId,
-        this.now(),
-      )
+      const stored = storedAgents.get(definition.reviewType)
+      if (stored?.status === 'running') {
+        this.store.resumeReviewAgent(
+          bundle.bundleId,
+          definition.reviewType,
+          run.providerSessionId,
+          run.providerRunId,
+          this.now(),
+        )
+      } else {
+        this.store.markReviewAgentRunning(
+          bundle.bundleId,
+          definition.reviewType,
+          run.providerSessionId,
+          run.providerRunId,
+          this.now(),
+        )
+      }
     }
 
     const completionAttempt = await collectCompletions(started)
@@ -273,12 +291,21 @@ export class ReviewCoordinator {
     }
 
     for (const {
-      definition, run, payload 
+      definition, run, payload
     } of completionAttempt.completions) {
       this.store.completeReviewAgent(
         bundle.bundleId,
         definition.reviewType,
-        run.providerSessionId,
+        {
+          bundleId: bundle.bundleId,
+          providerSessionId: run.providerSessionId,
+          providerRunId: run.providerRunId,
+          baseRevision: input.baseRevision,
+          headRevision: input.headRevision,
+          exactFilesDigest: exactFilesDigest(input.changedFiles),
+          exactFiles: input.changedFiles,
+          reviewerDefinitionVersion: definition.version,
+        },
         this.now(),
         recordReviewInputSchema.parse({
           ...payload,
@@ -303,11 +330,11 @@ export class ReviewCoordinator {
     }
     if (bundle.status === 'cancelled') return {
       type: 'cancelled',
-      bundle 
+      bundle
     }
     if (bundle.status === 'completed') return {
       type: 'completed',
-      bundle 
+      bundle
     }
     if (bundle.status === 'failed') return {
       type: 'failed',

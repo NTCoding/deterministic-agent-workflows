@@ -1,10 +1,10 @@
 import {
-  mkdtempSync, rmSync 
+  mkdtempSync, rmSync
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
-  afterEach, describe, expect, it, vi 
+  afterEach, describe, expect, it, vi
 } from 'vitest'
 import type {
   ReviewBundleRequest,
@@ -40,6 +40,7 @@ function request(bundleId = 'bundle-1'): ReviewBundleRequest {
     reviews: ['one', 'two', 'three', 'four'].map((reviewType) => ({
       reviewType,
       instructions: `Run ${reviewType}.`,
+      version: 'v1',
     })),
   }
 }
@@ -56,7 +57,7 @@ afterEach(() => {
   for (const directory of temporaryDirectories.splice(0)) {
     rmSync(directory, {
       recursive: true,
-      force: true 
+      force: true
     })
   }
 })
@@ -72,6 +73,7 @@ describe('ReviewCoordinator', () => {
         const completion = new Promise<ReviewPayload>((resolve) => resolvers.push(resolve))
         return {
           providerSessionId: `provider-${input.reviewType}`,
+          providerRunId: `run-${input.reviewType}`,
           completion,
           cancel: vi.fn(async () => undefined),
         }
@@ -104,6 +106,7 @@ describe('ReviewCoordinator', () => {
       async start(input): Promise<ReviewAgentRun> {
         return {
           providerSessionId: `provider-${input.reviewType}`,
+          providerRunId: `run-${input.reviewType}`,
           completion: new Promise<ReviewPayload>(() => undefined),
           cancel: vi.fn(async () => undefined),
         }
@@ -142,6 +145,7 @@ describe('ReviewCoordinator', () => {
         if (input.reviewType === 'two') throw new TypeError('agent unavailable')
         return {
           providerSessionId: `provider-${input.reviewType}`,
+          providerRunId: `run-${input.reviewType}`,
           completion: Promise.resolve(pass()),
           cancel,
         }
@@ -175,6 +179,7 @@ describe('ReviewCoordinator', () => {
         input.bundleId,
         definition.reviewType,
         `persisted-${definition.reviewType}`,
+        `original-run-${definition.reviewType}`,
         '2026-01-01T00:00:02.000Z',
       )
     }
@@ -183,6 +188,7 @@ describe('ReviewCoordinator', () => {
       providerSessionId: string,
     ): Promise<ReviewAgentRun> => ({
       providerSessionId,
+      providerRunId: `resumed-${providerSessionId}`,
       completion: Promise.resolve(pass()),
       cancel: vi.fn(async () => undefined),
     }))
@@ -214,6 +220,7 @@ describe('ReviewCoordinator', () => {
       input.bundleId,
       'one',
       'provider-one',
+      'run-one',
       '2026-01-01T00:00:02.000Z',
     )
     const cancel = vi.fn(async () => undefined)

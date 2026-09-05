@@ -1,9 +1,9 @@
 import {
-  dirname, join 
+  dirname, join
 } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
-  describe, expect, it 
+  describe, expect, it
 } from 'vitest'
 import { createAcpReviewAgentClient } from './acp-review-agent-client'
 
@@ -22,7 +22,7 @@ const request = {
 
 function client(mode: string, options: {
   timeoutMs?: number;
-  cancellationGraceMs?: number 
+  cancellationGraceMs?: number
 } = {}) {
   return createAcpReviewAgentClient({
     command: process.execPath,
@@ -37,6 +37,7 @@ describe('createAcpReviewAgentClient', () => {
   it('negotiates ACP, starts a session, prompts, and validates review output', async () => {
     const run = await client('pass').start(request)
 
+    expect(run.providerRunId).toMatch(/^[\da-f-]{36}$/u)
     await expect(run.completion).resolves.toStrictEqual({
       verdict: 'PASS',
       summary: request.prompt,
@@ -55,6 +56,22 @@ describe('createAcpReviewAgentClient', () => {
 
     await expect(reviewClient.start(request)).rejects.toThrow(
       'must not include credential GITHUB_TOKEN',
+    )
+  })
+
+  it('reports spawn failures instead of hanging', async () => {
+    const reviewClient = createAcpReviewAgentClient({
+      command: join(packageRoot, 'missing-acp-command'),
+      timeoutMs: 2_000,
+      cancellationGraceMs: 50,
+    })
+
+    await expect(reviewClient.start(request)).rejects.toThrow('ACP process failed')
+  })
+
+  it('reports an agent that exits before initialization instead of hanging', async () => {
+    await expect(client('early-exit').start(request)).rejects.toThrow(
+      'ACP process exited before protocol completion',
     )
   })
 
@@ -101,7 +118,7 @@ describe('createAcpReviewAgentClient', () => {
 
   it('times out and terminates a stalled prompt', async () => {
     const run = await client('ignore-cancel', {
-      timeoutMs: 10,
+      timeoutMs: 100,
       cancellationGraceMs: 10,
     }).start(request)
 

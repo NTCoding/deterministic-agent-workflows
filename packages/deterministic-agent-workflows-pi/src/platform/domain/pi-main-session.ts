@@ -1,4 +1,7 @@
+import { homedir } from 'node:os'
+import { join } from 'node:path'
 import type { AgentSessionRuntime } from '@earendil-works/pi-coding-agent'
+import { createStore } from '@nt-ai-lab/deterministic-agent-workflow-event-store'
 
 const PI_SUBAGENT_PARENT_SESSION = 'PI_SUBAGENT_PARENT_SESSION'
 
@@ -34,6 +37,8 @@ export function resolvePiMainSessionId(
 export async function replaceWithFreshPiSession(
   runtime: PiFreshSessionRuntime,
   stateInstructions: string,
+  databasePath: string = process.env['WORKFLOW_EVENTS_DB'] ??
+    join(homedir(), 'ai-workflow-database', '.workflow-events.db'),
 ): Promise<PiFreshSessionResult> {
   if (stateInstructions.trim().length === 0) {
     throw new TypeError('Fresh Pi session state instructions must not be empty.')
@@ -47,6 +52,12 @@ export async function replaceWithFreshPiSession(
   const sessionId = runtime.session.sessionId
   if (sessionId === previousSessionId) {
     throw new TypeError('Pi fresh-session replacement retained the previous session UUID.')
+  }
+  const store = createStore(databasePath)
+  try {
+    store.transferWorkflowSessionOwnership(previousSessionId, sessionId, new Date().toISOString())
+  } finally {
+    store.db.close()
   }
   await runtime.session.prompt(stateInstructions)
   return {
