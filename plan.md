@@ -197,6 +197,16 @@ Status legend: `TODO`, `IN_PROGRESS`, `BLOCKED`, `DONE`
 
 - [x] **DONE** Require each workflow implementation to provide the message returned when an unknown workflow command is invoked.
 
+### 16) Workflow-owned ACP review coordination (living-architecture #526)
+
+- [x] **DONE** Add provider-neutral durable review-job contracts, lifecycle events, and coordinator behavior outside the synchronous `WorkflowEngine`.
+- [x] **DONE** Add an ACP-specific adapter package with pinned SDK, supervised processes, cancellation, and recovery.
+- [x] **DONE** Add event-store persistence with a one-active-bundle invariant and atomic lifecycle/review completion.
+- [x] **DONE** Resolve Pi child workflow ownership from `PI_SUBAGENT_PARENT_SESSION` and prove a supported fresh-session boundary.
+- [x] **DONE** Preserve the high-level consumer API and consumer-owned review definitions without leaking platform events or Living Architecture names.
+- [x] **DONE** Consolidate repository guidance into scoped `AGENTS.md` and remove the legacy instruction file and references.
+- [x] **DONE** Complete focused and full verification without changing lint or coverage configuration.
+
 ---
 
 ## Acceptance criteria for “done”

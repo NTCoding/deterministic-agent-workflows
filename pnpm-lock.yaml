@@ -94,6 +94,22 @@ importers:
         specifier: ^2.0.0
         version: 2.1.9(@types/node@22.19.17)
 
+  packages/deterministic-agent-workflows-acp:
+    dependencies:
+      '@agentclientprotocol/sdk':
+        specifier: 1.4.0
+        version: 1.4.0(zod@4.1.8)
+      '@nt-ai-lab/deterministic-agent-workflow-cli':
+        specifier: workspace:*
+        version: link:../deterministic-agent-workflows-cli
+      '@nt-ai-lab/deterministic-agent-workflow-engine':
+        specifier: workspace:*
+        version: link:../deterministic-agent-workflows-engine
+    devDependencies:
+      vitest:
+        specifier: ^2.1.9
+        version: 2.1.9(@types/node@22.19.17)
+
   packages/deterministic-agent-workflows-claude-code:
     dependencies:
       '@nt-ai-lab/deterministic-agent-workflow-cli':
@@ -164,6 +180,10 @@ importers:
       zod:
         specifier: ^3.25.76
         version: 3.25.76
+    devDependencies:
+      vitest:
+        specifier: ^2.1.9
+        version: 2.1.9(@types/node@22.19.17)
 
   packages/deterministic-agent-workflows-opencode:
     dependencies:
@@ -209,6 +229,11 @@ importers:
         version: 3.25.76
 
 packages:
+
+  '@agentclientprotocol/sdk@1.4.0':
+    resolution: {integrity: sha512-/eufudw+aFY1LKLolT6yFE6UMmYRl7fMJ/DEONSIyR6wI3slHWITBsANRGqXEY8FRzqUxwh7QEaGiZHcJPVThg==}
+    peerDependencies:
+      zod: ^3.25.0 || ^4.0.0
 
   '@ampproject/remapping@2.3.0':
     resolution: {integrity: sha512-30iZtAPgz+LTIYoeivqYo853f02jBYSd5uGnGpkFV0M3xOt9aN73erkgYAmZU43x4VfqcnLxW9Kpg3R5LC4YYw==}
@@ -4204,6 +4229,10 @@ packages:
     resolution: {integrity: sha512-5R1P+WwQqmmMIEACyzSvo4JXHY5WiAFHRMg+zBZKgKS+Q1viRa0C1hmUKtHltoIFKtIdki3pRxkmpP74jnNYHQ==}
 
 snapshots:
+
+  '@agentclientprotocol/sdk@1.4.0(zod@4.1.8)':
+    dependencies:
+      zod: 4.1.8
 
   '@ampproject/remapping@2.3.0':
     dependencies:

@@ -62,6 +62,24 @@ export type {
 } from './platform/domain/review-types'
 
 export {
+  reviewAgentStatusSchema,
+  reviewBundleRequestSchema,
+  reviewBundleStatusSchema,
+  reviewDefinitionSchema,
+  storedReviewAgentSchema,
+  storedReviewBundleSchema,
+} from './platform/domain/review-job-types'
+export type {
+  ReviewAgentStatus,
+  ReviewBundleRequest,
+  ReviewBundleStatus,
+  ReviewDefinition,
+  ReviewJobStore,
+  StoredReviewAgent,
+  StoredReviewBundle,
+} from './platform/domain/review-job-types'
+
+export {
   engineEventSchema,
   reviewRecordedEventSchema,
 } from './platform/domain/engine-events'
@@ -80,6 +98,16 @@ export type {
   IdentityVerifiedEvent,
   ContextRequestedEvent,
   ReviewRecordedEvent,
+  ReviewBundleRequestedEvent,
+  ReviewBundleStartedEvent,
+  ReviewAgentRequestedEvent,
+  ReviewAgentStartedEvent,
+  ReviewAgentCompletedEvent,
+  ReviewAgentFailedEvent,
+  ReviewAgentCancelledEvent,
+  ReviewBundleCompletedEvent,
+  ReviewBundleFailedEvent,
+  ReviewBundleCancelledEvent,
 } from './platform/domain/engine-events'
 export { isPlatformOwnedEventExcludedFromWorkflowState } from './platform/domain/engine-events'
 

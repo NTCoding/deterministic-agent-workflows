@@ -26,7 +26,7 @@ import type {
   PiWorkflowExtension,
   PiWorkflowExtensionConfig,
 } from '../../../platform/domain/pi-workflow-extension-types'
-import { parsePiCommandArguments } from '../../../platform/domain/pi-command-arguments'
+import { parsePiCommandArguments } from '../../../platform/domain/pi-command-arguments'; import { resolvePiMainSessionId } from '../../../platform/domain/pi-main-session'
 import {
   hasPiWorkflowMarker,
   PI_WORKFLOW_MARKER_CUSTOM_TYPE,
@@ -46,10 +46,8 @@ import {
   resolveDatabasePath,
   translationNote,
 } from './pi-workflow-extension-platform'
-
 const PI_QUESTION_TOOL = 'question'; const DEFAULT_COMMAND_NAME = 'workflow'; const DEFAULT_TOOL_NAME = 'workflow'
 const INITIALIZATION_PENDING_REASON = 'Pi workflow initialization has not completed safely. Tool execution is blocked.'; const INACTIVE_WORKFLOW_REASON = 'Pi workflow is inactive. Run the workflow init command before using workflow operations.'
-
 export const PI_IDLE_RECOVERY_MESSAGE = formatStopPreventionMessage()
 export const PI_SESSION_BRANCH_BLOCK_MESSAGE = 'Pi session tree navigation and forks are disabled while a workflow is active.'
 
@@ -103,7 +101,7 @@ export function createPiWorkflowExtension<
       appendToFile: () => undefined,
       now,
       transcriptReader: new PiTranscriptReader(() => ctx.sessionManager.getBranch()),
-      sessionContext: { getMainSessionId: () => sessionId },
+      sessionContext: { getMainSessionId: () => resolvePiMainSessionId(sessionId) },
     }
   }
 

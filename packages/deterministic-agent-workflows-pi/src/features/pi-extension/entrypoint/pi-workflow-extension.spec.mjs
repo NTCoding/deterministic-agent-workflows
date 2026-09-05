@@ -17,12 +17,21 @@ import { pass } from '@nt-ai-lab/deterministic-agent-workflow-engine'
 import { createStore } from '@nt-ai-lab/deterministic-agent-workflow-event-store'
 import { z } from 'zod'
 import {
+  afterAll,
   afterEach,
   describe,
   expect,
   it,
 } from 'vitest'
 import { createPiWorkflowExtension } from './pi-workflow-extension.ts'
+
+const inheritedParentSession = process.env.PI_SUBAGENT_PARENT_SESSION
+delete process.env.PI_SUBAGENT_PARENT_SESSION
+afterAll(() => {
+  if (inheritedParentSession !== undefined) {
+    process.env.PI_SUBAGENT_PARENT_SESSION = inheritedParentSession
+  }
+})
 
 const repositoryRoot = fileURLToPath(new URL('../../../../../..', import.meta.url))
 const stateSchema = z.enum(['PLANNING', 'DEVELOPING'])

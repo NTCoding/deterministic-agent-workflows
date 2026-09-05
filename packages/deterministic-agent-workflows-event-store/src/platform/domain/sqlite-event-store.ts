@@ -4,6 +4,7 @@ import type {
   RecordReviewInput,
   RecordReflectionInput,
   ReviewFilters,
+  ReviewJobStore,
   StoredEvent,
   StoredReflection,
   StoredReview,
@@ -34,6 +35,12 @@ import {
   reviewIdRowSchema,
   reviewRowsSchema,
 } from './sqlite-review-storage'
+import {
+  createActiveReviewBundleIndexSql,
+  createReviewAgentsTableSql,
+  createReviewBundlesTableSql,
+  createSqliteReviewJobStore,
+} from './sqlite-review-job-store'
 
 const createTableSql = `
   CREATE TABLE IF NOT EXISTS events (
@@ -85,7 +92,7 @@ const reflectionRowsSchema = z.array(z.object({
 }))
 
 /** @riviere-role value-object */
-export type SqliteEventStore = {
+export type SqliteEventStore = ReviewJobStore & {
   readonly readEvents: (sessionId: string) => readonly StoredEvent[]
   readonly appendEvents: (sessionId: string, events: readonly StoredEvent[]) => void
   readonly sessionExists: (sessionId: string) => boolean
@@ -112,9 +119,14 @@ export function createStore(dbPath: string): SqliteEventStore {
   db.exec(createReviewsTypeVerdictIndexSql)
   db.exec(createReviewsBranchIndexSql)
   db.exec(createReviewsPullRequestIndexSql)
+  db.exec(createReviewBundlesTableSql)
+  db.exec(createActiveReviewBundleIndexSql)
+  db.exec(createReviewAgentsTableSql)
   ensureStateColumn(db)
+  const reviewJobStore = createSqliteReviewJobStore(db)
 
   return {
+    ...reviewJobStore,
     db,
     readEvents(sessionId: string): readonly StoredEvent[] {
       const rawRows = db.prepare('SELECT type, at, state, payload FROM events WHERE session_id = ? ORDER BY seq').all(sessionId)

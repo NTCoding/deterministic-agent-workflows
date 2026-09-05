@@ -1,0 +1,33 @@
+{
+  "name": "deterministic-agent-workflows-acp",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "library",
+  "sourceRoot": "packages/deterministic-agent-workflows-acp/src",
+  "targets": {
+    "build": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc -p packages/deterministic-agent-workflows-acp/tsconfig.json && node tools/rewrite-relative-import-extensions.mjs packages/deterministic-agent-workflows-acp/dist"
+      }
+    },
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc -p packages/deterministic-agent-workflows-acp/tsconfig.json --noEmit"
+      }
+    },
+    "lint": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["^build"],
+      "options": {
+        "command": "eslint packages/deterministic-agent-workflows-acp/src --ext .ts"
+      }
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "pnpm --dir packages/deterministic-agent-workflows-acp exec vitest run --config vitest.config.mts"
+      }
+    }
+  }
+}

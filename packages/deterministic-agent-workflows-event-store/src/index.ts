@@ -12,3 +12,9 @@ export {
   openSqliteDatabase,
 } from './platform/infra/external-clients/sqlite/sqlite-runtime'
 export { buildReviewFilters } from './platform/domain/sqlite-review-storage'
+export {
+  createActiveReviewBundleIndexSql,
+  createReviewAgentsTableSql,
+  createReviewBundlesTableSql,
+  createSqliteReviewJobStore,
+} from './platform/domain/sqlite-review-job-store'

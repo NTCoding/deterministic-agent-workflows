@@ -106,6 +106,84 @@ export const reviewRecordedEventSchema = z.object({
   verdict: z.enum(['PASS', 'FAIL']),
 })
 
+const reviewBundleRequestedEventSchema = z.object({
+  type: z.literal('review-bundle-requested'),
+  at: nonEmptyStringSchema,
+  bundleId: nonEmptyStringSchema,
+  repository: nonEmptyStringSchema,
+  pullRequestNumber: z.number().int().positive(),
+  headRevision: nonEmptyStringSchema,
+})
+
+const reviewBundleStartedEventSchema = z.object({
+  type: z.literal('review-bundle-started'),
+  at: nonEmptyStringSchema,
+  bundleId: nonEmptyStringSchema,
+})
+
+const reviewAgentRequestedEventSchema = z.object({
+  type: z.literal('review-agent-requested'),
+  at: nonEmptyStringSchema,
+  bundleId: nonEmptyStringSchema,
+  reviewType: nonEmptyStringSchema,
+})
+
+const reviewAgentStartedEventSchema = z.object({
+  type: z.literal('review-agent-started'),
+  at: nonEmptyStringSchema,
+  bundleId: nonEmptyStringSchema,
+  reviewType: nonEmptyStringSchema,
+  providerSessionId: nonEmptyStringSchema,
+})
+
+const reviewAgentCompletedEventSchema = z.object({
+  type: z.literal('review-agent-completed'),
+  at: nonEmptyStringSchema,
+  bundleId: nonEmptyStringSchema,
+  reviewType: nonEmptyStringSchema,
+  providerSessionId: nonEmptyStringSchema,
+  reviewId: z.number().int().positive(),
+  verdict: z.enum(['PASS', 'FAIL']),
+})
+
+const reviewAgentFailedEventSchema = z.object({
+  type: z.literal('review-agent-failed'),
+  at: nonEmptyStringSchema,
+  bundleId: nonEmptyStringSchema,
+  reviewType: nonEmptyStringSchema,
+  providerSessionId: nonEmptyStringSchema.optional(),
+  reason: nonEmptyStringSchema,
+})
+
+const reviewAgentCancelledEventSchema = z.object({
+  type: z.literal('review-agent-cancelled'),
+  at: nonEmptyStringSchema,
+  bundleId: nonEmptyStringSchema,
+  reviewType: nonEmptyStringSchema,
+  providerSessionId: nonEmptyStringSchema.optional(),
+  reason: nonEmptyStringSchema,
+})
+
+const reviewBundleCompletedEventSchema = z.object({
+  type: z.literal('review-bundle-completed'),
+  at: nonEmptyStringSchema,
+  bundleId: nonEmptyStringSchema,
+})
+
+const reviewBundleFailedEventSchema = z.object({
+  type: z.literal('review-bundle-failed'),
+  at: nonEmptyStringSchema,
+  bundleId: nonEmptyStringSchema,
+  reason: nonEmptyStringSchema,
+})
+
+const reviewBundleCancelledEventSchema = z.object({
+  type: z.literal('review-bundle-cancelled'),
+  at: nonEmptyStringSchema,
+  bundleId: nonEmptyStringSchema,
+  reason: nonEmptyStringSchema,
+})
+
 export const engineEventSchema = z.discriminatedUnion('type', [
   sessionStartedSchema,
   transitionedSchema,
@@ -120,6 +198,16 @@ export const engineEventSchema = z.discriminatedUnion('type', [
   identityVerifiedSchema,
   contextRequestedSchema,
   reviewRecordedEventSchema,
+  reviewBundleRequestedEventSchema,
+  reviewBundleStartedEventSchema,
+  reviewAgentRequestedEventSchema,
+  reviewAgentStartedEventSchema,
+  reviewAgentCompletedEventSchema,
+  reviewAgentFailedEventSchema,
+  reviewAgentCancelledEventSchema,
+  reviewBundleCompletedEventSchema,
+  reviewBundleFailedEventSchema,
+  reviewBundleCancelledEventSchema,
 ])
 
 const platformOwnedEventTypesExcludedFromWorkflowState = new Set<string>([
@@ -133,6 +221,16 @@ const platformOwnedEventTypesExcludedFromWorkflowState = new Set<string>([
   'stopping-checked',
   'identity-verified',
   'context-requested',
+  'review-bundle-requested',
+  'review-bundle-started',
+  'review-agent-requested',
+  'review-agent-started',
+  'review-agent-completed',
+  'review-agent-failed',
+  'review-agent-cancelled',
+  'review-bundle-completed',
+  'review-bundle-failed',
+  'review-bundle-cancelled',
 ])
 
 /** @riviere-role domain-service */
@@ -168,3 +266,23 @@ export type IdentityVerifiedEvent = z.infer<typeof identityVerifiedSchema>
 export type ContextRequestedEvent = z.infer<typeof contextRequestedSchema>
 /** @riviere-role value-object */
 export type ReviewRecordedEvent = z.infer<typeof reviewRecordedEventSchema>
+/** @riviere-role value-object */
+export type ReviewBundleRequestedEvent = z.infer<typeof reviewBundleRequestedEventSchema>
+/** @riviere-role value-object */
+export type ReviewBundleStartedEvent = z.infer<typeof reviewBundleStartedEventSchema>
+/** @riviere-role value-object */
+export type ReviewAgentRequestedEvent = z.infer<typeof reviewAgentRequestedEventSchema>
+/** @riviere-role value-object */
+export type ReviewAgentStartedEvent = z.infer<typeof reviewAgentStartedEventSchema>
+/** @riviere-role value-object */
+export type ReviewAgentCompletedEvent = z.infer<typeof reviewAgentCompletedEventSchema>
+/** @riviere-role value-object */
+export type ReviewAgentFailedEvent = z.infer<typeof reviewAgentFailedEventSchema>
+/** @riviere-role value-object */
+export type ReviewAgentCancelledEvent = z.infer<typeof reviewAgentCancelledEventSchema>
+/** @riviere-role value-object */
+export type ReviewBundleCompletedEvent = z.infer<typeof reviewBundleCompletedEventSchema>
+/** @riviere-role value-object */
+export type ReviewBundleFailedEvent = z.infer<typeof reviewBundleFailedEventSchema>
+/** @riviere-role value-object */
+export type ReviewBundleCancelledEvent = z.infer<typeof reviewBundleCancelledEventSchema>
