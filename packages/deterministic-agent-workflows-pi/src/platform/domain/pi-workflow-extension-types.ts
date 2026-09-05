@@ -46,6 +46,7 @@ export type PiWorkflowExtensionConfig<
 > = Omit<PreToolUseHandlerConfig<TWorkflow, TState, TStateName>, 'questionToolName'> & {
   readonly workflowDefinition: WorkflowDefinition<TWorkflow, TState, TDeps, TStateName, TOperation, TTransitionContext>
   readonly routes: RouteMap<TWorkflow, TState>
+  readonly unknownCommandMessage: string
   readonly buildWorkflowDeps: (platform: PlatformContext) => TDeps
   readonly pluginRoot: string
   readonly databasePath?: string

@@ -27,6 +27,7 @@ import {
   EXIT_ALLOW, EXIT_BLOCK, EXIT_ERROR 
 } from '../../../shell/exit-codes'
 import { handleRecordReviewRoute } from './review-routes'
+import { createWorkflowRunner } from './workflow-runner'
 
 type ReviewRouteStateName = 'PLANNING' | 'REVIEWING'
 
@@ -226,6 +227,21 @@ function recordReview(store: ReviewRouteStore, reviewJson: string, sessionId = '
     () => sessionId,
   )
 }
+
+describe('createWorkflowRunner', () => {
+  it('returns the configured message for an unknown command', () => {
+    const runner = createWorkflowRunner({
+      workflowDefinition,
+      routes: {},
+      unknownCommandMessage: 'Run a supported workflow operation.',
+    })
+
+    expect(runner(['unknown-operation'], createEngineDeps(new ReviewRouteStore()), {})).toStrictEqual({
+      output: 'Run a supported workflow operation.',
+      exitCode: EXIT_ERROR,
+    })
+  })
+})
 
 describe('handleRecordReviewRoute', () => {
   it('returns error when review JSON argument is invalid JSON', () => {

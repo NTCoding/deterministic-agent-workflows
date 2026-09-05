@@ -209,6 +209,7 @@ function countEvents(events, type) {
 const extension = createPiWorkflowExtension({
   workflowDefinition,
   routes,
+  unknownCommandMessage: 'Run a supported workflow operation.',
   bashForbidden: { commands: ['rm'] },
   isWriteAllowed: (_filePath, state) => state.currentStateMachineState === 'DEVELOPING',
   pluginRoot,

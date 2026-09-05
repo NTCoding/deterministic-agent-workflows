@@ -56,6 +56,7 @@ describe('Pi workflow engine dependencies', () => {
     const factory = createPiWorkflowExtension({
       workflowDefinition: {},
       routes: {},
+      unknownCommandMessage: 'Run a supported workflow operation.',
       bashForbidden: { commands: [] },
       isWriteAllowed: () => true,
       pluginRoot: '/plugin',

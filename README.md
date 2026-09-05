@@ -67,6 +67,7 @@ export default createOpenCodeWorkflowPlugin<
 >({
   workflowDefinition: WORKFLOW_DEFINITION,
   routes: ROUTES,
+  unknownCommandMessage: 'Run a supported workflow operation.',
   bashForbidden: PRE_TOOL_USE_POLICY.bashForbidden,
   isWriteAllowed: PRE_TOOL_USE_POLICY.isWriteAllowed,
   pluginRoot,
@@ -251,6 +252,7 @@ import { ROUTES, PRE_TOOL_USE_POLICY } from './features/workflow/entrypoint/work
 createClaudeCodeWorkflowCli({
   workflowDefinition: WORKFLOW_DEFINITION,
   routes: ROUTES,
+  unknownCommandMessage: 'Run a supported workflow operation.',
   bashForbidden: PRE_TOOL_USE_POLICY.bashForbidden,
   isWriteAllowed: PRE_TOOL_USE_POLICY.isWriteAllowed,
   buildWorkflowDeps: (platform) => ({
@@ -290,6 +292,7 @@ import { ROUTES, PRE_TOOL_USE_POLICY } from './features/workflow/entrypoint/work
 createCodexWorkflowCli({
   workflowDefinition: WORKFLOW_DEFINITION,
   routes: ROUTES,
+  unknownCommandMessage: 'Run a supported workflow operation.',
   bashForbidden: PRE_TOOL_USE_POLICY.bashForbidden,
   isWriteAllowed: PRE_TOOL_USE_POLICY.isWriteAllowed,
   workflowCommand: 'node "$(git rev-parse --show-toplevel)/dist/workflow-codex.js"',
@@ -336,6 +339,7 @@ const pluginRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 export default createPiWorkflowExtension({
   workflowDefinition: WORKFLOW_DEFINITION,
   routes: ROUTES,
+  unknownCommandMessage: 'Run a supported workflow operation.',
   bashForbidden: PRE_TOOL_USE_POLICY.bashForbidden,
   isWriteAllowed: PRE_TOOL_USE_POLICY.isWriteAllowed,
   pluginRoot,

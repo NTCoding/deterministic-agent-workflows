@@ -95,6 +95,7 @@ function invoke({ args = [], hook }) {
   let exitCode
   createCodexWorkflowCli({
     workflowDefinition: definition,
+    unknownCommandMessage: 'Run a supported workflow operation.',
     routes: {
       init: { type: 'session-start' },
       transition: { type: 'transition', args: [arg.state('STATE', stateSchema)] },

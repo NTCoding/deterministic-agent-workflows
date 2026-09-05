@@ -90,6 +90,7 @@ function invokeHook(sessionId, allowIdle, hookEventName = 'PreToolUse') {
   createClaudeCodeWorkflowCli({
     workflowDefinition: createDefinition(allowIdle),
     routes: {},
+    unknownCommandMessage: 'Run a supported workflow operation.',
     bashForbidden: { commands: [] },
     isWriteAllowed: () => true,
     customGates: [{

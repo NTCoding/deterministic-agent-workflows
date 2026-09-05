@@ -48,8 +48,7 @@ import {
 } from './pi-workflow-extension-platform'
 
 const PI_QUESTION_TOOL = 'question'; const DEFAULT_COMMAND_NAME = 'workflow'; const DEFAULT_TOOL_NAME = 'workflow'
-const INITIALIZATION_PENDING_REASON = 'Pi workflow initialization has not completed safely. Tool execution is blocked.'
-const INACTIVE_WORKFLOW_REASON = 'Pi workflow is inactive. Run the workflow init command before using workflow operations.'
+const INITIALIZATION_PENDING_REASON = 'Pi workflow initialization has not completed safely. Tool execution is blocked.'; const INACTIVE_WORKFLOW_REASON = 'Pi workflow is inactive. Run the workflow init command before using workflow operations.'
 
 export const PI_IDLE_RECOVERY_MESSAGE = formatStopPreventionMessage()
 export const PI_SESSION_BRANCH_BLOCK_MESSAGE = 'Pi session tree navigation and forks are disabled while a workflow is active.'
@@ -84,6 +83,7 @@ export function createPiWorkflowExtension<
   const runner = createWorkflowRunner<TWorkflow, TState, TDeps, TStateName, TOperation, TTransitionContext>({
     workflowDefinition: config.workflowDefinition,
     routes: config.routes,
+    unknownCommandMessage: config.unknownCommandMessage,
     bashForbidden: config.bashForbidden,
     isWriteAllowed: config.isWriteAllowed,
     questionToolName: PI_QUESTION_TOOL,
