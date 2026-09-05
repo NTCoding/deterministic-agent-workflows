@@ -2,6 +2,7 @@ import type { ExtensionFactory } from '@earendil-works/pi-coding-agent'
 import type {
   BaseWorkflowState,
   RehydratableWorkflow,
+  ReviewBundleRequest,
   TransitionContext,
   WorkflowDefinition,
 } from '@nt-ai-lab/deterministic-agent-workflow-engine'
@@ -9,6 +10,8 @@ import type {
   PlatformContext,
   PreToolUseHandlerConfig,
   RouteMap,
+  ReviewAgentClient,
+  ReviewCoordinatorResult,
 } from '@nt-ai-lab/deterministic-agent-workflow-cli'
 
 /** @riviere-role value-object */
@@ -36,6 +39,17 @@ export type PiSessionIdResult =
   }
 
 /** @riviere-role value-object */
+export interface PiWorkflowIdleContext<TState> {
+  readonly sessionId: string
+  readonly signal: AbortSignal
+  readonly workingDirectory: string
+  getState(): TState
+  runOperation(operation: string, ...args: readonly string[]): string
+  runReviews(request: Omit<ReviewBundleRequest, 'sessionId' | 'workingDirectory'>, client: ReviewAgentClient): Promise<ReviewCoordinatorResult>
+  resumeWithFreshContext(stateInstructions: string): void
+}
+
+/** @riviere-role value-object */
 export type PiWorkflowExtensionConfig<
   TWorkflow extends RehydratableWorkflow<TState>,
   TState extends BaseWorkflowState<TStateName>,
@@ -53,4 +67,8 @@ export type PiWorkflowExtensionConfig<
   readonly commandName?: string
   readonly toolName?: string
   readonly stopPreventionMessage?: string
+  readonly automation?: {
+    readonly ownsState: (state: TState) => boolean
+    readonly onIdle: (context: PiWorkflowIdleContext<TState>) => Promise<void>
+  }
 }

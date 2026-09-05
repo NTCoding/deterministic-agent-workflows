@@ -22,6 +22,7 @@ import {
   describe,
   expect,
   it,
+  vi,
 } from 'vitest'
 import { createPiWorkflowExtension } from './pi-workflow-extension.ts'
 
@@ -194,6 +195,7 @@ function registerFactory(factory, runtime) {
     }),
     sendMessage: (...args) => runtime.sendMessage(...args),
     sendUserMessage: (...args) => runtime.sendUserMessage(...args),
+    appendEntry: (...args) => runtime.appendEntry(...args),
   })
   return extension
 }
@@ -1204,4 +1206,196 @@ describe('createPiWorkflowExtension', () => {
 
     expect(harness.state.shutdowns).toBe(1)
   })
+})
+
+describe('workflow-owned Pi automation', () => {
+  it('starts concurrent reviews only after durable entry, blocks conversational tools, and resumes from state', async () => {
+    const root = createTestRoot()
+    const config = createConfig(root)
+    const registry = workflowDefinition.getRegistry()
+    const completions = []
+    const requests = []
+    const persistedStates = []
+    const client = {
+      start: async (request) => {
+        const store = createStore(config.databasePath)
+        try {
+          persistedStates.push(store.readEvents(manager.getSessionId()).filter(
+            (event) => event.envelope.type === 'transitioned',
+          ).at(-1).payload.to)
+        } finally {
+          store.db.close()
+        }
+        requests.push(request)
+        return {
+          providerSessionId: `provider-${request.reviewType}`,
+          providerRunId: `run-${request.reviewType}`,
+          completion: new Promise((resolve) => completions.push(resolve)),
+          cancel: async () => undefined,
+        }
+      },
+      load: async () => { throw new Error('Unexpected recovery') },
+      cancel: async () => undefined,
+    }
+    config.workflowDefinition = {
+      ...workflowDefinition,
+      getRegistry: () => ({
+        ...registry,
+        DEVELOPING: {
+          ...registry.DEVELOPING,
+          canTransitionTo: ['PLANNING']
+        },
+      }),
+    }
+    config.automation = {
+      ownsState: (state) => state.currentStateMachineState === 'DEVELOPING',
+      onIdle: async (context) => {
+        const result = await context.runReviews({
+          bundleId: 'fixture-bundle',
+          repository: 'owner/repository',
+          pullRequestNumber: 1,
+          baseRevision: 'base',
+          headRevision: 'head',
+          changedFiles: ['src/changed.ts'],
+          stateInstructions: 'Review the approved fixture scope.',
+          reviews: ['one', 'two', 'three', 'four'].map((reviewType) => ({
+            reviewType,
+            version: '1',
+            instructions: `Independent ${reviewType} review.`,
+          })),
+        }, client)
+        expect(result.type).toBe('completed')
+        context.runOperation('record-note', 'reviews completed')
+        context.runOperation('transition', 'PLANNING')
+        expect(context.getState().notes).toStrictEqual(['reviews completed'])
+        context.resumeWithFreshContext('STATE: PLANNING. Reviews completed.')
+      },
+    }
+    const manager = SessionManager.create(repositoryRoot, join(root, 'sessions'))
+    const harness = createHarness(manager, config)
+    await harness.runner.emit({
+      type: 'session_start',
+      reason: 'startup'
+    })
+    await activate(harness)
+    harness.sentUserMessages.length = 0
+    appendAssistant(manager, 'stop')
+    await harness.workflowCommand.handler('transition DEVELOPING', harness.runner.createCommandContext())
+    await vi.waitFor(() => expect(requests).toHaveLength(4))
+    expect(persistedStates).toStrictEqual(['DEVELOPING', 'DEVELOPING', 'DEVELOPING', 'DEVELOPING'])
+    const block = await harness.runner.emitToolCall({
+      type: 'tool_call',
+      toolName: 'read',
+      toolCallId: 'old-agent',
+      input: { path: 'file.ts' },
+    })
+    expect(block).toMatchObject({
+      block: true,
+      reason: expect.stringContaining('workflow owns')
+    })
+    await harness.runner.emit({ type: 'agent_settled' })
+    expect(requests).toHaveLength(4)
+    expect(harness.sentUserMessages).toStrictEqual([])
+    for (const complete of completions) complete({
+      verdict: 'PASS',
+      findings: []
+    })
+    await vi.waitFor(() => expect(harness.sentUserMessages).toStrictEqual(['STATE: PLANNING. Reviews completed.']))
+    expect(harness.state.shutdowns).toBe(0)
+    const store = createStore(config.databasePath)
+    try {
+      expect(store.listSessionReviews(manager.getSessionId())).toHaveLength(4)
+      expect(store.getReviewBundle('fixture-bundle').status).toBe('completed')
+    } finally {
+      store.db.close()
+    }
+    expect(manager.getBranch().at(-1)).toMatchObject({
+      type: 'custom',
+      customType: 'pi-context-window-state',
+      data: 'STATE: PLANNING. Reviews completed.',
+    })
+  })
+
+  it('fails closed rather than resuming the old context after an automation error', async () => {
+    const root = createTestRoot()
+    const config = createConfig(root)
+    config.automation = {
+      ownsState: (state) => state.currentStateMachineState === 'DEVELOPING',
+      onIdle: async () => { throw new Error('required review service unavailable') },
+    }
+    const manager = SessionManager.create(repositoryRoot, join(root, 'sessions'))
+    const harness = createHarness(manager, config)
+    await harness.runner.emit({
+      type: 'session_start',
+      reason: 'startup'
+    })
+    await activate(harness)
+    harness.sentUserMessages.length = 0
+    await harness.workflowCommand.handler('transition DEVELOPING', harness.runner.createCommandContext())
+    await vi.waitFor(() => expect(harness.state.shutdowns).toBe(1))
+    expect(harness.notifications).toContainEqual({
+      type: 'error',
+      message: expect.stringContaining('required review service unavailable'),
+    })
+    expect(harness.sentUserMessages).toStrictEqual([])
+  })
+})
+
+it('cancels adapter-owned reviews and invalidates callback capabilities on session shutdown', async () => {
+  const root = createTestRoot()
+  const config = createConfig(root)
+  const captured = {}
+  const cancelled = []
+  const client = {
+    start: async () => ({
+      providerSessionId: 'provider',
+      providerRunId: 'run',
+      completion: new Promise(() => undefined),
+      cancel: async () => { cancelled.push('provider') },
+    }),
+    load: async () => { throw new Error('Unexpected recovery') },
+    cancel: async () => undefined,
+  }
+  config.automation = {
+    ownsState: (state) => state.currentStateMachineState === 'DEVELOPING',
+    onIdle: async (context) => {
+      captured.context = context
+      captured.result = await context.runReviews({
+        bundleId: 'shutdown-bundle',
+        repository: 'owner/repository',
+        pullRequestNumber: 1,
+        baseRevision: 'base',
+        headRevision: 'head',
+        changedFiles: ['src/changed.ts'],
+        stateInstructions: 'Review the approved fixture scope.',
+        reviews: [{
+          reviewType: 'fixture',
+          version: '1',
+          instructions: 'Review.'
+        }],
+      }, client)
+    },
+  }
+  const manager = SessionManager.create(repositoryRoot, join(root, 'sessions'))
+  const harness = createHarness(manager, config)
+  await harness.runner.emit({
+    type: 'session_start',
+    reason: 'startup'
+  })
+  await activate(harness)
+  harness.sentUserMessages.length = 0
+  await harness.workflowCommand.handler('transition DEVELOPING', harness.runner.createCommandContext())
+  await vi.waitFor(() => expect(captured.context).toBeDefined())
+  await harness.runner.emit({ type: 'session_shutdown' })
+  await vi.waitFor(() => expect(captured.result?.type).toBe('cancelled'))
+  expect(cancelled).toStrictEqual(['provider'])
+  expect(captured.context.signal.aborted).toBe(true)
+  expect(() => captured.context.runOperation('record-note', 'late write')).toThrow('no longer active')
+  expect(harness.sentUserMessages).toStrictEqual([])
+  const store = createStore(config.databasePath)
+  try {
+    expect(store.getReviewBundle('shutdown-bundle').status).toBe('cancelled')
+  } finally {
+    store.db.close()
+  }
 })

@@ -45,6 +45,7 @@ import {
   translationNote,
 } from './pi-workflow-extension-platform'
 import { createPiWorkflowSessionOwnership } from './pi-workflow-session-ownership'
+import { registerPiWorkflowAutomation } from './pi-workflow-automation'
 const PI_QUESTION_TOOL = 'question'; const DEFAULT_COMMAND_NAME = 'workflow'; const DEFAULT_TOOL_NAME = 'workflow'
 const INITIALIZATION_PENDING_REASON = 'Pi workflow initialization has not completed safely. Tool execution is blocked.'; const INACTIVE_WORKFLOW_REASON = 'Pi workflow is inactive. Run the workflow init command before using workflow operations.'
 export const PI_IDLE_RECOVERY_MESSAGE = formatStopPreventionMessage()
@@ -333,7 +334,7 @@ export function createPiWorkflowExtension<
     })
 
     pi.on('agent_settled', (_event, ctx) => {
-      if (isInactive(ctx) || readinessFailure(ctx) !== undefined) return
+      if (isInactive(ctx) || readinessFailure(ctx) !== undefined || automation.ownsState(ctx)) return
       const session = readSessionId(ctx)
       if (!session.ok) return
       const settlement: PiAssistantSettlement | undefined = getLatestPiAssistantSettlement(ctx.sessionManager.getBranch())
@@ -378,6 +379,7 @@ export function createPiWorkflowExtension<
       executionMode: 'sequential',
       async execute(_toolCallId, parameters, _signal, _onUpdate, ctx) {
         const result = runRoute(ctx, [parameters.operation, ...(parameters.args ?? [])], pi)
+        if (result.exitCode === 0) automation.afterOperation(ctx)
         return {
           content: [{
             type: 'text',
@@ -394,11 +396,20 @@ export function createPiWorkflowExtension<
       handler: async (rawArguments, ctx) => {
         try {
           const result = runRoute(ctx, parsePiCommandArguments(rawArguments), pi)
-          notifyRouteResult(ctx, pi, result)
+          if (result.exitCode === 0) automation.afterOperation(ctx)
+          if (result.exitCode !== 0 || (!automation.ownsState(ctx) && readinessFailure(ctx) === undefined)) notifyRouteResult(ctx, pi, result)
         } catch (error: unknown) {
           ctx.ui.notify(String(error), 'error')
         }
       },
+    })
+    const automation = registerPiWorkflowAutomation(pi, {
+      databasePath,
+      ...(config.automation === undefined ? {} : { automation: config.automation }),
+      isReady: (ctx) => readinessFailure(ctx) === undefined && !ownership.usesInheritedWorkflow(ctx.sessionManager.getSessionId()),
+      getState: (ctx) => useEngine(ctx, (engine) => engine.getWorkflowState(ctx.sessionManager.getSessionId())),
+      runOperation: (ctx, args) => runRoute(ctx, args, pi),
+      fail: (ctx, reason) => markSafetyUnavailable(ctx, ctx.sessionManager.getSessionId(), reason),
     })
   }
 }

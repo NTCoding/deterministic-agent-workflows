@@ -235,9 +235,13 @@ export class WorkflowEngine<
   }
 
   getState(sessionId: string): EngineResult {
+    return serializeWorkflowState(this.getWorkflowState(sessionId))
+  }
+
+  getWorkflowState(sessionId: string): TState {
     sessionId = this.resolveSessionId(sessionId)
     this.requireSession(sessionId)
-    return serializeWorkflowState(this.rehydrateFromEvents(sessionId).getState())
+    return this.rehydrateFromEvents(sessionId).getState()
   }
 
   persistSessionId(sessionId: string): void {

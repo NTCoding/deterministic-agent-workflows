@@ -215,6 +215,7 @@ Status legend: `TODO`, `IN_PROGRESS`, `BLOCKED`, `DONE`
 - [x] **DONE** Exercise SQLite claim/completion/cancellation races on independent worker connections and roll back a failed completion event atomically.
 - [x] **DONE** Preserve an already-started child's own workflow and prove a persisted state-only context window with the installed Pi runtime, retaining the session and full transcript.
 - [x] **DONE** Remove obsolete session ownership transfer plumbing; context refresh retains the existing session identity.
+- [x] **DONE** Add Pi factory-owned idle automation, review-store lifetime, shutdown cancellation, and state-only model context through the installed extension API. Runtime tests inspect actual model requests, retained system instructions, repeated refresh, and reopening. The installed compaction command cannot refresh small sessions, so the extension uses a persisted context boundary instead of requiring a live `AgentSession`.
 - [ ] **IN_PROGRESS** Verify the combined diff locally and on PR 44, then inspect the complete public API before consumer integration.
 
 ---
