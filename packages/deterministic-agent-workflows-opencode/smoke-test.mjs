@@ -317,6 +317,7 @@ try {
     databasePath: opencodeDatabasePath,
     commandDirectories: [],
     commandPrefix: 'demo:',
+    stopPreventionMessage: 'Follow the OpenCode recovery procedure.',
     buildWorkflowDeps: () => ({}),
   })
 
@@ -505,6 +506,9 @@ try {
     || applyPatchWriteCheckCount !== 1
     || identityStatus !== 'verified'
     || promptedTexts.length !== 1
+    || !promptedTexts[0]?.startsWith('[Automatic Workflow Hook Response]')
+    || !promptedTexts[0]?.includes('The user has not seen this')
+    || !promptedTexts[0]?.endsWith('Follow the OpenCode recovery procedure.')
     || !childStateOutput.includes('"currentStateMachineState": "REVIEWING"')
     || !sessionGetCalls.includes('child-session-1')
     || !reviewOutput.includes('"ok": true')

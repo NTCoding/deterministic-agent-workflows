@@ -43,4 +43,5 @@ export type WorkflowRunnerConfig<
   readonly questionToolName?: string
   readonly customGates?: readonly CustomPreToolUseGate<TWorkflow, TState, TStateName>[]
   readonly preToolUseHandler?: PreToolUseHandlerFn<TWorkflow, TState, TDeps, TStateName, TOperation>
+  readonly stopPreventionMessage?: string
 }

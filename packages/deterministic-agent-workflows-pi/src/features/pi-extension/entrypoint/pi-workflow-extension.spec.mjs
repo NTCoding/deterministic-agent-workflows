@@ -22,10 +22,7 @@ import {
   expect,
   it,
 } from 'vitest'
-import {
-  createPiWorkflowExtension,
-  PI_IDLE_RECOVERY_MESSAGE,
-} from './pi-workflow-extension.ts'
+import { createPiWorkflowExtension } from './pi-workflow-extension.ts'
 
 const repositoryRoot = fileURLToPath(new URL('../../../../../..', import.meta.url))
 const stateSchema = z.enum(['PLANNING', 'DEVELOPING'])
@@ -585,7 +582,10 @@ describe('createPiWorkflowExtension', () => {
   it('recovers only distinct normal stop settlements', async () => {
     const root = createTestRoot()
     const manager = SessionManager.create(repositoryRoot, join(root, 'sessions'))
-    const harness = createHarness(manager, createConfig(root))
+    const harness = createHarness(manager, {
+      ...createConfig(root),
+      stopPreventionMessage: 'Follow the Pi recovery procedure.',
+    })
     await harness.runner.emit({
       type: 'session_start',
       reason: 'startup'
@@ -598,7 +598,11 @@ describe('createPiWorkflowExtension', () => {
     expect(harness.sentUserMessages).toHaveLength(0)
     appendAssistant(manager, 'stop')
     await harness.runner.emit({ type: 'agent_settled' })
-    expect(harness.sentUserMessages).toStrictEqual([PI_IDLE_RECOVERY_MESSAGE])
+    expect(harness.sentUserMessages).toHaveLength(1)
+    expect(harness.sentUserMessages[0]).toMatch(/^\[Automatic Workflow Hook Response\]/)
+    expect(harness.sentUserMessages[0]).toContain('The user has not seen this')
+    expect(harness.sentUserMessages[0]).toContain('Workflow state PLANNING does not allow stopping.')
+    expect(harness.sentUserMessages[0]).toMatch(/Follow the Pi recovery procedure\.$/)
     await harness.runner.emit({ type: 'agent_settled' })
     expect(harness.sentUserMessages).toHaveLength(1)
     appendAssistant(manager, 'stop')

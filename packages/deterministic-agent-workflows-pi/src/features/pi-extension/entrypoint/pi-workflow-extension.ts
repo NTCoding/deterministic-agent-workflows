@@ -15,9 +15,9 @@ import { WorkflowEngine } from '@nt-ai-lab/deterministic-agent-workflow-engine'
 import {
   createPreToolUseHandler,
   createWorkflowRunner,
+  formatStopPreventionMessage,
   getRepositoryName,
   type PlatformContext,
-  type RunnerResult,
 } from '@nt-ai-lab/deterministic-agent-workflow-cli'
 import { createStore } from '@nt-ai-lab/deterministic-agent-workflow-event-store'
 import { Type } from 'typebox'
@@ -51,7 +51,7 @@ const PI_QUESTION_TOOL = 'question'; const DEFAULT_COMMAND_NAME = 'workflow'; co
 const INITIALIZATION_PENDING_REASON = 'Pi workflow initialization has not completed safely. Tool execution is blocked.'
 const INACTIVE_WORKFLOW_REASON = 'Pi workflow is inactive. Run the workflow init command before using workflow operations.'
 
-export const PI_IDLE_RECOVERY_MESSAGE = 'You have stopped. You should never stop until the workflow is complete unless your current state permits stopping.'
+export const PI_IDLE_RECOVERY_MESSAGE = formatStopPreventionMessage()
 export const PI_SESSION_BRANCH_BLOCK_MESSAGE = 'Pi session tree navigation and forks are disabled while a workflow is active.'
 
 const workflowToolParameters = Type.Object({
@@ -235,7 +235,7 @@ export function createPiWorkflowExtension<
     }
   }
 
-  function runRoute(ctx: ExtensionContext, args: readonly string[], pi: ExtensionAPI): RunnerResult {
+  function runRoute(ctx: ExtensionContext, args: readonly string[], pi: ExtensionAPI) {
     if (isInactive(ctx) && args[0] === 'init') {
       const session = readSessionId(ctx)
       if (!session.ok) return {
@@ -361,7 +361,7 @@ export function createPiWorkflowExtension<
         const result = useEngine(ctx, (engine) => engine.checkStopping(session.sessionId, 'stop'))
         if (result.type === 'blocked' && ctx.isIdle() && !ctx.hasPendingMessages()) {
           recoveredAssistantBySession.set(session.sessionId, settlement.id)
-          pi.sendUserMessage(PI_IDLE_RECOVERY_MESSAGE)
+          pi.sendUserMessage(formatStopPreventionMessage(result.output, config.stopPreventionMessage))
         }
       } catch (error: unknown) {
         markSafetyUnavailable(ctx, session.sessionId, `Stopping safety could not be established: ${String(error)}`)

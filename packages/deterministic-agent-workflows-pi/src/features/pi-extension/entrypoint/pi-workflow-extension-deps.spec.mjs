@@ -35,6 +35,7 @@ vi.mock('@nt-ai-lab/deterministic-agent-workflow-cli', () => ({
     output: '',
     exitCode: 0
   }),
+  formatStopPreventionMessage: () => '[Automatic Workflow Hook Response]',
   getRepositoryName: () => 'NTCoding/deterministic-agent-workflows',
 }))
 

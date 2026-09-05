@@ -128,6 +128,8 @@ That policy means a write is denied outside `DEVELOPING`.
 
 Set `allowIdle: true` on a state only when an agent may stop or wait for a user response. It is `false` by default, so OpenCode's `question`, Claude Code's `AskUserQuestion`, and Codex's `request_user_input` tools are denied until the current state explicitly allows idle. Pi applies the same policy when the agent settles, and also enforces it for a registered `question` tool.
 
+When a stop is prevented, every adapter marks the resulting message as an automatic workflow hook response and warns the agent that it is not user approval. Set the optional `stopPreventionMessage` adapter configuration property to append project specific recovery instructions without replacing that warning.
+
 ## Workflow operations
 
 A workflow operation is a command the agent can invoke, for example `record-pr`.

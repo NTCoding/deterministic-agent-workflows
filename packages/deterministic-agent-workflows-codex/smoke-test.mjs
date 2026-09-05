@@ -113,6 +113,7 @@ function invoke({ args = [], hook }) {
     }],
     workflowCommand: 'node ./workflow-codex.mjs',
     workflowRoot: root,
+    stopPreventionMessage: 'Follow the project recovery procedure.',
     now: workflowNow,
     processDeps: {
       getEnv: (name) => name === 'HOME' ? root : name === 'WORKFLOW_EVENTS_DB' ? databasePath : undefined,
@@ -199,7 +200,10 @@ try {
     }
   })
   assert.equal(JSON.parse(stop.stdout).decision, 'block')
+  assert.match(JSON.parse(stop.stdout).reason, /^\[Automatic Workflow Hook Response\]/)
+  assert.match(JSON.parse(stop.stdout).reason, /The user has not seen this/)
   assert.match(JSON.parse(stop.stdout).reason, /Workflow state PLANNING does not allow stopping/)
+  assert.match(JSON.parse(stop.stdout).reason, /Follow the project recovery procedure\.$/)
 
   const transition = invoke({ args: ['transition', 'one', 'DEVELOPING'] })
   assert.equal(transition.exitCode, 0)
