@@ -191,7 +191,7 @@ Status legend: `TODO`, `IN_PROGRESS`, `BLOCKED`, `DONE`
 
 ### 14) Distinguish automatic stop prevention responses
 
-- [x] **DONE** Mark stop prevention messages as automatic workflow hook responses, make their lack of user approval explicit, tell blocked agents how to request assistance, and allow consumers to append project specific instructions.
+- [x] **DONE** Mark stop prevention messages as automatic workflow hook responses, make their lack of user approval explicit, tell blocked agents how to request assistance, and allow consumers to append project-specific instructions.
 
 ---
 
