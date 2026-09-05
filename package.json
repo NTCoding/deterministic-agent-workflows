@@ -16,6 +16,8 @@
     "publish:dry-run": "pnpm -r publish --dry-run --access public --no-git-checks"
   },
   "devDependencies": {
+    "@commitlint/cli": "^20.5.3",
+    "@commitlint/config-conventional": "^20.5.3",
     "@eslint-community/eslint-plugin-eslint-comments": "^4.5.0",
     "@living-architecture/riviere-role-enforcement": "^0.2.0",
     "@nx/eslint-plugin": "^22.5.2",
