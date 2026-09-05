@@ -205,7 +205,7 @@ Status legend: `TODO`, `IN_PROGRESS`, `BLOCKED`, `DONE`
 - [x] **DONE** Resolve Pi child delegation from `PI_SUBAGENT_PARENT_SESSION` and prove a fresh context window within the same conversation.
 - [x] **DONE** Preserve the high-level consumer API and consumer-owned review definitions without leaking platform events or Living Architecture names.
 - [x] **DONE** Consolidate repository guidance into scoped `AGENTS.md` and remove the legacy instruction file and references.
-- [x] **DONE** Complete focused and full verification without changing lint or coverage configuration.
+- [x] **DONE** Run focused checks and the full `pnpm verify` pipeline in the isolated implementation worktree without changing lint or coverage configuration. This does not complete the separate manual Control Center or release-readiness checklists.
 
 #### Follow-up validation findings
 

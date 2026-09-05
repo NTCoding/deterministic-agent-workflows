@@ -101,7 +101,7 @@ export function createPiWorkflowExtension<
       appendToFile: () => undefined,
       now,
       transcriptReader: new PiTranscriptReader(() => ctx.sessionManager.getBranch()),
-      sessionContext: {getMainSessionId: () => ownership.delegatedParent(sessionId) ?? sessionId,},
+      sessionContext: {getMainSessionId: () => ownership.delegatedParent(sessionId, store) ?? sessionId,},
     }
   }
 

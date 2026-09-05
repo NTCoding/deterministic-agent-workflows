@@ -25,6 +25,7 @@ import type { AcpReviewAgentClientConfig } from '../../../domain/acp-review-agen
 import {
   AcpTimeoutError,
   cancelAcpSession,
+  cancelTimedOutAcpPrompt,
   createAcpTimeout,
   stopAcpProcess,
 } from './acp-process-supervision'
@@ -206,6 +207,7 @@ function promptCompletion(
   config: AcpReviewAgentClientConfig,
 ): Promise<ReviewPayload> {
   return (async () => {
+    const lifecycle = { cancellationOwnsCleanup: false }
     const timeout = createAcpTimeout<never>(
       config.timeoutMs,
       `ACP prompt timed out after ${String(config.timeoutMs)}ms.`,
@@ -239,18 +241,19 @@ function promptCompletion(
       return reviewPayloadSchema.parse(JSON.parse(output))
     } catch (error) {
       if (error instanceof AcpTimeoutError) {
-        await cancelAcpSession({
+        lifecycle.cancellationOwnsCleanup = true
+        await cancelTimedOutAcpPrompt(error, () => cancelAcpSession({
           notify: () => active.context.notify(methods.agent.session.cancel, { sessionId }),
           processFailure: active.processFailure,
           prompt: request,
           stop: () => stopAcpProcess(active, config.cancellationGraceMs),
           graceMs: config.cancellationGraceMs,
-        })
+        }))
       }
       throw error
     } finally {
       timeout.clear()
-      await stopAcpProcess(active, config.cancellationGraceMs)
+      if (!lifecycle.cancellationOwnsCleanup) await stopAcpProcess(active, config.cancellationGraceMs)
     }
   })()
 }

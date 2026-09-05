@@ -1,11 +1,33 @@
 import {
   describe, expect, it, vi
 } from 'vitest'
-import { cancelAcpSession } from './acp-process-supervision'
+import {
+  AcpTimeoutError, cancelAcpSession, cancelTimedOutAcpPrompt
+} from './acp-process-supervision'
 
 const pending = new Promise<never>(() => undefined)
 
 describe('ACP cancellation supervision', () => {
+  it('preserves the original timeout when cancellation succeeds', async () => {
+    const timeout = new AcpTimeoutError('ACP prompt timed out.')
+    await expect(cancelTimedOutAcpPrompt(timeout, async () => undefined)).rejects.toBe(timeout)
+  })
+
+  it.each(['notification failed', 'transport failed', 'cleanup failed'])(
+    'preserves both the prompt timeout and %s', async (reason) => {
+      const timeout = new AcpTimeoutError('ACP prompt timed out.')
+      const cancellation = new TypeError(reason)
+      await expect(cancelTimedOutAcpPrompt(timeout, async () => { throw cancellation })).rejects.toMatchObject({
+        name: 'AcpTimeoutError',
+        message: `ACP prompt timed out. Cancellation failed: TypeError: ${reason}`,
+        cause: {
+          timeout,
+          cancellation
+        },
+      })
+    },
+  )
+
   it('waits for cooperative prompt completion before stopping the process', async () => {
     const state: { complete?: () => void } = {}
     const prompt = new Promise<void>((resolve) => {

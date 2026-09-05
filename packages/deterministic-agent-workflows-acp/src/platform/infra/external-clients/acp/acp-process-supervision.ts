@@ -2,8 +2,8 @@ import type { ChildProcessWithoutNullStreams } from 'node:child_process'
 
 /** @riviere-role external-client-error */
 export class AcpTimeoutError extends Error {
-  constructor(message: string) {
-    super(message)
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options)
     this.name = 'AcpTimeoutError'
   }
 }
@@ -23,6 +23,27 @@ export function createAcpTimeout<T>(milliseconds: number, message: string): {
       if (state.timeout !== undefined) clearTimeout(state.timeout)
     },
   }
+}
+
+/** @riviere-role external-client-service */
+export async function cancelTimedOutAcpPrompt(
+  timeout: AcpTimeoutError,
+  cancel: () => Promise<void>,
+): Promise<never> {
+  try {
+    await cancel()
+  } catch (cancellation: unknown) {
+    throw new AcpTimeoutError(
+      `${timeout.message} Cancellation failed: ${String(cancellation)}`,
+      {
+        cause: {
+          timeout,
+          cancellation
+        }
+      },
+    )
+  }
+  throw timeout
 }
 
 const stoppingProcesses = new WeakMap<ChildProcessWithoutNullStreams, Promise<void>>()

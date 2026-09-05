@@ -480,9 +480,21 @@ describe('createPiWorkflowExtension', () => {
     }
   })
 
-  it('keeps an already-started child on its own workflow even when the parent is absent', async () => {
+  it.each([false, true])('keeps an already-started child isolated when parent started is %s', async (parentStarted) => {
     const root = createTestRoot()
     const databasePath = join(root, 'workflow-events.db')
+    const parent = SessionManager.create(repositoryRoot, join(root, 'sessions'))
+    if (parentStarted) {
+      const harness = createHarness(parent, createConfig(root, databasePath))
+      await harness.runner.emit({
+        type: 'session_start',
+        reason: 'startup'
+      })
+      await activate(harness)
+    }
+    const before = createStore(databasePath)
+    const parentEvents = before.readEvents(parent.getSessionId())
+    before.db.close()
     const child = SessionManager.create(repositoryRoot, join(root, 'sessions'))
     const original = createHarness(child, createConfig(root, databasePath))
     await original.runner.emit({
@@ -490,7 +502,7 @@ describe('createPiWorkflowExtension', () => {
       reason: 'startup',
     })
     await activate(original)
-    process.env.PI_SUBAGENT_PARENT_SESSION = 'absent-parent'
+    process.env.PI_SUBAGENT_PARENT_SESSION = parent.getSessionId()
     try {
       const resumed = createHarness(child, createConfig(root, databasePath))
       await resumed.runner.emit({
@@ -510,6 +522,7 @@ describe('createPiWorkflowExtension', () => {
       expect(blocked?.reason).toContain('forbidden in state PLANNING')
       const store = createStore(databasePath)
       expect(store.readEvents(child.getSessionId()).at(-1)?.envelope.type).toBe('write-checked')
+      expect(store.readEvents(parent.getSessionId())).toStrictEqual(parentEvents)
       store.db.close()
     } finally {
       delete process.env.PI_SUBAGENT_PARENT_SESSION
