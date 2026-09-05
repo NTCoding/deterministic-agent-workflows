@@ -161,9 +161,10 @@ async function openProcess(
   const stream = ndJsonStream(output, input)
   const connection = app.connect(stream)
   const context = connection.agent
+  const startupTimeoutMs = Math.max(config.timeoutMs, 5_000)
   const initializationTimeout = createTimeout<never>(
-    config.timeoutMs,
-    `ACP initialization timed out after ${String(config.timeoutMs)}ms.`,
+    startupTimeoutMs,
+    `ACP initialization timed out after ${String(startupTimeoutMs)}ms.`,
   )
   try {
     const initialization = await Promise.race([
@@ -313,9 +314,10 @@ async function openSession(
   config: AcpReviewAgentClientConfig,
 ): Promise<string> {
   const mcpServers = [...(config.mcpServers ?? [])]
+  const startupTimeoutMs = Math.max(config.timeoutMs, 5_000)
   const timeout = createTimeout<never>(
-    config.timeoutMs,
-    `ACP session open timed out after ${String(config.timeoutMs)}ms.`,
+    startupTimeoutMs,
+    `ACP session open timed out after ${String(startupTimeoutMs)}ms.`,
   )
   try {
     if (loadSessionId === undefined) {
