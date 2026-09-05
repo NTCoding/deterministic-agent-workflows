@@ -207,6 +207,15 @@ Status legend: `TODO`, `IN_PROGRESS`, `BLOCKED`, `DONE`
 - [x] **DONE** Consolidate repository guidance into scoped `AGENTS.md` and remove the legacy instruction file and references.
 - [x] **DONE** Complete focused and full verification without changing lint or coverage configuration.
 
+#### Follow-up validation findings
+
+- [x] **DONE** Preserve strict completion provenance through public stored reviews and both query paths while keeping legacy reviews readable.
+- [x] **DONE** Supervise cooperative cancellation, bounded notification failures, forced process termination, and active-run cleanup.
+- [x] **DONE** Record cancellation failures and share concurrent calls on one coordinator without rewriting terminal bundles.
+- [x] **DONE** Exercise SQLite claim/completion/cancellation races on independent worker connections and roll back a failed completion event atomically.
+- [x] **DONE** Preserve an already-started child's own workflow and prove replacement with the installed Pi runtime, including old-session disposal and empty fresh context.
+- [ ] **IN_PROGRESS** Verify the combined diff locally and on PR 44, then inspect the complete public API before consumer integration.
+
 ---
 
 ## Acceptance criteria for “done”

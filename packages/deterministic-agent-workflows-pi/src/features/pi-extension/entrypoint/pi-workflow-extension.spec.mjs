@@ -480,6 +480,42 @@ describe('createPiWorkflowExtension', () => {
     }
   })
 
+  it('keeps an already-started child on its own workflow even when the parent is absent', async () => {
+    const root = createTestRoot()
+    const databasePath = join(root, 'workflow-events.db')
+    const child = SessionManager.create(repositoryRoot, join(root, 'sessions'))
+    const original = createHarness(child, createConfig(root, databasePath))
+    await original.runner.emit({
+      type: 'session_start',
+      reason: 'startup',
+    })
+    await activate(original)
+    process.env.PI_SUBAGENT_PARENT_SESSION = 'absent-parent'
+    try {
+      const resumed = createHarness(child, createConfig(root, databasePath))
+      await resumed.runner.emit({
+        type: 'session_start',
+        reason: 'resume',
+      })
+      const blocked = await resumed.runner.emitToolCall({
+        type: 'tool_call',
+        toolCallId: 'child-owned-write',
+        toolName: 'write',
+        input: {
+          path: 'src/app.ts',
+          content: 'unsafe',
+        },
+      })
+      expect(resumed.state.shutdowns).toBe(0)
+      expect(blocked?.reason).toContain('forbidden in state PLANNING')
+      const store = createStore(databasePath)
+      expect(store.readEvents(child.getSessionId()).at(-1)?.envelope.type).toBe('write-checked')
+      store.db.close()
+    } finally {
+      delete process.env.PI_SUBAGENT_PARENT_SESSION
+    }
+  })
+
   it('fails closed when a fresh delegated child has no persisted parent workflow', async () => {
     const root = createTestRoot()
     const child = SessionManager.create(repositoryRoot, join(root, 'sessions'))

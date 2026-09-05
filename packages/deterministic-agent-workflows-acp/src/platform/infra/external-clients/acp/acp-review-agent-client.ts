@@ -22,6 +22,12 @@ import type {
   ReviewAgentRun,
 } from '@nt-ai-lab/deterministic-agent-workflow-cli'
 import type { AcpReviewAgentClientConfig } from '../../../domain/acp-review-agent-client-types'
+import {
+  AcpTimeoutError,
+  cancelAcpSession,
+  createAcpTimeout,
+  stopAcpProcess,
+} from './acp-process-supervision'
 
 class AcpProtocolError extends Error {
   constructor(message: string) {
@@ -41,25 +47,6 @@ type ActiveProcess = {
   readonly stderr: () => string
   readonly capabilities: InitializeResponse['agentCapabilities']
   readonly processFailure: Promise<never>
-}
-
-function createTimeout<T>(milliseconds: number, message: string): {
-  readonly promise: Promise<T>
-  readonly clear: () => void
-} {
-  const state: { timeout?: NodeJS.Timeout } = {}
-  const promise = new Promise<T>((_resolve, reject) => {
-    state.timeout = setTimeout(
-      () => reject(new AcpProtocolError(message)),
-      milliseconds,
-    )
-  })
-  return {
-    promise,
-    clear: () => {
-      if (state.timeout !== undefined) clearTimeout(state.timeout)
-    },
-  }
 }
 
 function appendAgentText(
@@ -161,7 +148,7 @@ async function openProcess(
   const stream = ndJsonStream(output, input)
   const connection = app.connect(stream)
   const context = connection.agent
-  const initializationTimeout = createTimeout<never>(
+  const initializationTimeout = createAcpTimeout<never>(
     config.timeoutMs,
     `ACP initialization timed out after ${String(config.timeoutMs)}ms.`,
   )
@@ -197,7 +184,7 @@ async function openProcess(
       processExit,
       new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), 25)),
     ])
-    await stopProcess({
+    await stopAcpProcess({
       child,
       connection
     }, config.cancellationGraceMs)
@@ -212,36 +199,6 @@ async function openProcess(
   }
 }
 
-async function stopProcess(
-  active: Pick<ActiveProcess, 'child' | 'connection'>,
-  graceMs: number,
-): Promise<void> {
-  const closeError: unknown = (() => {
-    try {
-      active.connection.close()
-      return undefined
-    } catch (error) {
-      return error
-    }
-  })()
-  if (active.child.exitCode === null && active.child.signalCode === null) {
-    const exited = new Promise<void>((resolve) => {
-      active.child.once('close', () => resolve())
-    })
-    active.child.kill('SIGTERM')
-    const grace = createTimeout<void>(graceMs, 'ACP process did not stop after SIGTERM.')
-    try {
-      await Promise.race([exited, grace.promise])
-    } catch {
-      active.child.kill('SIGKILL')
-      await exited
-    } finally {
-      grace.clear()
-    }
-  }
-  if (closeError !== undefined) throw closeError
-}
-
 function promptCompletion(
   active: ActiveProcess,
   sessionId: string,
@@ -249,24 +206,28 @@ function promptCompletion(
   config: AcpReviewAgentClientConfig,
 ): Promise<ReviewPayload> {
   return (async () => {
-    const timeout = createTimeout<never>(
+    const timeout = createAcpTimeout<never>(
       config.timeoutMs,
       `ACP prompt timed out after ${String(config.timeoutMs)}ms.`,
     )
+    const request = active.context.request(methods.agent.session.prompt, {
+      sessionId,
+      prompt: [{
+        type: 'text',
+        text: prompt
+      }],
+    })
     try {
       const response = await Promise.race([
-        active.context.request(methods.agent.session.prompt, {
-          sessionId,
-          prompt: [{
-            type: 'text',
-            text: prompt
-          }],
-        }),
+        request,
         timeout.promise,
         active.processFailure,
       ])
       if (response.stopReason === 'cancelled') {
         throw new AcpProtocolError('ACP prompt was cancelled.')
+      }
+      if (response.stopReason !== 'end_turn') {
+        throw new AcpProtocolError(`ACP prompt stopped without completion: ${response.stopReason}.`)
       }
       const output = active.outputBySession.get(sessionId)?.trim()
       if (output === undefined || output.length === 0) {
@@ -276,9 +237,20 @@ function promptCompletion(
         )
       }
       return reviewPayloadSchema.parse(JSON.parse(output))
+    } catch (error) {
+      if (error instanceof AcpTimeoutError) {
+        await cancelAcpSession({
+          notify: () => active.context.notify(methods.agent.session.cancel, { sessionId }),
+          processFailure: active.processFailure,
+          prompt: request,
+          stop: () => stopAcpProcess(active, config.cancellationGraceMs),
+          graceMs: config.cancellationGraceMs,
+        })
+      }
+      throw error
     } finally {
       timeout.clear()
-      await stopProcess(active, config.cancellationGraceMs)
+      await stopAcpProcess(active, config.cancellationGraceMs)
     }
   })()
 }
@@ -289,20 +261,18 @@ function createRun(
   input: ReviewAgentRequest,
   config: AcpReviewAgentClientConfig,
 ): ReviewAgentRun {
+  const completion = promptCompletion(active, sessionId, input.prompt, config)
   return {
     providerSessionId: sessionId,
     providerRunId: randomUUID(),
-    completion: promptCompletion(active, sessionId, input.prompt, config),
-    async cancel(): Promise<void> {
-      try {
-        await Promise.race([
-          active.context.notify(methods.agent.session.cancel, { sessionId }),
-          active.processFailure,
-        ])
-      } finally {
-        await stopProcess(active, config.cancellationGraceMs)
-      }
-    },
+    completion,
+    cancel: () => cancelAcpSession({
+      notify: () => active.context.notify(methods.agent.session.cancel, { sessionId }),
+      processFailure: active.processFailure,
+      prompt: completion,
+      stop: () => stopAcpProcess(active, config.cancellationGraceMs),
+      graceMs: config.cancellationGraceMs,
+    }),
   }
 }
 
@@ -313,7 +283,7 @@ async function openSession(
   config: AcpReviewAgentClientConfig,
 ): Promise<string> {
   const mcpServers = [...(config.mcpServers ?? [])]
-  const timeout = createTimeout<never>(
+  const timeout = createAcpTimeout<never>(
     config.timeoutMs,
     `ACP session open timed out after ${String(config.timeoutMs)}ms.`,
   )
@@ -343,7 +313,7 @@ async function openSession(
     ])
     return loadSessionId
   } catch (error) {
-    await stopProcess(active, config.cancellationGraceMs)
+    await stopAcpProcess(active, config.cancellationGraceMs)
     throw error
   } finally {
     timeout.clear()
@@ -365,7 +335,7 @@ export function createAcpReviewAgentClient(
       'ACP reviewer cancellationGraceMs must be a positive safe integer.',
     )
   }
-  const activeByRun = new Map<string, ActiveProcess>()
+  const activeByRun = new Map<string, ReviewAgentRun>()
 
   async function startSession(
     input: ReviewAgentRequest,
@@ -374,7 +344,7 @@ export function createAcpReviewAgentClient(
     const active = await openProcess(config, input.workingDirectory)
     const sessionId = await openSession(active, input, loadSessionId, config)
     const run = createRun(active, sessionId, input, config)
-    activeByRun.set(run.providerRunId, active)
+    activeByRun.set(run.providerRunId, run)
     void run.completion.then(
       () => activeByRun.delete(run.providerRunId),
       () => activeByRun.delete(run.providerRunId),
@@ -386,19 +356,15 @@ export function createAcpReviewAgentClient(
     start: (input) => startSession(input),
     load: (input, providerSessionId) => startSession(input, providerSessionId),
     async cancel(providerSessionId: string, providerRunId: string): Promise<void> {
-      const active = activeByRun.get(providerRunId)
-      if (active === undefined) return
+      const run = activeByRun.get(providerRunId)
+      if (run === undefined) return
+      if (run.providerSessionId !== providerSessionId) {
+        throw new AcpProtocolError('ACP cancellation provider session does not match the active run.')
+      }
       try {
-        await Promise.race([
-          active.context.notify(methods.agent.session.cancel, { sessionId: providerSessionId }),
-          active.processFailure,
-        ])
+        await run.cancel()
       } finally {
-        try {
-          await stopProcess(active, config.cancellationGraceMs)
-        } finally {
-          activeByRun.delete(providerRunId)
-        }
+        activeByRun.delete(providerRunId)
       }
     },
   }

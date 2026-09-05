@@ -1,3 +1,4 @@
+import { appendFileSync } from 'node:fs'
 import {
   Readable, Writable
 } from 'node:stream'
@@ -11,6 +12,15 @@ import {
 const mode = process.env.FAKE_ACP_MODE ?? 'pass'
 if (mode === 'early-exit') process.exit(17)
 let cancelPrompt
+const log = (event) => {
+  if (process.env.FAKE_ACP_LOG !== undefined) {
+    appendFileSync(process.env.FAKE_ACP_LOG, `${process.pid} ${event}\n`)
+  }
+}
+if (mode === 'ignore-cancel') {
+  process.on('SIGTERM', () => log('SIGTERM'))
+  setInterval(() => undefined, 1_000)
+}
 
 const app = agent({ name: 'fake-review-agent' })
   .onRequest(methods.agent.initialize, () => ({
@@ -26,10 +36,12 @@ const app = agent({ name: 'fake-review-agent' })
   .onRequest(methods.agent.session.prompt, async ({
     params, client
   }) => {
+    log('prompt-started')
     if (mode === 'slow' || mode === 'ignore-cancel') {
       await new Promise((resolve) => {
         cancelPrompt = mode === 'slow' ? resolve : undefined
       })
+      log('prompt-cancelled')
       return { stopReason: 'cancelled' }
     }
     const payload = mode === 'invalid-json'
@@ -52,6 +64,7 @@ const app = agent({ name: 'fake-review-agent' })
     return { stopReason: 'end_turn' }
   })
   .onNotification(methods.agent.session.cancel, () => {
+    log('cancel-received')
     cancelPrompt?.()
   })
 

@@ -24,6 +24,7 @@
     },
     "test": {
       "executor": "nx:run-commands",
+      "dependsOn": ["build", "^build"],
       "options": {
         "command": "pnpm --dir packages/deterministic-agent-workflows-event-store exec vitest run src"
       }

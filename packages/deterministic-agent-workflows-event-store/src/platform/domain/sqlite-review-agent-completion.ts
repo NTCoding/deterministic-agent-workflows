@@ -112,6 +112,7 @@ export function completeReviewAgentTransaction(
         sessionId: bundle.sessionId,
         createdAt,
         ...parsedInput,
+        completionProvenance: provenance,
       }),
     }
   } catch (error) {

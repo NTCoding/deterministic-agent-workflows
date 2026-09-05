@@ -23,8 +23,14 @@ export function createPiWorkflowSessionOwnership(
   databasePath: string,
 ): PiWorkflowSessionOwnership {
   const delegatedParent = (sessionId: string): string | undefined => {
-    const mainSessionId = resolvePiMainSessionId(sessionId)
-    return mainSessionId === sessionId ? undefined : mainSessionId
+    const store = createStore(databasePath)
+    try {
+      if (store.hasSessionStarted(sessionId)) return undefined
+      const mainSessionId = resolvePiMainSessionId(sessionId)
+      return mainSessionId === sessionId ? undefined : mainSessionId
+    } finally {
+      store.db.close()
+    }
   }
   return {
     delegatedParent,

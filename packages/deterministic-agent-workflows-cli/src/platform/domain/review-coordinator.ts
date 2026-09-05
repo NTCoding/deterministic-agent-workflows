@@ -146,11 +146,11 @@ type CompletedReview = StartedReview & {readonly payload: ReviewPayload}
 
 type CompletionAttempt =
   | {
-    readonly ok: true;
+    readonly type: 'reviews-completed';
     readonly completions: readonly CompletedReview[]
   }
   | {
-    readonly ok: false;
+    readonly type: 'reviews-failed';
     readonly reason: string
   }
 
@@ -164,13 +164,12 @@ async function collectCompletions(started: readonly StartedReview[]): Promise<Co
       payload: reviewPayloadSchema.parse(await run.completion),
     })))
     return {
-      ok: true,
+      type: 'reviews-completed',
       completions
     }
   } catch (error) {
-    await Promise.allSettled(started.map(({ run }) => run.cancel()))
     return {
-      ok: false,
+      type: 'reviews-failed',
       reason: `Review agent failed: ${String(error)}`
     }
   }
@@ -201,7 +200,10 @@ export class ReviewCoordinator {
   private readonly store: ReviewJobStore
   private readonly client: ReviewAgentClient
   private readonly now: () => string
-  private readonly cancellationReasons = new Map<string, string>()
+  private readonly cancellations = new Map<string, Promise<ReviewCoordinatorResult>>()
+  private readonly executions = new Map<string, Promise<ReviewCoordinatorResult>>()
+  private readonly cancellationSignals = new Map<string, (result: ReviewCoordinatorResult) => void>()
+  private readonly liveRuns = new Map<string, Map<string, ReviewAgentRun>>()
   private readonly startBarriers = new Map<string, Promise<void>>()
 
   constructor(deps: ReviewCoordinatorDeps) {
@@ -220,6 +222,23 @@ export class ReviewCoordinator {
     }
     const terminal = terminalResult(existing)
     if (terminal !== undefined) return terminal
+    const running = this.executions.get(input.bundleId)
+    if (running !== undefined) return running
+    const execution = this.runBundle(input, eventState, existing).finally(() => {
+      this.executions.delete(input.bundleId)
+      this.liveRuns.delete(input.bundleId)
+      this.cancellations.delete(input.bundleId)
+      this.cancellationSignals.delete(input.bundleId)
+    })
+    this.executions.set(input.bundleId, execution)
+    return execution
+  }
+
+  private async runBundle(
+    input: ReviewBundleRequest,
+    eventState: string,
+    existing: StoredReviewBundle | undefined,
+  ): Promise<ReviewCoordinatorResult> {
     const claimed = claimOrResumeBundle(this.store, input, existing, this.now)
     const bundle = claimed.status === 'requested'
       ? this.store.markReviewBundleRunning(claimed.bundleId, this.now())
@@ -231,12 +250,21 @@ export class ReviewCoordinator {
     const pendingDefinitions = input.reviews.filter(
       (definition) => storedAgents.get(definition.reviewType)?.status !== 'completed',
     )
+    const cancelled = new Promise<ReviewCoordinatorResult>((resolve) => {
+      this.cancellationSignals.set(bundle.bundleId, resolve)
+    })
+    const liveRuns = new Map<string, ReviewAgentRun>()
+    this.liveRuns.set(bundle.bundleId, liveRuns)
     const startPromises = pendingDefinitions.map(async (definition) => {
       const stored = storedAgents.get(definition.reviewType)
       const request = buildAgentRequest(input, definition)
       const run = stored?.providerSessionId === undefined
         ? await this.client.start(request)
         : await this.client.load(request, stored.providerSessionId)
+      liveRuns.set(definition.reviewType, run)
+      // Observe failures immediately while the other provider starts are still pending.
+      // The original completion promise is still validated by collectCompletions.
+      void run.completion.catch(() => undefined)
       try {
         if (stored?.status === 'running') {
           this.store.resumeReviewAgent(
@@ -259,7 +287,6 @@ export class ReviewCoordinator {
         await run.cancel()
         throw error
       }
-      if (this.cancellationReasons.has(bundle.bundleId)) await run.cancel()
       return {
         definition,
         run
@@ -272,39 +299,25 @@ export class ReviewCoordinator {
     const started = starts.flatMap(
       (result) => result.status === 'fulfilled' ? [result.value] : [],
     )
-    const cancellationReason = this.cancellationReasons.get(bundle.bundleId)
-    if (cancellationReason !== undefined) {
-      this.cancellationReasons.delete(bundle.bundleId)
-      const current = this.store.getReviewBundle(bundle.bundleId)
-      return {
-        type: 'cancelled',
-        bundle: current?.status === 'cancelled'
-          ? current
-          : this.store.cancelReviewBundle(bundle.bundleId, cancellationReason, this.now()),
-      }
-    }
+    const cancellation = this.cancellations.get(bundle.bundleId)
+    if (cancellation !== undefined) return cancellation
     const startFailure = starts.find(
       (result): result is PromiseRejectedResult => result.status === 'rejected',
     )
     if (startFailure !== undefined) {
-      await Promise.allSettled(started.map(({ run }) => run.cancel()))
-      const reason = `Unable to start review bundle: ${String(startFailure.reason)}`
-      return {
-        type: 'failed',
-        reason,
-        bundle: this.store.failReviewBundle(bundle.bundleId, reason, this.now()),
-      }
+      return this.failBundle(bundle.bundleId, `Unable to start review bundle: ${String(startFailure.reason)}`)
     }
 
-    const completionAttempt = await collectCompletions(started)
-    if (!completionAttempt.ok) return {
-      type: 'failed',
-      reason: completionAttempt.reason,
-      bundle: this.store.failReviewBundle(
-        bundle.bundleId,
-        completionAttempt.reason,
-        this.now(),
-      ),
+    const completionAttempt = await Promise.race([collectCompletions(started), cancelled])
+    if (completionAttempt.type !== 'reviews-completed' && completionAttempt.type !== 'reviews-failed') {
+      return completionAttempt
+    }
+    const pendingCancellation = this.cancellations.get(bundle.bundleId)
+    if (pendingCancellation !== undefined) return pendingCancellation
+    const latestTerminal = terminalResult(this.store.getReviewBundle(bundle.bundleId))
+    if (latestTerminal !== undefined) return latestTerminal
+    if (completionAttempt.type === 'reviews-failed') {
+      return this.failBundle(bundle.bundleId, completionAttempt.reason)
     }
 
     for (const {
@@ -341,43 +354,64 @@ export class ReviewCoordinator {
   }
 
   async cancel(bundleId: string, reason: string): Promise<ReviewCoordinatorResult> {
-    const initial = this.store.getReviewBundle(bundleId)
-    if (initial === undefined) {
-      throw new WorkflowStateError(`Review bundle ${bundleId} not found.`)
+    const existing = this.cancellations.get(bundleId)
+    if (existing !== undefined) return existing
+    const cancellation = this.cancelBundle(bundleId, reason).then((result) => {
+      this.cancellationSignals.get(bundleId)?.(result)
+      return result
+    })
+    this.cancellations.set(bundleId, cancellation)
+    return cancellation
+  }
+
+  private async stopAgents(bundleId: string): Promise<readonly string[]> {
+    const live = this.liveRuns.get(bundleId)
+    const agents = this.store.listReviewAgents(bundleId).filter(
+      (agent) => agent.status === 'running',
+    )
+    const results = await Promise.allSettled(agents.map(async (agent) => {
+      const run = live?.get(agent.reviewType)
+      if (run !== undefined) return run.cancel()
+      if (agent.providerSessionId === undefined || agent.providerRunId === undefined) {
+        throw new WorkflowStateError(`Running review agent ${agent.reviewType} has no provider identity.`)
+      }
+      return this.client.cancel(agent.providerSessionId, agent.providerRunId)
+    }))
+    return results.flatMap((result) => result.status === 'rejected' ? [String(result.reason)] : [])
+  }
+
+  private async failBundle(bundleId: string, reason: string): Promise<ReviewCoordinatorResult> {
+    const errors = await this.stopAgents(bundleId)
+    const failureReason = errors.length === 0 ? reason : `${reason}; Cancellation failed: ${errors.join('; ')}`
+    const terminal = terminalResult(this.store.getReviewBundle(bundleId))
+    if (terminal !== undefined) return terminal
+    return {
+      type: 'failed',
+      reason: failureReason,
+      bundle: this.store.failReviewBundle(bundleId, failureReason, this.now()),
     }
+  }
+
+  private async cancelBundle(bundleId: string, reason: string): Promise<ReviewCoordinatorResult> {
+    const initial = this.store.getReviewBundle(bundleId)
+    if (initial === undefined) throw new WorkflowStateError(`Review bundle ${bundleId} not found.`)
     const initialTerminal = terminalResult(initial)
     if (initialTerminal !== undefined) return initialTerminal
-    this.cancellationReasons.set(bundleId, reason)
-    const startBarrier = this.startBarriers.get(bundleId)
-    await startBarrier
-    const bundle = this.store.getReviewBundle(bundleId)
-    const terminal = terminalResult(bundle)
-    if (terminal !== undefined) {
-      if (startBarrier === undefined) this.cancellationReasons.delete(bundleId)
-      return terminal
+    await this.startBarriers.get(bundleId)
+    const errors = await this.stopAgents(bundleId)
+    const terminal = terminalResult(this.store.getReviewBundle(bundleId))
+    if (terminal !== undefined) return terminal
+    if (errors.length > 0) {
+      const failureReason = `Cancellation failed: ${errors.join('; ')}`
+      return {
+        type: 'failed',
+        reason: failureReason,
+        bundle: this.store.failReviewBundle(bundleId, failureReason, this.now()),
+      }
     }
-    const activeRuns = this.store.listReviewAgents(bundleId).flatMap(
-      (agent) => agent.status === 'running' && agent.providerSessionId !== undefined &&
-        agent.providerRunId !== undefined
-        ? [{
-          providerSessionId: agent.providerSessionId,
-          providerRunId: agent.providerRunId,
-        }]
-        : [],
-    )
-    await Promise.allSettled(activeRuns.map((run) =>
-      this.client.cancel(run.providerSessionId, run.providerRunId)))
-    const latest = this.store.getReviewBundle(bundleId)
-    const latestTerminal = terminalResult(latest)
-    if (latestTerminal !== undefined) {
-      if (startBarrier === undefined) this.cancellationReasons.delete(bundleId)
-      return latestTerminal
-    }
-    const cancelled = this.store.cancelReviewBundle(bundleId, reason, this.now())
-    if (startBarrier === undefined) this.cancellationReasons.delete(bundleId)
     return {
       type: 'cancelled',
-      bundle: cancelled,
+      bundle: this.store.cancelReviewBundle(bundleId, reason, this.now()),
     }
   }
 }

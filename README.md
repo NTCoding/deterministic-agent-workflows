@@ -79,6 +79,10 @@ await coordinator.run({
 
 Each reviewer definition includes an immutable `version`. The coordinator request and completion provenance are pinned to the bundle, provider session and run, base revision, head revision, reviewer version, and a SHA-256 digest of the exact ordered changed-file list. ACP reviewers do not inherit GitHub credentials; provide only constrained MCP servers and non-credential environment values. Calling `run` again with the same bundle resumes persisted provider sessions, while another active bundle for the same pull request fails closed.
 
+Completed bundle reviews expose `completionProvenance` on `StoredReview`, including results returned by completion, `listSessionReviews`, and `listReviews`. Older reviews without bundle provenance remain readable with this property absent; consumers must not treat an absent provenance record as evidence of a reviewed revision.
+
+Cancellation waits for the ACP prompt to settle during the cooperative grace period before process termination. Processes that ignore `SIGTERM` receive `SIGKILL`. Notification, transport, and cleanup errors remain failures rather than successful cancellation. Concurrent calls on the same coordinator share the active bundle execution.
+
 The Pi package also exports `resolvePiMainSessionId`, which consumes `PI_SUBAGENT_PARENT_SESSION` inside the adapter, and `replaceWithFreshPiSession`, which uses Pi's supported `AgentSessionRuntime.newSession()` boundary, durably transfers sole workflow ownership in the configured workflow event database, and then delivers state instructions to the replacement session.
 
 ## OpenCode example

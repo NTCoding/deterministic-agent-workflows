@@ -1,8 +1,14 @@
 import { z } from 'zod'
 import { nonEmptyStringSchema } from './non-empty-string'
-import type {
-  RecordReviewInput, StoredReview
+import {
+  reviewCompletionProvenanceSchema,
+  type RecordReviewInput,
+  type ReviewCompletionProvenance,
+  type StoredReview,
 } from './review-types'
+
+export { reviewCompletionProvenanceSchema } from './review-types'
+export type { ReviewCompletionProvenance } from './review-types'
 
 const promptLineSchema = nonEmptyStringSchema.refine(
   (value) => !value.includes('\n') && !value.includes('\r'),
@@ -29,17 +35,6 @@ export const reviewDefinitionSchema = z.object({
   reviewType: nonEmptyStringSchema,
   instructions: nonEmptyStringSchema,
   version: nonEmptyStringSchema,
-}).strict()
-
-export const reviewCompletionProvenanceSchema = z.object({
-  bundleId: nonEmptyStringSchema,
-  providerSessionId: nonEmptyStringSchema,
-  providerRunId: nonEmptyStringSchema,
-  baseRevision: promptLineSchema,
-  headRevision: promptLineSchema,
-  exactFilesDigest: z.string().regex(/^[a-f\d]{64}$/u),
-  exactFiles: z.array(promptLineSchema).min(1),
-  reviewerDefinitionVersion: nonEmptyStringSchema,
 }).strict()
 
 const reviewBundleRequestObjectSchema = z.object({
@@ -101,8 +96,6 @@ export type ReviewBundleStatus = z.infer<typeof reviewBundleStatusSchema>
 export type ReviewAgentStatus = z.infer<typeof reviewAgentStatusSchema>
 /** @riviere-role value-object */
 export type ReviewDefinition = z.infer<typeof reviewDefinitionSchema>
-/** @riviere-role value-object */
-export type ReviewCompletionProvenance = z.infer<typeof reviewCompletionProvenanceSchema>
 /** @riviere-role value-object */
 export type ReviewBundleRequest = z.infer<typeof reviewBundleRequestSchema>
 /** @riviere-role value-object */
