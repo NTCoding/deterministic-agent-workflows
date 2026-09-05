@@ -246,6 +246,7 @@ const platformOwnedEventTypesExcludedFromWorkflowState = new Set<string>([
   'review-bundle-completed',
   'review-bundle-failed',
   'review-bundle-cancelled',
+  'workflow-session-owner-transferred',
 ])
 
 /** @riviere-role domain-service */
