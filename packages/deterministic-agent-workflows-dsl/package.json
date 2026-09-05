@@ -1,6 +1,6 @@
 {
   "name": "@nt-ai-lab/deterministic-agent-workflow-dsl",
-  "version": "0.4.6",
+  "version": "0.4.7",
   "private": false,
   "type": "module",
   "repository": {
