@@ -35,7 +35,7 @@ export interface ReviewAgentRun {
 export interface ReviewAgentClient {
   start(input: ReviewAgentRequest): Promise<ReviewAgentRun>
   load(input: ReviewAgentRequest, providerSessionId: string): Promise<ReviewAgentRun>
-  cancel(providerSessionId: string): Promise<void>
+  cancel(providerSessionId: string, providerRunId: string): Promise<void>
 }
 
 /** @riviere-role value-object */
@@ -201,6 +201,8 @@ export class ReviewCoordinator {
   private readonly store: ReviewJobStore
   private readonly client: ReviewAgentClient
   private readonly now: () => string
+  private readonly cancellationReasons = new Map<string, string>()
+  private readonly startBarriers = new Map<string, Promise<void>>()
 
   constructor(deps: ReviewCoordinatorDeps) {
     this.store = deps.store
@@ -229,22 +231,60 @@ export class ReviewCoordinator {
     const pendingDefinitions = input.reviews.filter(
       (definition) => storedAgents.get(definition.reviewType)?.status !== 'completed',
     )
-    const starts = await Promise.allSettled(pendingDefinitions.map(async (definition) => {
+    const startPromises = pendingDefinitions.map(async (definition) => {
       const stored = storedAgents.get(definition.reviewType)
       const request = buildAgentRequest(input, definition)
       const run = stored?.providerSessionId === undefined
         ? await this.client.start(request)
         : await this.client.load(request, stored.providerSessionId)
+      try {
+        if (stored?.status === 'running') {
+          this.store.resumeReviewAgent(
+            bundle.bundleId,
+            definition.reviewType,
+            run.providerSessionId,
+            run.providerRunId,
+            this.now(),
+          )
+        } else {
+          this.store.markReviewAgentRunning(
+            bundle.bundleId,
+            definition.reviewType,
+            run.providerSessionId,
+            run.providerRunId,
+            this.now(),
+          )
+        }
+      } catch (error) {
+        await run.cancel()
+        throw error
+      }
+      if (this.cancellationReasons.has(bundle.bundleId)) await run.cancel()
       return {
         definition,
         run
       }
-    }))
-    const startFailure = starts.find(
-      (result): result is PromiseRejectedResult => result.status === 'rejected',
-    )
+    })
+    const startBarrier = Promise.allSettled(startPromises).then(() => undefined)
+    this.startBarriers.set(bundle.bundleId, startBarrier)
+    const starts = await Promise.allSettled(startPromises)
+    this.startBarriers.delete(bundle.bundleId)
     const started = starts.flatMap(
       (result) => result.status === 'fulfilled' ? [result.value] : [],
+    )
+    const cancellationReason = this.cancellationReasons.get(bundle.bundleId)
+    if (cancellationReason !== undefined) {
+      this.cancellationReasons.delete(bundle.bundleId)
+      const current = this.store.getReviewBundle(bundle.bundleId)
+      return {
+        type: 'cancelled',
+        bundle: current?.status === 'cancelled'
+          ? current
+          : this.store.cancelReviewBundle(bundle.bundleId, cancellationReason, this.now()),
+      }
+    }
+    const startFailure = starts.find(
+      (result): result is PromiseRejectedResult => result.status === 'rejected',
     )
     if (startFailure !== undefined) {
       await Promise.allSettled(started.map(({ run }) => run.cancel()))
@@ -253,29 +293,6 @@ export class ReviewCoordinator {
         type: 'failed',
         reason,
         bundle: this.store.failReviewBundle(bundle.bundleId, reason, this.now()),
-      }
-    }
-
-    for (const {
-      definition, run
-    } of started) {
-      const stored = storedAgents.get(definition.reviewType)
-      if (stored?.status === 'running') {
-        this.store.resumeReviewAgent(
-          bundle.bundleId,
-          definition.reviewType,
-          run.providerSessionId,
-          run.providerRunId,
-          this.now(),
-        )
-      } else {
-        this.store.markReviewAgentRunning(
-          bundle.bundleId,
-          definition.reviewType,
-          run.providerSessionId,
-          run.providerRunId,
-          this.now(),
-        )
       }
     }
 
@@ -324,34 +341,43 @@ export class ReviewCoordinator {
   }
 
   async cancel(bundleId: string, reason: string): Promise<ReviewCoordinatorResult> {
-    const bundle = this.store.getReviewBundle(bundleId)
-    if (bundle === undefined) {
+    const initial = this.store.getReviewBundle(bundleId)
+    if (initial === undefined) {
       throw new WorkflowStateError(`Review bundle ${bundleId} not found.`)
     }
-    if (bundle.status === 'cancelled') return {
-      type: 'cancelled',
-      bundle
+    const initialTerminal = terminalResult(initial)
+    if (initialTerminal !== undefined) return initialTerminal
+    this.cancellationReasons.set(bundleId, reason)
+    const startBarrier = this.startBarriers.get(bundleId)
+    await startBarrier
+    const bundle = this.store.getReviewBundle(bundleId)
+    const terminal = terminalResult(bundle)
+    if (terminal !== undefined) {
+      if (startBarrier === undefined) this.cancellationReasons.delete(bundleId)
+      return terminal
     }
-    if (bundle.status === 'completed') return {
-      type: 'completed',
-      bundle
-    }
-    if (bundle.status === 'failed') return {
-      type: 'failed',
-      bundle,
-      reason: bundle.failureReason ?? 'Review bundle failed.',
-    }
-    const providerSessionIds = this.store.listReviewAgents(bundleId).flatMap(
-      (agent) => agent.status === 'running' && agent.providerSessionId !== undefined
-        ? [agent.providerSessionId]
+    const activeRuns = this.store.listReviewAgents(bundleId).flatMap(
+      (agent) => agent.status === 'running' && agent.providerSessionId !== undefined &&
+        agent.providerRunId !== undefined
+        ? [{
+          providerSessionId: agent.providerSessionId,
+          providerRunId: agent.providerRunId,
+        }]
         : [],
     )
-    await Promise.allSettled(
-      providerSessionIds.map((providerSessionId) => this.client.cancel(providerSessionId)),
-    )
+    await Promise.allSettled(activeRuns.map((run) =>
+      this.client.cancel(run.providerSessionId, run.providerRunId)))
+    const latest = this.store.getReviewBundle(bundleId)
+    const latestTerminal = terminalResult(latest)
+    if (latestTerminal !== undefined) {
+      if (startBarrier === undefined) this.cancellationReasons.delete(bundleId)
+      return latestTerminal
+    }
+    const cancelled = this.store.cancelReviewBundle(bundleId, reason, this.now())
+    if (startBarrier === undefined) this.cancellationReasons.delete(bundleId)
     return {
       type: 'cancelled',
-      bundle: this.store.cancelReviewBundle(bundleId, reason, this.now()),
+      bundle: cancelled,
     }
   }
 }

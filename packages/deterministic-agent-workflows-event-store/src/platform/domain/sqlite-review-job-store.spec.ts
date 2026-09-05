@@ -65,6 +65,20 @@ afterEach(() => {
 })
 
 describe('SQLite review job store', () => {
+  it('rejects blank lifecycle timestamps and terminal reasons before transactions', () => {
+    const store = createStore(databasePath())
+    expect(() => store.claimReviewBundle(request('bundle-1'), ' ')).toThrow(/./u)
+    store.claimReviewBundle(request('bundle-1'), '2026-01-01T00:00:00.000Z')
+    expect(() => store.markReviewBundleRunning('bundle-1', ' ')).toThrow(/./u)
+    expect(() => store.failReviewBundle(
+      'bundle-1',
+      ' ',
+      '2026-01-01T00:00:01.000Z',
+    )).toThrow(/./u)
+    expect(store.getReviewBundle('bundle-1')?.status).toBe('requested')
+    store.db.close()
+  })
+
   it('enforces one active bundle per repository pull request', () => {
     const store = createStore(databasePath())
     store.claimReviewBundle(request('bundle-1'), '2026-01-01T00:00:00.000Z')

@@ -211,6 +211,49 @@ describe('ReviewCoordinator', () => {
     store.db.close()
   })
 
+  it('waits for in-flight starts, persists them, and cancels late resolved runs', async () => {
+    const store = createTestStore()
+    const input = {
+      ...request(),
+      reviews: [request().reviews[0]],
+    }
+    const startState: { resolve?: (run: ReviewAgentRun) => void } = {}
+    const start = vi.fn(() => new Promise<ReviewAgentRun>((resolve) => {
+      startState.resolve = resolve
+    }))
+    const runCancel = vi.fn(async () => undefined)
+    const providerCancel = vi.fn(async () => undefined)
+    const coordinator = new ReviewCoordinator({
+      store,
+      client: {
+        start,
+        load: vi.fn(),
+        cancel: providerCancel,
+      },
+      now: () => '2026-01-01T00:00:03.000Z',
+    })
+
+    const running = coordinator.run(input, 'REVIEWING')
+    await vi.waitFor(() => expect(start).toHaveBeenCalledOnce())
+    const cancelling = coordinator.cancel(input.bundleId, 'User cancelled.')
+    startState.resolve?.({
+      providerSessionId: 'late-session',
+      providerRunId: 'late-run',
+      completion: new Promise<ReviewPayload>(() => undefined),
+      cancel: runCancel,
+    })
+
+    await expect(cancelling).resolves.toMatchObject({ type: 'cancelled' })
+    await expect(running).resolves.toMatchObject({ type: 'cancelled' })
+    expect(runCancel).toHaveBeenCalledOnce()
+    expect(store.listReviewAgents(input.bundleId)[0]).toMatchObject({
+      status: 'cancelled',
+      providerSessionId: 'late-session',
+      providerRunId: 'late-run',
+    })
+    store.db.close()
+  })
+
   it('cancels active provider sessions idempotently', async () => {
     const store = createTestStore()
     const input = request()

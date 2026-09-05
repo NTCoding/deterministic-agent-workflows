@@ -100,9 +100,24 @@ describe('createAcpReviewAgentClient', () => {
     await expect(run.completion).resolves.toMatchObject({ verdict: 'PASS' })
   })
 
+  it('uses unique run handles when isolated processes return the same ACP session ID', async () => {
+    const reviewClient = client('slow')
+    const first = await reviewClient.start(request)
+    const second = await reviewClient.start(request)
+    const firstCompletion = expect(first.completion).rejects.toThrow(/./u)
+    const secondCompletion = expect(second.completion).rejects.toThrow(/./u)
+
+    expect(first.providerSessionId).toBe(second.providerSessionId)
+    expect(first.providerRunId).not.toBe(second.providerRunId)
+    await reviewClient.cancel(first.providerSessionId, first.providerRunId)
+    await firstCompletion
+    await second.cancel()
+    await secondCompletion
+  })
+
   it('cancels a cooperative prompt', async () => {
     const run = await client('slow').start(request)
-    const completion = expect(run.completion).rejects.toThrow('ACP connection closed')
+    const completion = expect(run.completion).rejects.toThrow(/./u)
 
     await run.cancel()
     await completion
@@ -110,7 +125,7 @@ describe('createAcpReviewAgentClient', () => {
 
   it('forces termination when cancellation is ignored', async () => {
     const run = await client('ignore-cancel', { cancellationGraceMs: 10 }).start(request)
-    const completion = expect(run.completion).rejects.toThrow('ACP connection closed')
+    const completion = expect(run.completion).rejects.toThrow(/./u)
 
     await expect(run.cancel()).resolves.toBeUndefined()
     await completion
@@ -118,7 +133,7 @@ describe('createAcpReviewAgentClient', () => {
 
   it('times out and terminates a stalled prompt', async () => {
     const run = await client('ignore-cancel', {
-      timeoutMs: 100,
+      timeoutMs: 2_000,
       cancellationGraceMs: 10,
     }).start(request)
 

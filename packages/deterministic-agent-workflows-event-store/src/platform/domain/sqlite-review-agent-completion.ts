@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto'
+import { z } from 'zod'
 import type {
   RecordReviewInput,
   ReviewCompletionProvenance,
@@ -43,6 +44,8 @@ export function completeReviewAgentTransaction(
     readonly review: StoredReview 
   } {
   const parsedInput = recordReviewInputSchema.parse(input)
+  z.string().trim().min(1).parse(createdAt)
+  z.string().trim().min(1).parse(eventState)
   const provenance = reviewCompletionProvenanceSchema.parse(rawProvenance)
   if (parsedInput.reviewType !== reviewType) {
     throw new WorkflowStateError(

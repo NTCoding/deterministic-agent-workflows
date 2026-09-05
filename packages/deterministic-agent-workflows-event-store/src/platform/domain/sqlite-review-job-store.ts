@@ -56,6 +56,8 @@ export const createReviewAgentsTableSql = `
   )
 `
 
+const lifecycleMetadataSchema = z.string().trim().min(1)
+
 const reviewBundleRowSchema = z.object({
   bundle_id: z.string(),
   session_id: z.string(),
@@ -147,6 +149,14 @@ function appendPlatformEvent(
   ).run(sessionId, type, at, state, JSON.stringify(payload))
 }
 
+function validateLifecycleMetadata(
+  timestamp: string,
+  reason?: string,
+): void {
+  lifecycleMetadataSchema.parse(timestamp)
+  if (reason !== undefined) lifecycleMetadataSchema.parse(reason)
+}
+
 function updateBundleStatus(
   db: SqliteDatabase,
   bundleId: string,
@@ -155,6 +165,7 @@ function updateBundleStatus(
   eventType: 'review-bundle-started' | 'review-bundle-completed' | 'review-bundle-failed' | 'review-bundle-cancelled',
   reason?: string,
 ): StoredReviewBundle {
+  validateLifecycleMetadata(updatedAt, reason)
   db.exec('BEGIN IMMEDIATE')
   try {
     const current = requireReviewBundle(db, bundleId)
@@ -172,6 +183,7 @@ export function createSqliteReviewJobStore(db: SqliteDatabase): ReviewJobStore {
   return {
     claimReviewBundle(input: ReviewBundleRequest, createdAt: string): StoredReviewBundle {
       const parsed = reviewBundleRequestSchema.parse(input)
+      validateLifecycleMetadata(createdAt)
       db.exec('BEGIN IMMEDIATE')
       try {
         db.prepare(`
@@ -263,6 +275,9 @@ export function createSqliteReviewJobStore(db: SqliteDatabase): ReviewJobStore {
       providerRunId: string,
       updatedAt: string,
     ): StoredReviewAgent {
+      validateLifecycleMetadata(updatedAt)
+      validateLifecycleMetadata(providerSessionId)
+      validateLifecycleMetadata(providerRunId)
       db.exec('BEGIN IMMEDIATE')
       try {
         const bundle = requireReviewBundle(db, bundleId)
@@ -297,6 +312,9 @@ export function createSqliteReviewJobStore(db: SqliteDatabase): ReviewJobStore {
       providerRunId: string,
       updatedAt: string,
     ): StoredReviewAgent {
+      validateLifecycleMetadata(updatedAt)
+      validateLifecycleMetadata(providerSessionId)
+      validateLifecycleMetadata(providerRunId)
       db.exec('BEGIN IMMEDIATE')
       try {
         const bundle = requireReviewBundle(db, bundleId)
@@ -339,6 +357,7 @@ export function createSqliteReviewJobStore(db: SqliteDatabase): ReviewJobStore {
       }, bundleId, reviewType, provenance, createdAt, input, eventState)
     },
     completeReviewBundle(bundleId: string, updatedAt: string): StoredReviewBundle {
+      validateLifecycleMetadata(updatedAt)
       db.exec('BEGIN IMMEDIATE')
       try {
         const bundle = requireReviewBundle(db, bundleId)

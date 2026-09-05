@@ -161,10 +161,9 @@ async function openProcess(
   const stream = ndJsonStream(output, input)
   const connection = app.connect(stream)
   const context = connection.agent
-  const startupTimeoutMs = Math.max(config.timeoutMs, 5_000)
   const initializationTimeout = createTimeout<never>(
-    startupTimeoutMs,
-    `ACP initialization timed out after ${String(startupTimeoutMs)}ms.`,
+    config.timeoutMs,
+    `ACP initialization timed out after ${String(config.timeoutMs)}ms.`,
   )
   try {
     const initialization = await Promise.race([
@@ -314,10 +313,9 @@ async function openSession(
   config: AcpReviewAgentClientConfig,
 ): Promise<string> {
   const mcpServers = [...(config.mcpServers ?? [])]
-  const startupTimeoutMs = Math.max(config.timeoutMs, 5_000)
   const timeout = createTimeout<never>(
-    startupTimeoutMs,
-    `ACP session open timed out after ${String(startupTimeoutMs)}ms.`,
+    config.timeoutMs,
+    `ACP session open timed out after ${String(config.timeoutMs)}ms.`,
   )
   try {
     if (loadSessionId === undefined) {
@@ -367,7 +365,7 @@ export function createAcpReviewAgentClient(
       'ACP reviewer cancellationGraceMs must be a positive safe integer.',
     )
   }
-  const activeBySession = new Map<string, ActiveProcess>()
+  const activeByRun = new Map<string, ActiveProcess>()
 
   async function startSession(
     input: ReviewAgentRequest,
@@ -375,15 +373,11 @@ export function createAcpReviewAgentClient(
   ): Promise<ReviewAgentRun> {
     const active = await openProcess(config, input.workingDirectory)
     const sessionId = await openSession(active, input, loadSessionId, config)
-    if (activeBySession.has(sessionId)) {
-      await stopProcess(active, config.cancellationGraceMs)
-      throw new AcpProtocolError(`ACP provider session ${sessionId} is already active.`)
-    }
-    activeBySession.set(sessionId, active)
     const run = createRun(active, sessionId, input, config)
+    activeByRun.set(run.providerRunId, active)
     void run.completion.then(
-      () => activeBySession.delete(sessionId),
-      () => activeBySession.delete(sessionId),
+      () => activeByRun.delete(run.providerRunId),
+      () => activeByRun.delete(run.providerRunId),
     )
     return run
   }
@@ -391,8 +385,8 @@ export function createAcpReviewAgentClient(
   return {
     start: (input) => startSession(input),
     load: (input, providerSessionId) => startSession(input, providerSessionId),
-    async cancel(providerSessionId: string): Promise<void> {
-      const active = activeBySession.get(providerSessionId)
+    async cancel(providerSessionId: string, providerRunId: string): Promise<void> {
+      const active = activeByRun.get(providerRunId)
       if (active === undefined) return
       try {
         await Promise.race([
@@ -403,7 +397,7 @@ export function createAcpReviewAgentClient(
         try {
           await stopProcess(active, config.cancellationGraceMs)
         } finally {
-          activeBySession.delete(providerSessionId)
+          activeByRun.delete(providerRunId)
         }
       }
     },
