@@ -193,6 +193,10 @@ Status legend: `TODO`, `IN_PROGRESS`, `BLOCKED`, `DONE`
 
 - [x] **DONE** Mark stop prevention messages as automatic workflow hook responses, make their lack of user approval explicit, tell blocked agents how to request assistance, and allow consumers to append project-specific instructions.
 
+### 15) Customise unknown command responses
+
+- [x] **DONE** Require each workflow implementation to provide the message returned when an unknown workflow command is invoked.
+
 ---
 
 ## Acceptance criteria for “done”

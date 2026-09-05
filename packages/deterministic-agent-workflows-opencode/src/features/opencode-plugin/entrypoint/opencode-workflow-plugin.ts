@@ -240,6 +240,7 @@ export function createOpenCodeWorkflowPlugin<
           ? createWorkflowRunner({
             workflowDefinition: config.workflowDefinition,
             routes,
+            unknownCommandMessage: config.unknownCommandMessage,
             bashForbidden: config.bashForbidden,
             isWriteAllowed: config.isWriteAllowed,
             questionToolName: OPENCODE_QUESTION_TOOL,
@@ -247,6 +248,7 @@ export function createOpenCodeWorkflowPlugin<
           : createWorkflowRunner({
             workflowDefinition: config.workflowDefinition,
             routes,
+            unknownCommandMessage: config.unknownCommandMessage,
             bashForbidden: config.bashForbidden,
             isWriteAllowed: config.isWriteAllowed,
             questionToolName: OPENCODE_QUESTION_TOOL,

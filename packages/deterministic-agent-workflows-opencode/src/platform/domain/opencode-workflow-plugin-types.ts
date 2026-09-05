@@ -42,6 +42,7 @@ export type OpenCodeWorkflowPluginConfig<
   readonly pluginRoot: string
   readonly databasePath?: string
   readonly routes?: RouteMap<TWorkflow, TState>
+  readonly unknownCommandMessage: string
   readonly commandDirectories?: readonly string[]
   readonly commandPrefix?: string
   readonly stopPreventionMessage?: string

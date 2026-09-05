@@ -131,6 +131,7 @@ function createTestRoot() {
 function createConfig(root, databasePath = join(root, 'workflow-events.db')) {
   return {
     workflowDefinition,
+    unknownCommandMessage: 'Run a supported workflow operation.',
     routes: {
       init: { type: 'session-start' },
       transition: {

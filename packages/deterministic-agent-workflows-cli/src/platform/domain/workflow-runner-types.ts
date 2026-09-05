@@ -38,6 +38,7 @@ export type WorkflowRunnerConfig<
 > = {
   readonly workflowDefinition: WorkflowDefinition<TWorkflow, TState, TDeps, TStateName, TOperation, TTransitionContext>
   readonly routes: RouteMap<TWorkflow, TState>
+  readonly unknownCommandMessage: string
   readonly bashForbidden?: BashForbiddenConfig
   readonly isWriteAllowed?: (filePath: string, state: TState) => boolean
   readonly questionToolName?: string

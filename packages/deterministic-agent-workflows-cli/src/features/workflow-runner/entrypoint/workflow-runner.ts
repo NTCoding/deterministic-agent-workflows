@@ -226,7 +226,7 @@ function handleRoute<
   if (builtin !== undefined) return builtin
   const routeDef = Object.hasOwn(config.routes, routeName) ? config.routes[routeName] : undefined
   if (routeDef === undefined) return {
-    output: `Unknown command: ${routeName}`,
+    output: config.unknownCommandMessage,
     exitCode: EXIT_ERROR
   }
 
