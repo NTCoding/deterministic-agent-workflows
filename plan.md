@@ -189,6 +189,10 @@ Status legend: `TODO`, `IN_PROGRESS`, `BLOCKED`, `DONE`
 - [x] **DONE** Add a Pi extension factory with explicit workflow start, safe resumption of active workflows, workflow commands, tool enforcement after workflow start, stopping recovery, event persistence, and Control Center transcript support.
 - [x] **DONE** Block Pi tree navigation and forks after workflow start so the linear workflow event stream cannot retain state from an abandoned branch.
 
+### 14) Distinguish automatic stop prevention responses
+
+- [x] **DONE** Mark stop prevention messages as automatic workflow hook responses, make their lack of user approval explicit, tell blocked agents how to request assistance, and allow consumers to append project-specific instructions.
+
 ---
 
 ## Acceptance criteria for “done”

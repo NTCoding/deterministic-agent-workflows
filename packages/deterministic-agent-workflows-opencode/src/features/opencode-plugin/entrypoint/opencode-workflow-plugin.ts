@@ -25,6 +25,7 @@ import type { PlatformContext } from '@nt-ai-lab/deterministic-agent-workflow-cl
 import {
   createPreToolUseHandler,
   createWorkflowRunner,
+  formatStopPreventionMessage,
   getRepositoryName,
 } from '@nt-ai-lab/deterministic-agent-workflow-cli'
 import { createStore } from '@nt-ai-lab/deterministic-agent-workflow-event-store'
@@ -36,7 +37,7 @@ import type {
 import { OpenCodeTranscriptReader } from '../../../platform/infra/external-clients/opencode/opencode-transcript-reader'
 import { createOpenCodeSessionContext } from '../../../platform/infra/external-clients/opencode/opencode-session-context'
 
-export const IDLE_RECOVERY_MESSAGE = 'You have stopped. You should never stop until the workflow is complete unless your current state permits stopping.'
+export const IDLE_RECOVERY_MESSAGE = formatStopPreventionMessage()
 const OPENCODE_QUESTION_TOOL = 'question'
 
 const TRANSLATION_NOTE = [
@@ -73,13 +74,13 @@ function createRunnerOptions(sessionID: string, worktree: string, dbPath: string
   }
 }
 
-async function promptIdleRecovery(client: OpenCodePluginInput['client'], sessionID: string): Promise<void> {
+async function promptIdleRecovery(client: OpenCodePluginInput['client'], sessionID: string, customMessage?: string): Promise<void> {
   await client.session.promptAsync({
     path: { id: sessionID },
     body: {
       parts: [{
         type: 'text',
-        text: IDLE_RECOVERY_MESSAGE,
+        text: formatStopPreventionMessage(undefined, customMessage),
       }],
     },
   })
@@ -181,7 +182,7 @@ export function createOpenCodeWorkflowPlugin<
         return engine.checkStopping(sessionID, 'stop').type === 'success'
       }),
       sendIdleRecoveryPrompt: async (sessionID) => {
-        await promptIdleRecovery(input.client, sessionID)
+        await promptIdleRecovery(input.client, sessionID, config.stopPreventionMessage)
       },
     })
 

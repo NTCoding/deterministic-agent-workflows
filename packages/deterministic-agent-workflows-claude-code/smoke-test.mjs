@@ -84,7 +84,7 @@ function seedSession(sessionId) {
   }])
 }
 
-function invokeQuestion(sessionId, allowIdle) {
+function invokeHook(sessionId, allowIdle, hookEventName = 'PreToolUse') {
   let stdout = ''
   let exitCode
   createClaudeCodeWorkflowCli({
@@ -98,6 +98,7 @@ function invokeQuestion(sessionId, allowIdle) {
         ? 'planning questions are disabled by a custom gate'
         : true,
     }],
+    stopPreventionMessage: 'Follow the Claude Code recovery procedure.',
     buildWorkflowDeps: () => ({}),
     processDeps: {
       getEnv: (name) => ({
@@ -115,7 +116,7 @@ function invokeQuestion(sessionId, allowIdle) {
           session_id: sessionId,
           transcript_path: transcriptPath,
           cwd: root,
-          hook_event_name: 'PreToolUse',
+          hook_event_name: hookEventName,
           tool_name: 'AskUserQuestion',
           tool_input: {},
           tool_use_id: 'question-1',
@@ -133,12 +134,19 @@ function invokeQuestion(sessionId, allowIdle) {
 
 try {
   seedSession('blocked')
-  const blocked = invokeQuestion('blocked', false)
+  const blocked = invokeHook('blocked', false)
   assert.equal(blocked.exitCode, 2)
   assert.match(blocked.stdout, /planning questions are disabled by a custom gate/)
 
   seedSession('allowed')
-  const allowed = invokeQuestion('allowed', true)
+  const stop = invokeHook('blocked', false, 'Stop')
+  assert.equal(stop.exitCode, 0)
+  assert.match(JSON.parse(stop.stdout).reason, /^\[Automatic Workflow Hook Response\]/)
+  assert.match(JSON.parse(stop.stdout).reason, /The user has not seen this/)
+  assert.match(JSON.parse(stop.stdout).reason, /Workflow state PLANNING does not allow stopping/)
+  assert.match(JSON.parse(stop.stdout).reason, /Follow the Claude Code recovery procedure\.$/)
+
+  const allowed = invokeHook('allowed', true)
   assert.equal(allowed.exitCode, 0)
   assert.equal(allowed.stdout, '')
 } finally {

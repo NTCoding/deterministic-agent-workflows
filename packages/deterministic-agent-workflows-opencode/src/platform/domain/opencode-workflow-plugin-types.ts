@@ -44,4 +44,5 @@ export type OpenCodeWorkflowPluginConfig<
   readonly routes?: RouteMap<TWorkflow, TState>
   readonly commandDirectories?: readonly string[]
   readonly commandPrefix?: string
+  readonly stopPreventionMessage?: string
 }

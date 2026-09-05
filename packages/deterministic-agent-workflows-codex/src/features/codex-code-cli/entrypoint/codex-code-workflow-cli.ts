@@ -19,6 +19,7 @@ import {
   createWorkflowRunner,
   formatContextInjection,
   formatDenyDecision,
+  formatStopDenyDecision,
   getRepositoryName,
   type PlatformContext,
   type PreToolUseHandlerFn,
@@ -174,7 +175,7 @@ function handleHookInvocation<
     case 'SessionStart': return startSession(config, engine, parsed.session_id, parsed.transcript_path, parsed.cwd, now)
     case 'PreToolUse': return checkToolUse(config, engine, raw)
     case 'SubagentStart': return registerSubagent(engine, raw)
-    case 'Stop': return preventUnsupportedStop(engine, parsed.session_id)
+    case 'Stop': return preventUnsupportedStop(engine, parsed.session_id, config.stopPreventionMessage)
   }
 }
 
@@ -330,17 +331,14 @@ function preventUnsupportedStop<
   TDeps,
   TStateName extends string,
   TOperation extends string,
->(engine: WorkflowEngine<TWorkflow, TState, TDeps, TStateName, TOperation>, sessionId: string): RunnerResult {
+>(engine: WorkflowEngine<TWorkflow, TState, TDeps, TStateName, TOperation>, sessionId: string, stopPreventionMessage?: string): RunnerResult {
   if (!engine.hasSessionStarted(sessionId)) return {
     output: '',
     exitCode: 0
   }
   const result = engine.checkStopping(sessionId, 'stop')
   if (result.type === 'blocked') return {
-    output: JSON.stringify({
-      decision: 'block',
-      reason: result.output,
-    }),
+    output: formatStopDenyDecision(result.output, stopPreventionMessage),
     exitCode: 0,
   }
   return toRunnerResult(result)

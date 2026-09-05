@@ -51,4 +51,5 @@ export type PiWorkflowExtensionConfig<
   readonly databasePath?: string
   readonly commandName?: string
   readonly toolName?: string
+  readonly stopPreventionMessage?: string
 }

@@ -14,7 +14,6 @@ import { pass } from '../deterministic-agent-workflows-engine/dist/index.js'
 import { createStore } from '../deterministic-agent-workflows-event-store/dist/index.js'
 import {
   createPiWorkflowExtension,
-  PI_IDLE_RECOVERY_MESSAGE,
   PI_SESSION_BRANCH_BLOCK_MESSAGE,
 } from './dist/index.js'
 
@@ -267,7 +266,9 @@ try {
   assert.match(blockedQuestion.reason, /does not allow asking user questions/)
 
   await runtime.handlers.get('agent_settled')({ type: 'agent_settled' }, context)
-  assert.equal(runtime.sentUserMessages[0], PI_IDLE_RECOVERY_MESSAGE)
+  assert.match(runtime.sentUserMessages[0], /^\[Automatic Workflow Hook Response\]/)
+  assert.match(runtime.sentUserMessages[0], /The user has not seen this/)
+  assert.match(runtime.sentUserMessages[0], /Workflow state PLANNING does not allow stopping\./)
 
   const treeResult = await runtime.handlers.get('session_before_tree')({
     type: 'session_before_tree',

@@ -78,14 +78,14 @@ function resolvePreToolUseHandler<
   })
 }
 
-function engineResultToRunnerResult(result: EngineResult, blockStop = false): RunnerResult {
+function engineResultToRunnerResult(result: EngineResult, blockStop = false, stopPreventionMessage?: string): RunnerResult {
   switch (result.type) {
     case 'success': return {
       output: result.output,
       exitCode: EXIT_ALLOW 
     }
     case 'blocked': return {
-      output: blockStop ? formatStopDenyDecision(result.output) : result.output,
+      output: blockStop ? formatStopDenyDecision(result.output, stopPreventionMessage) : result.output,
       exitCode: blockStop ? EXIT_ALLOW : EXIT_BLOCK,
     }
     case 'error': return {
@@ -160,7 +160,7 @@ export function createWorkflowRunner<
       output: 'No command and no stdin available',
       exitCode: EXIT_ERROR 
     }
-    return handleHook(engine, resolvedHandler, config.questionToolName, options.readStdin)
+    return handleHook(engine, resolvedHandler, config.questionToolName, config.stopPreventionMessage, options.readStdin)
   }
 }
 
@@ -288,7 +288,7 @@ function handleHook<
   TDeps,
   TStateName extends string,
   TOperation extends string,
->(engine: WorkflowEngine<TWorkflow, TState, TDeps, TStateName, TOperation>, resolvedHandler: PreToolUseHandlerFn<TWorkflow, TState, TDeps, TStateName, TOperation> | undefined, questionToolName: string | undefined, readStdin: () => string): RunnerResult {
+>(engine: WorkflowEngine<TWorkflow, TState, TDeps, TStateName, TOperation>, resolvedHandler: PreToolUseHandlerFn<TWorkflow, TState, TDeps, TStateName, TOperation> | undefined, questionToolName: string | undefined, stopPreventionMessage: string | undefined, readStdin: () => string): RunnerResult {
   const stdin = readStdin()
   const hookInput: unknown = JSON.parse(stdin)
   const commonParse = hookCommonInputSchema.safeParse(hookInput)
@@ -319,7 +319,7 @@ function handleHook<
     case 'PreToolUse': return handlePreToolUseHook(engine, resolvedHandler, questionToolName, stdin)
     case 'SubagentStart': return handleSubagentStartHook(engine, stdin)
     case 'TeammateIdle': return handleTeammateIdleHook(engine, stdin)
-    case 'Stop': return engineResultToRunnerResult(engine.checkStopping(common.session_id, 'stop'), true)
+    case 'Stop': return engineResultToRunnerResult(engine.checkStopping(common.session_id, 'stop'), true, stopPreventionMessage)
     default: return {
       output: '',
       exitCode: EXIT_ALLOW 
