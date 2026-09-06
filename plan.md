@@ -209,6 +209,8 @@ Status legend: `TODO`, `IN_PROGRESS`, `BLOCKED`, `DONE`
 
 #### Follow-up validation findings
 
+- [x] **DONE** Claim exclusive review execution through a domain port before provider launch across coordinator instances and database connections. SQLite owns the exclusive lock without blocking event writes; high-level factory setup is unchanged. Regressions cover the reproduced race, cancellation isolation, rejected cancellation retry, snapshot reconciliation, release after failure, canonical path aliases, in-memory stores, unavailable lock storage, and process-exit recovery of persisted sessions. Frozen installation and uncached full verification passed. Coordination lock recovery does not itself terminate external provider processes.
+
 - [x] **DONE** Fix ACP process-group cleanup on macOS/Linux, reject unsupported hosts before launch, and cover descendants surviving cancellation or an early parent exit. Windows support is deferred by the user. Frozen installation and uncached full verification passed; tests also cover normal completion, protocol failure, timeout, signalling errors, bounded forced termination and isolation from another reviewer group.
 
 - [x] **DONE** Preserve strict completion provenance through public stored reviews and both query paths while keeping legacy reviews readable.

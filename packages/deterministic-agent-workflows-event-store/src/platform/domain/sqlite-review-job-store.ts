@@ -14,6 +14,7 @@ import {
   storedReviewBundleSchema,
   WorkflowStateError,
 } from '@nt-ai-lab/deterministic-agent-workflow-engine'
+import { claimSqliteExclusiveLock } from '../infra/external-clients/sqlite/sqlite-exclusive-lock'
 import type { SqliteDatabase } from '../infra/external-clients/sqlite/sqlite-runtime'
 import { updateReviewBundleLifecycle } from './sqlite-review-bundle-lifecycle'
 import { completeReviewAgentTransaction } from './sqlite-review-agent-completion'
@@ -181,6 +182,10 @@ function updateBundleStatus(
 /** @riviere-role domain-service */
 export function createSqliteReviewJobStore(db: SqliteDatabase): ReviewJobStore {
   return {
+    claimReviewExecution(bundleId: string): () => void {
+      validateLifecycleMetadata(bundleId)
+      return claimSqliteExclusiveLock(db, `review-execution:${bundleId}`)
+    },
     claimReviewBundle(input: ReviewBundleRequest, createdAt: string): StoredReviewBundle {
       const parsed = reviewBundleRequestSchema.parse(input)
       validateLifecycleMetadata(createdAt)
