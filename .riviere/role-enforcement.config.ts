@@ -33,6 +33,7 @@ const externalClientRoles: RoleName[] = [
 const cliPresentationRoles: RoleName[] = ['cli-output-formatter', 'cli-error']
 
 const packages = [
+  'packages/deterministic-agent-workflows-acp',
   'packages/deterministic-agent-workflows-cli',
   'packages/deterministic-agent-workflows-engine',
   'packages/deterministic-agent-workflows-dsl',
@@ -57,6 +58,7 @@ export const config = roleEnforcement({
   roleDefinitionsDir: '.riviere/role-definitions',
   roles: allRoles,
   workspacePackageSources: {
+    '@nt-ai-lab/deterministic-agent-workflow-acp': 'packages/deterministic-agent-workflows-acp/src/index.ts',
     '@nt-ai-lab/deterministic-agent-workflow-cli': 'packages/deterministic-agent-workflows-cli/src/index.ts',
     '@nt-ai-lab/deterministic-agent-workflow-engine': 'packages/deterministic-agent-workflows-engine/src/index.ts',
     '@nt-ai-lab/deterministic-agent-workflow-dsl': 'packages/deterministic-agent-workflows-dsl/src/index.ts',

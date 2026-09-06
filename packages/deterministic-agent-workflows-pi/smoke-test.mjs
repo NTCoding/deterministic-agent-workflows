@@ -1,4 +1,7 @@
 import assert from 'node:assert/strict'
+
+// Smoke-test sessions are fixtures, not children of the process running the suite.
+delete process.env.PI_SUBAGENT_PARENT_SESSION
 import {
   mkdirSync,
   mkdtempSync,

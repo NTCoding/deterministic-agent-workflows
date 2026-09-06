@@ -197,6 +197,28 @@ Status legend: `TODO`, `IN_PROGRESS`, `BLOCKED`, `DONE`
 
 - [x] **DONE** Require each workflow implementation to provide the message returned when an unknown workflow command is invoked.
 
+### 16) Workflow-owned ACP review coordination (living-architecture #526)
+
+- [x] **DONE** Add provider-neutral durable review-job contracts, lifecycle events, and coordinator behavior outside the synchronous `WorkflowEngine`.
+- [x] **DONE** Add an ACP-specific adapter package with pinned SDK, supervised processes, cancellation, and recovery.
+- [x] **DONE** Add event-store persistence with a one-active-bundle invariant and atomic lifecycle/review completion.
+- [x] **DONE** Resolve Pi child delegation from `PI_SUBAGENT_PARENT_SESSION` and prove a fresh context window within the same conversation.
+- [x] **DONE** Preserve the high-level consumer API and consumer-owned review definitions without leaking platform events or Living Architecture names.
+- [x] **DONE** Consolidate repository guidance into scoped `AGENTS.md` and remove the legacy instruction file and references.
+- [x] **DONE** Run focused checks and the full `pnpm verify` pipeline in the isolated implementation worktree without changing lint or coverage configuration. This does not complete the separate manual Control Center or release-readiness checklists.
+
+#### Follow-up validation findings
+
+- [x] **DONE** Preserve strict completion provenance through public stored reviews and both query paths while keeping legacy reviews readable.
+- [x] **DONE** Supervise cooperative cancellation, bounded notification failures, forced process termination, and active-run cleanup.
+- [x] **DONE** Record cancellation failures and share concurrent calls on one coordinator without rewriting terminal bundles.
+- [x] **DONE** Exercise SQLite claim/completion/cancellation races on independent worker connections and roll back a failed completion event atomically.
+- [x] **DONE** Preserve an already-started child's own workflow and prove a persisted state-only context window with the installed Pi runtime, retaining the session and full transcript.
+- [x] **DONE** Remove obsolete session ownership transfer plumbing; context refresh retains the existing session identity.
+- [x] **DONE** Add Pi factory-owned idle automation, review-store lifetime, shutdown cancellation, and state-only model context through the installed extension API. Runtime tests inspect actual model requests, retained system instructions, repeated refresh, and reopening. The installed compaction command cannot refresh small sessions, so the extension uses a persisted context boundary instead of requiring a live `AgentSession`.
+- [x] **DONE** Persist each completed reviewer independently so a later provider failure cannot discard an already-recorded result. A regression proves the completed review and provenance survive while only the remaining agents are cancelled.
+- [ ] **IN_PROGRESS** Verify the combined diff locally and on PR 44, then inspect the complete public API before consumer integration.
+
 ---
 
 ## Acceptance criteria for “done”

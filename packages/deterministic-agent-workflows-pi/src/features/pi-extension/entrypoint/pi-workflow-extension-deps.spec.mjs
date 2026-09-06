@@ -1,9 +1,18 @@
 import {
+  afterAll,
   describe,
   expect,
   it,
   vi,
 } from 'vitest'
+
+const inheritedParentSession = process.env.PI_SUBAGENT_PARENT_SESSION
+delete process.env.PI_SUBAGENT_PARENT_SESSION
+afterAll(() => {
+  if (inheritedParentSession !== undefined) {
+    process.env.PI_SUBAGENT_PARENT_SESSION = inheritedParentSession
+  }
+})
 
 const captured = vi.hoisted(() => ({engineDeps: undefined,}))
 

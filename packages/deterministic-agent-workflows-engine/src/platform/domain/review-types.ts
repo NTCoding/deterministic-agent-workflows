@@ -56,7 +56,24 @@ export const recordReviewInputSchema = reviewPayloadSchema.extend({
   sourceState: nonEmptyStringSchema.optional(),
 }).strict()
 
+const provenanceRevisionSchema = nonEmptyStringSchema.refine(
+  (value) => !value.includes('\n') && !value.includes('\r'),
+  'Expected a single-line value.',
+)
+
+export const reviewCompletionProvenanceSchema = z.object({
+  bundleId: nonEmptyStringSchema,
+  providerSessionId: nonEmptyStringSchema,
+  providerRunId: nonEmptyStringSchema,
+  baseRevision: provenanceRevisionSchema,
+  headRevision: provenanceRevisionSchema,
+  exactFilesDigest: z.string().regex(/^[a-f\d]{64}$/u),
+  exactFiles: z.array(provenanceRevisionSchema).min(1),
+  reviewerDefinitionVersion: nonEmptyStringSchema,
+}).strict()
+
 export const storedReviewSchema = recordReviewInputSchema.extend({
+  completionProvenance: reviewCompletionProvenanceSchema.optional(),
   id: z.number().int().positive(),
   sessionId: nonEmptyStringSchema,
   createdAt: nonEmptyStringSchema,
@@ -92,6 +109,9 @@ export type ReviewPayload = z.infer<typeof reviewPayloadSchema>
 
 /** @riviere-role value-object */
 export type RecordReviewInput = z.infer<typeof recordReviewInputSchema>
+
+/** @riviere-role value-object */
+export type ReviewCompletionProvenance = z.infer<typeof reviewCompletionProvenanceSchema>
 
 /** @riviere-role value-object */
 export type StoredReview = z.infer<typeof storedReviewSchema>

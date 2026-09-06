@@ -1,0 +1,32 @@
+{
+  "name": "@nt-ai-lab/deterministic-agent-workflow-acp",
+  "version": "0.1.0",
+  "private": false,
+  "type": "module",
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/NTCoding/deterministic-agent-workflows.git",
+    "directory": "packages/deterministic-agent-workflows-acp"
+  },
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "@agentclientprotocol/sdk": "1.4.0",
+    "@nt-ai-lab/deterministic-agent-workflow-cli": "workspace:*",
+    "@nt-ai-lab/deterministic-agent-workflow-engine": "workspace:*"
+  },
+  "devDependencies": {
+    "vitest": "^2.1.9"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

@@ -34,6 +34,14 @@ export type {
 } from './platform/domain/workflow-cli-types'
 export { createDefaultProcessDeps } from './platform/infra/external-clients/process/default-process-deps'
 export type { PlatformContext } from './platform/domain/platform-context'
+export { ReviewCoordinator } from './platform/domain/review-coordinator'
+export type {
+  ReviewAgentClient,
+  ReviewAgentRequest,
+  ReviewAgentRun,
+  ReviewCoordinatorDeps,
+  ReviewCoordinatorResult,
+} from './platform/domain/review-coordinator'
 export { getRepositoryName } from './platform/infra/external-clients/git/repository-name'
 export {
   EXIT_ALLOW,

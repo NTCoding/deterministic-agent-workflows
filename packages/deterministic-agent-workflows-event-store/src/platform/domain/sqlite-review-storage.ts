@@ -3,12 +3,14 @@ import type {
   ListedReview,
   RecordReviewInput,
   ReviewFilters,
+  ReviewCompletionProvenance,
   StoredReview,
 } from '@nt-ai-lab/deterministic-agent-workflow-engine'
 import {
   listedReviewSchema,
   recordReviewInputSchema,
   reviewFiltersSchema,
+  reviewCompletionProvenanceSchema,
   storedReviewSchema,
 } from '@nt-ai-lab/deterministic-agent-workflow-engine'
 
@@ -73,7 +75,7 @@ export const listedReviewRowsSchema = z.array(z.object({
   repository: z.string().nullable(),
 }))
 
-const persistedReviewPayloadSchema = recordReviewInputSchema.passthrough()
+const persistedReviewPayloadSchema = recordReviewInputSchema.extend({completionProvenance: reviewCompletionProvenanceSchema.optional(),}).passthrough()
 
 /** @riviere-role value-object */
 export type ReviewRow = z.infer<typeof reviewRowsSchema>[number]
@@ -165,10 +167,14 @@ function parseReviewPayload(payload: unknown): {
   readonly branch?: string
   readonly pullRequestNumber?: number
   readonly findings: RecordReviewInput['findings']
+  readonly completionProvenance?: ReviewCompletionProvenance
 } {
   const parsed = persistedReviewPayloadSchema.parse(payload)
   return {
     findings: parsed.findings,
+    ...(parsed.completionProvenance === undefined
+      ? {}
+      : { completionProvenance: parsed.completionProvenance }),
     ...(parsed.summary === undefined ? {} : { summary: parsed.summary }),
     ...(parsed.branch === undefined ? {} : { branch: parsed.branch }),
     ...(parsed.pullRequestNumber === undefined ? {} : { pullRequestNumber: parsed.pullRequestNumber }),

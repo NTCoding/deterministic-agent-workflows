@@ -7,7 +7,7 @@ module.exports = {
       comment: 'engine must not depend on provider adapters',
       from: { path: '^packages/deterministic-agent-workflows-engine/src' },
       to: {
-        path: '(^packages/deterministic-agent-workflows-(claude-code|codex|opencode|pi)/src)|(^@nt-ai-lab/deterministic-agent-workflow-(claude-code|codex|opencode|pi)$)',
+        path: '(^packages/deterministic-agent-workflows-(acp|claude-code|codex|opencode|pi)/src)|(^@nt-ai-lab/deterministic-agent-workflow-(acp|claude-code|codex|opencode|pi)$)',
       },
     },
     {
@@ -25,7 +25,7 @@ module.exports = {
       comment: 'event-store must not depend on adapter packages',
       from: { path: '^packages/deterministic-agent-workflows-event-store/src' },
       to: {
-        path: '(^packages/deterministic-agent-workflows-(claude-code|codex|opencode|pi)/src)|(^@nt-ai-lab/deterministic-agent-workflow-(claude-code|codex|opencode|pi)$)',
+        path: '(^packages/deterministic-agent-workflows-(acp|claude-code|codex|opencode|pi)/src)|(^@nt-ai-lab/deterministic-agent-workflow-(acp|claude-code|codex|opencode|pi)$)',
       },
     },
     {

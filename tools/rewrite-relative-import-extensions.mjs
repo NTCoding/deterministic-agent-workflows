@@ -16,7 +16,7 @@ function rewriteDirectory(directory) {
       rewriteDirectory(entryPath)
       continue
     }
-    if (entry.isFile() && extname(entry.name) === '.js') {
+    if (entry.isFile() && (extname(entry.name) === '.js' || entry.name.endsWith('.d.ts'))) {
       rewriteFile(entryPath)
     }
   }

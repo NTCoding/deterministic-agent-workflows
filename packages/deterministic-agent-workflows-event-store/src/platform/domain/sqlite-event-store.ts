@@ -4,6 +4,7 @@ import type {
   RecordReviewInput,
   RecordReflectionInput,
   ReviewFilters,
+  ReviewJobStore,
   StoredEvent,
   StoredReflection,
   StoredReview,
@@ -23,45 +24,14 @@ import {
 } from '../infra/external-clients/sqlite/sqlite-runtime'
 import {
   buildReviewFilters,
-  createReviewsBranchIndexSql,
-  createReviewsPullRequestIndexSql,
-  createReviewsSessionIndexSql,
-  createReviewsTableSql,
-  createReviewsTypeVerdictIndexSql,
   listedReviewRowsSchema,
   parseListedReviewRow,
   parseStoredReviewRow,
   reviewIdRowSchema,
   reviewRowsSchema,
 } from './sqlite-review-storage'
-
-const createTableSql = `
-  CREATE TABLE IF NOT EXISTS events (
-    seq INTEGER PRIMARY KEY AUTOINCREMENT,
-    session_id TEXT NOT NULL,
-    type TEXT NOT NULL,
-    at TEXT NOT NULL,
-    state TEXT,
-    payload TEXT NOT NULL
-  )
-`
-
-const createReflectionsTableSql = `
-  CREATE TABLE IF NOT EXISTS reflections (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    session_id TEXT NOT NULL,
-    created_at TEXT NOT NULL,
-    label TEXT,
-    agent_name TEXT,
-    source_state TEXT,
-    payload_json TEXT NOT NULL
-  )
-`
-
-const createReflectionsIndexSql = `
-  CREATE INDEX IF NOT EXISTS idx_reflections_session_created_at
-  ON reflections (session_id, created_at DESC, id DESC)
-`
+import { createSqliteReviewJobStore } from './sqlite-review-job-store'
+import { initializeEventStoreSchema } from './sqlite-event-store-schema'
 
 const eventRowSchema = z.array(z.object({
   type: z.string(),
@@ -72,7 +42,6 @@ const eventRowSchema = z.array(z.object({
 const rowWithSessionIdSchema = z.array(z.object({ session_id: z.string() }))
 const countFieldSchema = z.union([z.number(), z.bigint(), z.string()])
 const countRowSchema = z.object({ count: countFieldSchema })
-const tableInfoRowSchema = z.array(z.object({ name: z.string() }))
 const reflectionIdRowSchema = z.object({ id: countFieldSchema })
 const reflectionRowsSchema = z.array(z.object({
   id: z.number(),
@@ -85,7 +54,7 @@ const reflectionRowsSchema = z.array(z.object({
 }))
 
 /** @riviere-role value-object */
-export type SqliteEventStore = {
+export type SqliteEventStore = ReviewJobStore & {
   readonly readEvents: (sessionId: string) => readonly StoredEvent[]
   readonly appendEvents: (sessionId: string, events: readonly StoredEvent[]) => void
   readonly sessionExists: (sessionId: string) => boolean
@@ -104,17 +73,11 @@ export type SqliteEventStore = {
 export function createStore(dbPath: string): SqliteEventStore {
   const db = openSqliteDatabase(dbPath)
   enableWalMode(db)
-  db.exec(createTableSql)
-  db.exec(createReflectionsTableSql)
-  db.exec(createReflectionsIndexSql)
-  db.exec(createReviewsTableSql)
-  db.exec(createReviewsSessionIndexSql)
-  db.exec(createReviewsTypeVerdictIndexSql)
-  db.exec(createReviewsBranchIndexSql)
-  db.exec(createReviewsPullRequestIndexSql)
-  ensureStateColumn(db)
+  initializeEventStoreSchema(db)
+  const reviewJobStore = createSqliteReviewJobStore(db)
 
   return {
+    ...reviewJobStore,
     db,
     readEvents(sessionId: string): readonly StoredEvent[] {
       const rawRows = db.prepare('SELECT type, at, state, payload FROM events WHERE session_id = ? ORDER BY seq').all(sessionId)
@@ -310,6 +273,7 @@ export function createStore(dbPath: string): SqliteEventStore {
       const rawRows = db.prepare('SELECT session_id FROM events GROUP BY session_id ORDER BY MIN(seq)').all()
       return rowWithSessionIdSchema.parse(rawRows).map((row) => row.session_id)
     },
+
   }
 }
 
@@ -353,13 +317,6 @@ function tryParsePayload(payload: string, index: number): unknown {
   } catch (cause) {
     throw new WorkflowStateError(`Cannot parse event payload at index ${index}: ${String(cause)}`)
   }
-}
-
-function ensureStateColumn(db: SqliteDatabase): void {
-  const rawColumns = db.prepare('PRAGMA table_info(events)').all()
-  const columns = tableInfoRowSchema.parse(rawColumns)
-  if (columns.some((column) => column.name === 'state')) return
-  db.exec('ALTER TABLE events ADD COLUMN state TEXT')
 }
 
 type EventRow = {
