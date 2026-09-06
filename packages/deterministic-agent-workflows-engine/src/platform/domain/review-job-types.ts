@@ -105,6 +105,8 @@ export type StoredReviewAgent = z.infer<typeof storedReviewAgentSchema>
 
 /** @riviere-role value-object */
 export interface ReviewJobStore {
+  /** Claim exclusive execution before provider work; return an idempotent release capability. */
+  claimReviewExecution(bundleId: string): () => void
   claimReviewBundle(input: ReviewBundleRequest, createdAt: string): StoredReviewBundle
   getReviewBundle(bundleId: string): StoredReviewBundle | undefined
   findActiveReviewBundle(repository: string, pullRequestNumber: number): StoredReviewBundle | undefined

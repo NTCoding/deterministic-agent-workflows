@@ -86,11 +86,12 @@ function buildReviewPrompt(
   ].join('\n')
 }
 
-function hasSameReviewRequest(
-  stored: StoredReviewBundle,
+function validateStoredReviewRequest(
+  stored: StoredReviewBundle | undefined,
   input: ReviewBundleRequest,
-): boolean {
-  return stored.bundleId === input.bundleId &&
+): void {
+  if (stored === undefined) return
+  const same = stored.bundleId === input.bundleId &&
     stored.sessionId === input.sessionId &&
     stored.repository === input.repository &&
     stored.workingDirectory === input.workingDirectory &&
@@ -100,6 +101,7 @@ function hasSameReviewRequest(
     stored.stateInstructions === input.stateInstructions &&
     JSON.stringify(stored.changedFiles) === JSON.stringify(input.changedFiles) &&
     JSON.stringify(stored.reviews) === JSON.stringify(input.reviews)
+  if (!same) throw new WorkflowStateError(`Review bundle ${input.bundleId} cannot be resumed with different inputs.`)
 }
 
 function terminalResult(
@@ -214,20 +216,18 @@ export class ReviewCoordinator {
   async run(rawInput: ReviewBundleRequest, eventState: string): Promise<ReviewCoordinatorResult> {
     const input = reviewBundleRequestSchema.parse(rawInput)
     const existing = this.store.getReviewBundle(input.bundleId)
-    if (existing !== undefined && !hasSameReviewRequest(existing, input)) {
-      throw new WorkflowStateError(
-        `Review bundle ${input.bundleId} cannot be resumed with different inputs.`,
-      )
-    }
+    validateStoredReviewRequest(existing, input)
     const terminal = terminalResult(existing)
     if (terminal !== undefined) return terminal
     const running = this.executions.get(input.bundleId)
     if (running !== undefined) return running
-    const execution = this.runBundle(input, eventState, existing).finally(() => {
+    const releaseOwnership = this.store.claimReviewExecution(input.bundleId)
+    const execution = this.runBundle(input, eventState).finally(() => {
       this.executions.delete(input.bundleId)
       this.liveRuns.delete(input.bundleId)
       this.cancellations.delete(input.bundleId)
       this.cancellationSignals.delete(input.bundleId)
+      releaseOwnership()
     })
     this.executions.set(input.bundleId, execution)
     return execution
@@ -236,8 +236,13 @@ export class ReviewCoordinator {
   private async runBundle(
     input: ReviewBundleRequest,
     eventState: string,
-    existing: StoredReviewBundle | undefined,
   ): Promise<ReviewCoordinatorResult> {
+    // Re-read after obtaining ownership: another process may have finished between
+    // the initial observation and the exclusive claim.
+    const existing = this.store.getReviewBundle(input.bundleId)
+    validateStoredReviewRequest(existing, input)
+    const terminal = terminalResult(existing)
+    if (terminal !== undefined) return terminal
     const claimed = claimOrResumeBundle(this.store, input, existing, this.now)
     const bundle = claimed.status === 'requested'
       ? this.store.markReviewBundleRunning(claimed.bundleId, this.now())
@@ -361,9 +366,17 @@ export class ReviewCoordinator {
   async cancel(bundleId: string, reason: string): Promise<ReviewCoordinatorResult> {
     const existing = this.cancellations.get(bundleId)
     if (existing !== undefined) return existing
+    const releaseOwnership = this.executions.has(bundleId)
+      ? undefined
+      : this.store.claimReviewExecution(bundleId)
     const cancellation = this.cancelBundle(bundleId, reason).then((result) => {
       this.cancellationSignals.get(bundleId)?.(result)
       return result
+    }).finally(() => {
+      if (releaseOwnership !== undefined) {
+        this.cancellations.delete(bundleId)
+        releaseOwnership()
+      }
     })
     this.cancellations.set(bundleId, cancellation)
     return cancellation

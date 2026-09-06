@@ -25,6 +25,7 @@
     },
     "test": {
       "executor": "nx:run-commands",
+      "dependsOn": ["build", "^build"],
       "options": {
         "command": "pnpm --dir packages/deterministic-agent-workflows-cli exec vitest run --config vitest.config.mts"
       }

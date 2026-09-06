@@ -168,7 +168,7 @@ describe('ReviewCoordinator', () => {
       now: () => '2026-01-01T00:00:00.000Z',
     })
 
-    void coordinator.run(request('bundle-1'), 'REVIEWING')
+    const running = coordinator.run(request('bundle-1'), 'REVIEWING')
     await vi.waitFor(() => expect(
       store.findActiveReviewBundle('owner/repository', 42),
     ).toBeDefined())
@@ -182,6 +182,8 @@ describe('ReviewCoordinator', () => {
     }, 'REVIEWING')).rejects.toThrow(
       'cannot be resumed with different inputs',
     )
+    await coordinator.cancel('bundle-1', 'Fixture cleanup.')
+    await running
     store.db.close()
   })
 
@@ -214,6 +216,8 @@ describe('ReviewCoordinator', () => {
     })
     expect(cancel).toHaveBeenCalledTimes(3)
     expect(store.listReviewAgents('bundle-1').every((agent) => agent.status === 'failed')).toBe(true)
+    const release = store.claimReviewExecution('bundle-1')
+    release()
     store.db.close()
   })
 
