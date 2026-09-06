@@ -46,11 +46,11 @@ it('bounds failed forced termination and closes the protocol connection', async 
     const first = stopAcpProcess({
       child,
       connection 
-    }, 20)
+    }, 1, 20)
     expect(stopAcpProcess({
       child,
       connection 
-    }, 20)).toBe(first)
+    }, 1, 20)).toBe(first)
     await expect(first).rejects.toThrow('did not stop within 20ms')
     expect(kill).toHaveBeenCalledWith(-Number(child.pid), 'SIGKILL')
     expect(connection.close).toHaveBeenCalledOnce()

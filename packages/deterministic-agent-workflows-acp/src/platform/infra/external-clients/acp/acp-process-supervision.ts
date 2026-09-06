@@ -56,10 +56,11 @@ export function stopAcpProcess(
     readonly connection: { close(): void }
   },
   graceMs: number,
+  terminationTimeoutMs: number,
 ): Promise<void> {
   const existing = stoppingProcesses.get(active.child)
   if (existing !== undefined) return existing
-  const stopping = terminateAcpProcess(active.child, graceMs).finally(() => {
+  const stopping = terminateAcpProcess(active.child, graceMs, terminationTimeoutMs).finally(() => {
     active.connection.close()
   })
   stoppingProcesses.set(active.child, stopping)
@@ -118,13 +119,14 @@ async function waitForProcessGroupExit(pid: number, graceMs: number): Promise<vo
 async function terminateAcpProcess(
   child: ChildProcessWithoutNullStreams,
   graceMs: number,
+  terminationTimeoutMs: number,
 ): Promise<void> {
   if (child.pid === undefined) return
   const exited = child.stdout.closed && child.stderr.closed
     ? Promise.resolve()
     : new Promise<void>((resolve) => child.once('close', () => resolve()))
-  await terminateAcpProcessGroup(child.pid, graceMs)
-  const timeout = createAcpTimeout<void>(graceMs, 'ACP process streams did not close after termination.')
+  await terminateAcpProcessGroup(child.pid, graceMs, terminationTimeoutMs)
+  const timeout = createAcpTimeout<void>(terminationTimeoutMs, 'ACP process streams did not close after termination.')
   try {
     await Promise.race([exited, timeout.promise])
   } finally {
@@ -132,7 +134,7 @@ async function terminateAcpProcess(
   }
 }
 
-async function terminateAcpProcessGroup(pid: number, graceMs: number): Promise<void> {
+async function terminateAcpProcessGroup(pid: number, graceMs: number, terminationTimeoutMs: number): Promise<void> {
   // The group can outlive its leader. An exited child is not evidence of cleanup.
   if (!signalAcpProcessGroup(pid, 'SIGTERM')) return
   try {
@@ -140,7 +142,7 @@ async function terminateAcpProcessGroup(pid: number, graceMs: number): Promise<v
   } catch (error) {
     if (!(error instanceof AcpTimeoutError)) throw error
     signalAcpProcessGroup(pid, 'SIGKILL')
-    await waitForProcessGroupExit(pid, graceMs)
+    await waitForProcessGroupExit(pid, terminationTimeoutMs)
   }
 }
 

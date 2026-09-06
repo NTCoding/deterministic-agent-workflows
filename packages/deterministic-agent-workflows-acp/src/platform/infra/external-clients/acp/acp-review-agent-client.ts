@@ -190,7 +190,7 @@ async function openProcess(
     await stopAcpProcess({
       child,
       connection
-    }, config.cancellationGraceMs)
+    }, config.cancellationGraceMs, config.timeoutMs)
     if (exit !== undefined) {
       throw new AcpProtocolError(
         `ACP process exited before protocol completion (code ${String(exit.code)}, signal ${String(exit.signal)}). stderr: ${stderrChunks.join('').trim()}`,
@@ -248,14 +248,14 @@ function promptCompletion(
           notify: () => active.context.notify(methods.agent.session.cancel, { sessionId }),
           processFailure: active.processFailure,
           prompt: request,
-          stop: () => stopAcpProcess(active, config.cancellationGraceMs),
+          stop: () => stopAcpProcess(active, config.cancellationGraceMs, config.timeoutMs),
           graceMs: config.cancellationGraceMs,
         }))
       }
       throw error
     } finally {
       timeout.clear()
-      if (!lifecycle.cancellationOwnsCleanup) await stopAcpProcess(active, config.cancellationGraceMs)
+      if (!lifecycle.cancellationOwnsCleanup) await stopAcpProcess(active, config.cancellationGraceMs, config.timeoutMs)
     }
   })()
 }
@@ -275,7 +275,7 @@ function createRun(
       notify: () => active.context.notify(methods.agent.session.cancel, { sessionId }),
       processFailure: active.processFailure,
       prompt: completion,
-      stop: () => stopAcpProcess(active, config.cancellationGraceMs),
+      stop: () => stopAcpProcess(active, config.cancellationGraceMs, config.timeoutMs),
       graceMs: config.cancellationGraceMs,
     }),
   }
@@ -318,7 +318,7 @@ async function openSession(
     ])
     return loadSessionId
   } catch (error) {
-    await stopAcpProcess(active, config.cancellationGraceMs)
+    await stopAcpProcess(active, config.cancellationGraceMs, config.timeoutMs)
     throw error
   } finally {
     timeout.clear()
