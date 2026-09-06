@@ -209,6 +209,8 @@ Status legend: `TODO`, `IN_PROGRESS`, `BLOCKED`, `DONE`
 
 #### Follow-up validation findings
 
+- [x] **DONE** Fix ACP process-group cleanup on macOS/Linux, reject unsupported hosts before launch, and cover descendants surviving cancellation or an early parent exit. Windows support is deferred by the user. Frozen installation and uncached full verification passed; tests also cover normal completion, protocol failure, timeout, signalling errors, bounded forced termination and isolation from another reviewer group.
+
 - [x] **DONE** Preserve strict completion provenance through public stored reviews and both query paths while keeping legacy reviews readable.
 - [x] **DONE** Supervise cooperative cancellation, bounded notification failures, forced process termination, and active-run cleanup.
 - [x] **DONE** Record cancellation failures and share concurrent calls on one coordinator without rewriting terminal bundles.

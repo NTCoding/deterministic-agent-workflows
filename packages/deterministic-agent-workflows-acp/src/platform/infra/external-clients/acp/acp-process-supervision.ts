@@ -1,3 +1,4 @@
+import { setTimeout as delay } from 'node:timers/promises'
 import type { ChildProcessWithoutNullStreams } from 'node:child_process'
 
 /** @riviere-role external-client-error */
@@ -65,22 +66,81 @@ export function stopAcpProcess(
   return stopping
 }
 
+/** @riviere-role external-client-error */
+class AcpUnsupportedPlatformError extends Error {
+  constructor(platform: NodeJS.Platform) {
+    super(`ACP process-tree supervision requires macOS or Linux; unsupported host: ${platform}.`)
+    this.name = 'AcpUnsupportedPlatformError'
+  }
+}
+
+/** @riviere-role external-client-service */
+export function requireAcpProcessGroups(platform: NodeJS.Platform = process.platform): void {
+  if (platform !== 'darwin' && platform !== 'linux') {
+    throw new AcpUnsupportedPlatformError(platform)
+  }
+}
+
+/** @riviere-role external-client-error */
+class AcpProcessGroupError extends Error {
+  constructor(pid: number) {
+    super(`Invalid ACP process group identifier: ${String(pid)}.`)
+    this.name = 'AcpProcessGroupError'
+  }
+}
+
+/** @riviere-role external-client-service */
+export function signalAcpProcessGroup(pid: number, signal: NodeJS.Signals | 0): boolean {
+  if (!Number.isSafeInteger(pid) || pid <= 1) throw new AcpProcessGroupError(pid)
+  try {
+    process.kill(-pid, signal)
+    return true
+  } catch (error) {
+    if (error instanceof Error && 'code' in error) {
+      if (error.code === 'ESRCH') return false
+      // EPERM on a zero-signal existence probe means present, never successfully stopped.
+      if (signal === 0 && error.code === 'EPERM') return true
+    }
+    throw error
+  }
+}
+
+async function waitForProcessGroupExit(pid: number, graceMs: number): Promise<void> {
+  const deadline = performance.now() + graceMs
+  while (signalAcpProcessGroup(pid, 0)) {
+    if (performance.now() >= deadline) {
+      throw new AcpTimeoutError(`ACP process group ${String(pid)} did not stop within ${String(graceMs)}ms.`)
+    }
+    await delay(10)
+  }
+}
+
 async function terminateAcpProcess(
   child: ChildProcessWithoutNullStreams,
   graceMs: number,
 ): Promise<void> {
-  if (child.pid === undefined || child.exitCode !== null || child.signalCode !== null) return
-  const exited = new Promise<void>((resolve) => child.once('close', () => resolve()))
-  child.kill('SIGTERM')
-  const grace = createAcpTimeout<void>(graceMs, 'ACP process did not stop after SIGTERM.')
+  if (child.pid === undefined) return
+  const exited = child.stdout.closed && child.stderr.closed
+    ? Promise.resolve()
+    : new Promise<void>((resolve) => child.once('close', () => resolve()))
+  await terminateAcpProcessGroup(child.pid, graceMs)
+  const timeout = createAcpTimeout<void>(graceMs, 'ACP process streams did not close after termination.')
   try {
-    await Promise.race([exited, grace.promise])
+    await Promise.race([exited, timeout.promise])
+  } finally {
+    timeout.clear()
+  }
+}
+
+async function terminateAcpProcessGroup(pid: number, graceMs: number): Promise<void> {
+  // The group can outlive its leader. An exited child is not evidence of cleanup.
+  if (!signalAcpProcessGroup(pid, 'SIGTERM')) return
+  try {
+    await waitForProcessGroupExit(pid, graceMs)
   } catch (error) {
     if (!(error instanceof AcpTimeoutError)) throw error
-    child.kill('SIGKILL')
-    await exited
-  } finally {
-    grace.clear()
+    signalAcpProcessGroup(pid, 'SIGKILL')
+    await waitForProcessGroupExit(pid, graceMs)
   }
 }
 

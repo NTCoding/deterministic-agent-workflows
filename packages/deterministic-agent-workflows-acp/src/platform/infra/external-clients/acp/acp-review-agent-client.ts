@@ -28,6 +28,7 @@ import {
   cancelTimedOutAcpPrompt,
   createAcpTimeout,
   stopAcpProcess,
+  requireAcpProcessGroups,
 } from './acp-process-supervision'
 
 class AcpProtocolError extends Error {
@@ -88,6 +89,7 @@ async function openProcess(
     cwd: workingDirectory,
     env: buildProcessEnvironment(config.environment),
     shell: false,
+    detached: true,
     stdio: ['pipe', 'pipe', 'pipe'],
   })
   const stderrChunks: string[] = []
@@ -327,6 +329,7 @@ async function openSession(
 export function createAcpReviewAgentClient(
   config: AcpReviewAgentClientConfig,
 ): ReviewAgentClient {
+  requireAcpProcessGroups()
   if (config.command.trim().length === 0) {
     throw new AcpProtocolError('ACP reviewer command must not be empty.')
   }
