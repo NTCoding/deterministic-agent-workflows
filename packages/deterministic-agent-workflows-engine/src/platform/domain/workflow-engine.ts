@@ -182,11 +182,13 @@ export class WorkflowEngine<
           to: target
         }
       workflow.appendEvent(transitionEvent)
-      targetDef.afterEntry?.()
     } catch (error: unknown) {
       return this.uncommittedOperationError(error)
     }
     this.persistEvents(sessionId, workflow)
+
+    const afterEntryFailure = this.runAfterEntry(targetDef)
+    if (afterEntryFailure !== undefined) return afterEntryFailure
 
     try {
       const newState = workflow.getState()
@@ -396,6 +398,17 @@ export class WorkflowEngine<
       return callback()
     } catch (error: unknown) {
       return this.uncommittedOperationError(error)
+    }
+  }
+
+  private runAfterEntry(
+    targetDef: ReturnType<WorkflowDefinition<TWorkflow, TState, TDeps, TStateName, TOperation, TTransitionContext>['getRegistry']>[TStateName],
+  ): EngineResult | undefined {
+    try {
+      targetDef.afterEntry?.()
+      return undefined
+    } catch (error: unknown) {
+      return this.committedResponseError(error)
     }
   }
 
