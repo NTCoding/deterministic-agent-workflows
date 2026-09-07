@@ -38,58 +38,6 @@ pnpm add @nt-ai-lab/deterministic-agent-workflow-pi
 pnpm add @nt-ai-lab/deterministic-agent-workflow-acp
 ```
 
-## Durable ACP review coordination
-
-Consumers own reviewer names, prompts, changed-file discovery, revisions, and the workflow state that triggers review. Pi consumers configure automation on their existing extension factory. The adapter waits for durable state and an idle agent before invoking consumer policy. It owns the coordinator and event-store lifetime; consumers do not construct an engine, open a database, or rehydrate events.
-
-```ts
-import { createAcpReviewAgentClient } from '@nt-ai-lab/deterministic-agent-workflow-acp'
-import { createPiWorkflowExtension } from '@nt-ai-lab/deterministic-agent-workflow-pi'
-
-const reviewClient = createAcpReviewAgentClient({
-  command: '/absolute/path/to/acp-agent',
-  args: [],
-  mcpServers: constrainedFeedbackServers,
-  timeoutMs: 15 * 60 * 1_000,
-  cancellationGraceMs: 5_000,
-})
-
-const extension = createPiWorkflowExtension({
-  ...workflowConfiguration,
-  automation: {
-    ownsState: (state) => state.currentStateMachineState === 'REVIEWING',
-    onIdle: async (context) => {
-      const request = await buildReviewRequest(context.getState(), context.signal)
-      const result = await context.runReviews(request, reviewClient)
-      // Consumer policy also checks external gates and handles failures.
-      const nextState = await determineNextState(result, context.signal)
-      context.runOperation('transition', nextState)
-      context.resumeWithFreshContext(buildStateInstructions(context.getState()))
-    },
-  },
-})
-```
-
-In this example, `workflowConfiguration`, `constrainedFeedbackServers`, `buildReviewRequest`, `determineNextState`, and `buildStateInstructions` are consumer-owned configuration and policy. A review request supplies bundle ID, repository, PR number, base/head revisions, changed files, state instructions, and reviewer definitions. The adapter supplies session identity and working directory. `runOperation` uses the consumer's existing validated routes and rejects unsuccessful operations. The callback must handle domain failures through those routes; an uncaught callback error shuts the Pi session down rather than resuming the old context.
-
-Conversational tools and input are blocked while automation owns the state. Session shutdown aborts `context.signal`, cancels active reviews, and invalidates callback capabilities. Polling and other consumer work must honour this signal. The adapter recovers workflow-owned states on session startup. Persisted bundle identity remains the basis of reviewer recovery and retry reconciliation.
-
-Each reviewer definition includes an immutable `version`. The coordinator request and completion provenance are pinned to the bundle, provider session and run, base revision, head revision, reviewer version, and a SHA-256 digest of the exact ordered changed-file list. ACP reviewers do not inherit GitHub credentials; provide only constrained MCP servers and non-credential environment values. Calling `runReviews` again with the same bundle resumes persisted provider sessions, while another active bundle for the same pull request fails closed.
-
-Before starting or loading providers, the coordinator claims exclusive execution through its domain port. A competing coordinator or cancellation caller fails closed without launching providers or changing the owner's bundle. Calls already running on the same coordinator still share their result. Ownership is released after execution or cancellation settles, including failures. No new factory configuration is required. Advanced custom `ReviewJobStore` implementations must provide `claimReviewExecution`, excluding competing owners of the same stored bundle across connections and processes.
-
-SQLite implements execution ownership using a separate exclusive-lock database under `<canonical-event-database-path>.locks/`. The event database remains writable, and different bundles do not share an execution lock. Lock files are intentionally retained: do not remove them while any runtime is active, since replacing an inode would bypass an existing lock. Use the same canonical event database and normal local SQLite filesystem locking; do not use hard-linked database aliases. In-memory stores use connection-local exclusion.
-
-Process exit releases the native coordination lock without a timeout or lease expiry. Recovery can then reload persisted provider sessions under exclusive ownership. This lock prevents competing coordinators; it does not itself terminate external provider processes after a coordinator crash. Provider session recovery and process cleanup remain responsibilities of the provider client.
-
-Completed bundle reviews expose `completionProvenance` on `StoredReview`, including results returned by completion, `listSessionReviews`, and `listReviews`. Older reviews without bundle provenance remain readable with this property absent; consumers must not treat an absent provenance record as evidence of a reviewed revision.
-
-Cancellation waits for the ACP prompt to settle during the cooperative grace period before process termination. On macOS and Linux, each ACP process starts in its own process group. Cleanup signals the whole group, including descendants after the original agent exits. Groups that ignore `SIGTERM` receive `SIGKILL`; `cancellationGraceMs` controls the graceful wait, while `timeoutMs` separately bounds forced termination and stream closure. A short cooperative grace period does not require the operating system to reap killed processes in that same short interval. Unsupported hosts, including Windows, fail before launching ACP. This is process lifecycle supervision, not a sandbox: descendants that deliberately create a different session or process group are outside this mechanism. Notification, transport, and cleanup errors remain failures rather than successful cancellation. Concurrent calls on the same coordinator share the active bundle execution.
-
-`resumeWithFreshContext` persists a state-instruction boundary through Pi's extension API and uses its documented context hook to send only those instructions and subsequent messages to the model. It works for short conversations and after reopening without requiring an `AgentSession` reference. Normal system and repository instructions are retained. The complete transcript and conversation/session identity remain unchanged; this is a fresh model context, not a new session. No AI handover is generated. If Pi subsequently compacts the conversation, the adapter supplies deterministic state instructions rather than summarising the retired context.
-
-Advanced SDK applications that already own an `AgentSession` can still use `refreshPiContextWindow(session, stateInstructions)`. That lower-level helper applies a persisted compaction directly. Normal extension consumers use the factory automation API above. `resolvePiMainSessionId` continues to resolve child delegation from `PI_SUBAGENT_PARENT_SESSION`.
-
 ## OpenCode example
 
 Define the workflow in the user repo, then plug it into OpenCode.
@@ -417,6 +365,62 @@ once a workflow has started, including command line forks from an active parent
 session. Normal session resumption remains supported. Pi must run with session
 persistence enabled; `--no-session` is rejected because it provides no durable
 transcript for workflow identity checks or the Control Center.
+
+## AI code review automation (ACP)
+
+This library can automatically run AI code reviewers over your pull request. When the workflow reaches a review state and the agent goes idle, the adapter launches external reviewer agents over the Agent Client Protocol (ACP), collects their verdicts, and records them as durable workflow events.
+
+You decide what a review means: reviewer names, prompts, versions, which files and revisions to review, and which workflow state triggers the review. The adapter owns the mechanics: it launches and supervises the reviewer processes, cancels them safely on shutdown, persists every result, and recovers half-finished reviews after a crash. Consumers do not construct an engine, open a database, or rehydrate events.
+
+The example below wires this into the Pi adapter using the extension factory you already have.
+
+```ts
+import { createAcpReviewAgentClient } from '@nt-ai-lab/deterministic-agent-workflow-acp'
+import { createPiWorkflowExtension } from '@nt-ai-lab/deterministic-agent-workflow-pi'
+
+const reviewClient = createAcpReviewAgentClient({
+  command: '/absolute/path/to/acp-agent',
+  args: [],
+  mcpServers: constrainedFeedbackServers,
+  timeoutMs: 15 * 60 * 1_000,
+  cancellationGraceMs: 5_000,
+})
+
+const extension = createPiWorkflowExtension({
+  ...workflowConfiguration,
+  automation: {
+    ownsState: (state) => state.currentStateMachineState === 'REVIEWING',
+    onIdle: async (context) => {
+      const request = await buildReviewRequest(context.getState(), context.signal)
+      const result = await context.runReviews(request, reviewClient)
+      // Consumer policy also checks external gates and handles failures.
+      const nextState = await determineNextState(result, context.signal)
+      context.runOperation('transition', nextState)
+      context.resumeWithFreshContext(buildStateInstructions(context.getState()))
+    },
+  },
+})
+```
+
+In this example, `workflowConfiguration`, `constrainedFeedbackServers`, `buildReviewRequest`, `determineNextState`, and `buildStateInstructions` are consumer-owned configuration and policy. A review request supplies bundle ID, repository, PR number, base/head revisions, changed files, state instructions, and reviewer definitions. The adapter supplies session identity and working directory. `runOperation` uses the consumer's existing validated routes and rejects unsuccessful operations. The callback must handle domain failures through those routes; an uncaught callback error shuts the Pi session down rather than resuming the old context.
+
+Conversational tools and input are blocked while automation owns the state. Session shutdown aborts `context.signal`, cancels active reviews, and invalidates callback capabilities. Polling and other consumer work must honour this signal. The adapter recovers workflow-owned states on session startup. Persisted bundle identity remains the basis of reviewer recovery and retry reconciliation.
+
+Each reviewer definition includes an immutable `version`. The coordinator request and completion provenance are pinned to the bundle, provider session and run, base revision, head revision, reviewer version, and a SHA-256 digest of the exact ordered changed-file list. ACP reviewers do not inherit GitHub credentials; provide only constrained MCP servers and non-credential environment values. Calling `runReviews` again with the same bundle resumes persisted provider sessions, while another active bundle for the same pull request fails closed.
+
+Before starting or loading providers, the coordinator claims exclusive execution through its domain port. A competing coordinator or cancellation caller fails closed without launching providers or changing the owner's bundle. Calls already running on the same coordinator still share their result. Ownership is released after execution or cancellation settles, including failures. No new factory configuration is required. Advanced custom `ReviewJobStore` implementations must provide `claimReviewExecution`, excluding competing owners of the same stored bundle across connections and processes.
+
+SQLite implements execution ownership using a separate exclusive-lock database under `<canonical-event-database-path>.locks/`. The event database remains writable, and different bundles do not share an execution lock. Lock files are intentionally retained: do not remove them while any runtime is active, since replacing an inode would bypass an existing lock. Use the same canonical event database and normal local SQLite filesystem locking; do not use hard-linked database aliases. In-memory stores use connection-local exclusion.
+
+Process exit releases the native coordination lock without a timeout or lease expiry. Recovery can then reload persisted provider sessions under exclusive ownership. This lock prevents competing coordinators; it does not itself terminate external provider processes after a coordinator crash. Provider session recovery and process cleanup remain responsibilities of the provider client.
+
+Completed bundle reviews expose `completionProvenance` on `StoredReview`, including results returned by completion, `listSessionReviews`, and `listReviews`. Older reviews without bundle provenance remain readable with this property absent; consumers must not treat an absent provenance record as evidence of a reviewed revision.
+
+Cancellation waits for the ACP prompt to settle during the cooperative grace period before process termination. On macOS and Linux, each ACP process starts in its own process group. Cleanup signals the whole group, including descendants after the original agent exits. Groups that ignore `SIGTERM` receive `SIGKILL`; `cancellationGraceMs` controls the graceful wait, while `timeoutMs` separately bounds forced termination and stream closure. A short cooperative grace period does not require the operating system to reap killed processes in that same short interval. Unsupported hosts, including Windows, fail before launching ACP. This is process lifecycle supervision, not a sandbox: descendants that deliberately create a different session or process group are outside this mechanism. Notification, transport, and cleanup errors remain failures rather than successful cancellation. Concurrent calls on the same coordinator share the active bundle execution.
+
+`resumeWithFreshContext` persists a state-instruction boundary through Pi's extension API and uses its documented context hook to send only those instructions and subsequent messages to the model. It works for short conversations and after reopening without requiring an `AgentSession` reference. Normal system and repository instructions are retained. The complete transcript and conversation/session identity remain unchanged; this is a fresh model context, not a new session. No AI handover is generated. If Pi subsequently compacts the conversation, the adapter supplies deterministic state instructions rather than summarising the retired context.
+
+Advanced SDK applications that already own an `AgentSession` can still use `refreshPiContextWindow(session, stateInstructions)`. That lower-level helper applies a persisted compaction directly. Normal extension consumers use the factory automation API above. `resolvePiMainSessionId` continues to resolve child delegation from `PI_SUBAGENT_PARENT_SESSION`.
 
 ## Event store
 

@@ -51,7 +51,8 @@ export function createWorkflowCli<
     getPluginRoot: () => pluginRoot,
     now,
     getSessionId,
-    store,
+    workflowEventStore: store,
+    reviewStore: store,
   }
 
   const engineDeps: WorkflowEngineDeps = {

@@ -1,6 +1,7 @@
 import type {
   BaseWorkflowState,
   RehydratableWorkflow,
+  ReviewJobStore,
   TranscriptReader,
   WorkflowEventStore,
 } from '@nt-ai-lab/deterministic-agent-workflow-engine'
@@ -19,7 +20,7 @@ export type ProcessDeps = {
   readonly getArgv: () => readonly string[]
   readonly readFile: (path: string) => string
   readonly appendToFile: (path: string, content: string) => void
-  readonly buildStore: (dbPath: string) => WorkflowEventStore
+  readonly buildStore: (dbPath: string) => WorkflowEventStore & ReviewJobStore
 }
 
 /** @riviere-role value-object */
