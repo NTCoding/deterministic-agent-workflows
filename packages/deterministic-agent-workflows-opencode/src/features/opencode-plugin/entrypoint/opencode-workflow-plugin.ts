@@ -143,7 +143,8 @@ export function createOpenCodeWorkflowPlugin<
         getPluginRoot: () => config.pluginRoot,
         now,
         getSessionId: () => sessionID,
-        store,
+        workflowEventStore: store,
+        reviewStore: store,
       }
 
       return {

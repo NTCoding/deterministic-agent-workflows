@@ -221,6 +221,7 @@ Status legend: `TODO`, `IN_PROGRESS`, `BLOCKED`, `DONE`
 - [x] **DONE** Remove obsolete session ownership transfer plumbing; context refresh retains the existing session identity.
 - [x] **DONE** Add Pi factory-owned idle automation, review-store lifetime, shutdown cancellation, and state-only model context through the installed extension API. Runtime tests inspect actual model requests, retained system instructions, repeated refresh, and reopening. The installed compaction command cannot refresh small sessions, so the extension uses a persisted context boundary instead of requiring a live `AgentSession`.
 - [x] **DONE** Persist each completed reviewer independently so a later provider failure cannot discard an already-recorded result. A regression proves the completed review and provenance survive while only the remaining agents are cancelled.
+- [x] **DONE** Split the PlatformContext store conflation found during public API inspection: rename `store` to `workflowEventStore` and add a separate `reviewStore: ReviewJobStore` so consumers can construct a `ReviewCoordinator` from `buildWorkflowDeps` without casts. Widen `ProcessDeps.buildStore` to return both store contracts, update every adapter construction site, restructure the README so ACP review automation sits below the core setup sections, and rewrite its intro in plain language.
 - [ ] **IN_PROGRESS** Verify the combined diff locally and on PR 44, then inspect the complete public API before consumer integration.
 
 ---

@@ -10,8 +10,10 @@ import type {
   BaseWorkflowState,
   EngineResult,
   RehydratableWorkflow,
+  ReviewJobStore,
   TranscriptReader,
   WorkflowEngineDeps,
+  WorkflowEventStore,
 } from '@nt-ai-lab/deterministic-agent-workflow-engine'
 import { WorkflowEngine } from '@nt-ai-lab/deterministic-agent-workflow-engine'
 import {
@@ -116,7 +118,7 @@ function handleWorkflowCommand<
   TDeps,
   TStateName extends string,
   TOperation extends string,
->(config: CodexWorkflowCliConfig<TWorkflow, TState, TDeps, TStateName, TOperation>, store: WorkflowEngineDeps['store'], root: string, now: () => string, args: readonly string[]): RunnerResult {
+>(config: CodexWorkflowCliConfig<TWorkflow, TState, TDeps, TStateName, TOperation>, store: WorkflowEventStore & ReviewJobStore, root: string, now: () => string, args: readonly string[]): RunnerResult {
   if (args.length < 2 || args[0] === '' || args[1] === '') {
     throw new TypeError('Codex workflow commands require <operation> <session-id> [args]')
   }
@@ -137,12 +139,13 @@ function buildWorkflowDeps<
   TDeps,
   TStateName extends string,
   TOperation extends string,
->(config: CodexWorkflowCliConfig<TWorkflow, TState, TDeps, TStateName, TOperation>, store: WorkflowEngineDeps['store'], root: string, now: () => string, sessionId: string): TDeps {
+>(config: CodexWorkflowCliConfig<TWorkflow, TState, TDeps, TStateName, TOperation>, store: WorkflowEventStore & ReviewJobStore, root: string, now: () => string, sessionId: string): TDeps {
   const platform: PlatformContext = {
     getPluginRoot: () => root,
     now,
     getSessionId: () => sessionId,
-    store,
+    workflowEventStore: store,
+    reviewStore: store,
   }
   return config.buildWorkflowDeps(platform)
 }
@@ -165,7 +168,7 @@ function handleHookInvocation<
   TDeps,
   TStateName extends string,
   TOperation extends string,
->(config: CodexWorkflowCliConfig<TWorkflow, TState, TDeps, TStateName, TOperation>, store: WorkflowEngineDeps['store'], root: string, now: () => string): RunnerResult {
+>(config: CodexWorkflowCliConfig<TWorkflow, TState, TDeps, TStateName, TOperation>, store: WorkflowEventStore & ReviewJobStore, root: string, now: () => string): RunnerResult {
   const raw = config.processDeps.readFile('/dev/stdin')
   const parsed = codexHookInputSchema.parse(JSON.parse(raw))
   const engineDeps = buildEngineDeps(config, store, root, now, parsed.session_id)

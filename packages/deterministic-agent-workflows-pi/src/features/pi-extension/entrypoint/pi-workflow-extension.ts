@@ -124,7 +124,8 @@ export function createPiWorkflowExtension<
         getPluginRoot: () => config.pluginRoot,
         now,
         getSessionId: () => sessionId,
-        store,
+        workflowEventStore: store,
+        reviewStore: store,
       }
       const workflowDeps = config.buildWorkflowDeps(platform)
       const engine = new WorkflowEngine<TWorkflow, TState, TDeps, TStateName, TOperation, TTransitionContext>(config.workflowDefinition, engineDeps, workflowDeps)
