@@ -17,6 +17,7 @@ import {
   stripEnvelopeKeys,
   WorkflowStateError,
 } from '@nt-ai-lab/deterministic-agent-workflow-engine'
+import type { ReviewerFeedbackStore } from './reviewer-feedback-store'
 import {
   enableWalMode,
   openSqliteDatabase,
@@ -31,6 +32,7 @@ import {
   reviewRowsSchema,
 } from './sqlite-review-storage'
 import { createSqliteReviewJobStore } from './sqlite-review-job-store'
+import { createSqliteReviewerFeedbackStore } from './sqlite-reviewer-feedback-store'
 import { initializeEventStoreSchema } from './sqlite-event-store-schema'
 
 const eventRowSchema = z.array(z.object({
@@ -54,7 +56,7 @@ const reflectionRowsSchema = z.array(z.object({
 }))
 
 /** @riviere-role value-object */
-export type SqliteEventStore = ReviewJobStore & {
+export type SqliteEventStore = ReviewJobStore & ReviewerFeedbackStore & {
   readonly readEvents: (sessionId: string) => readonly StoredEvent[]
   readonly appendEvents: (sessionId: string, events: readonly StoredEvent[]) => void
   readonly sessionExists: (sessionId: string) => boolean
@@ -75,9 +77,11 @@ export function createStore(dbPath: string): SqliteEventStore {
   enableWalMode(db)
   initializeEventStoreSchema(db)
   const reviewJobStore = createSqliteReviewJobStore(db)
+  const reviewerFeedbackStore = createSqliteReviewerFeedbackStore(db)
 
   return {
     ...reviewJobStore,
+    ...reviewerFeedbackStore,
     db,
     readEvents(sessionId: string): readonly StoredEvent[] {
       const rawRows = db.prepare('SELECT type, at, state, payload FROM events WHERE session_id = ? ORDER BY seq').all(sessionId)

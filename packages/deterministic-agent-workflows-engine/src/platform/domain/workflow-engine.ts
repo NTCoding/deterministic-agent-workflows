@@ -1,4 +1,3 @@
-import { checkIdentity } from './identity-verification'
 import {
   checkBashWithPlatformEvents,
   checkStopAllowed,
@@ -7,11 +6,11 @@ import {
   writeJournalWithPlatformEvents,
 } from './workflow-engine-platform-operations'
 import {
-  buildPrefixPattern,
   buildProcedurePath,
   enrichSessionStartedEvents,
   getExpectedPrefix,
   readProcedure,
+  wrapEventsWithFold,
 } from './workflow-engine-support'
 import {
   formatIllegalTransitionError,
@@ -37,7 +36,14 @@ import {
   toPayload,
   type StoredEvent,
 } from './stored-event'
+import type { ContextRetiredEvent } from './engine-events'
 import { engineEventSchema } from './engine-events'
+import { verifyAgentIdentity } from './workflow-engine-identity'
+import {
+  formatCommittedResponseError,
+  formatUncommittedOperationError,
+} from './workflow-engine-errors'
+import { createWorkflowContextRetirement } from './workflow-engine-context-retirement'
 import {
   WorkflowStateError,
   type BaseWorkflowState,
@@ -45,6 +51,15 @@ import {
 import { reduceWorkflowStateFromStoredEvents } from './workflow-state-reducer'
 import { serializeWorkflowState } from './workflow-state-serialization'
 import { requireNonEmptyString } from './non-empty-string'
+
+type WorkflowRegistryType<
+  TWorkflow extends RehydratableWorkflow<TState>,
+  TState extends BaseWorkflowState<TStateName>,
+  TDeps,
+  TStateName extends string,
+  TOperation extends string,
+  TTransitionContext extends TransitionContext<TState, TStateName>,
+> = ReturnType<WorkflowDefinition<TWorkflow, TState, TDeps, TStateName, TOperation, TTransitionContext>['getRegistry']>
 
 /** @riviere-role domain-service */
 export class WorkflowEngine<
@@ -55,11 +70,22 @@ export class WorkflowEngine<
   TOperation extends string = string,
   TTransitionContext extends TransitionContext<TState, TStateName> = TransitionContext<TState, TStateName>,
 > {
+  private readonly contextRetirement: ReturnType<typeof createWorkflowContextRetirement>
+
   constructor(
     private readonly factory: WorkflowDefinition<TWorkflow, TState, TDeps, TStateName, TOperation, TTransitionContext>,
     private readonly engineDeps: WorkflowEngineDeps,
     private readonly workflowDeps: TDeps,
-  ) {}
+  ) {
+    this.contextRetirement = createWorkflowContextRetirement({
+      store: engineDeps.store,
+      resolveSessionId: (sessionId) => this.resolveSessionId(sessionId),
+      now: () => engineDeps.now(),
+      persistPlatformEvent: (sessionId, event) => {
+        this.persistPlatformEvent(sessionId, this.rehydrateFromEvents(sessionId).getState(), event)
+      },
+    })
+  }
 
   startSession(sessionId: string, transcriptPath: string, repository: string): EngineResult {
     const validSessionId = this.resolveSessionId(requireNonEmptyString(sessionId, 'sessionId'))
@@ -103,6 +129,9 @@ export class WorkflowEngine<
     op: string,
     fn: (workflow: TWorkflow) => PreconditionResult,
   ): EngineResult {
+    const callingSessionId = sessionId
+    const retirementGate = this.contextRetirement.gate(callingSessionId, op)
+    if (retirementGate !== undefined) return retirementGate
     sessionId = this.resolveSessionId(sessionId)
     this.requireSession(sessionId)
     const workflow = this.rehydrateFromEvents(sessionId)
@@ -127,11 +156,13 @@ export class WorkflowEngine<
         output: formatOperationSuccess(op, body, currentPrefix)
       }
     } catch (error: unknown) {
-      return this.committedResponseError(error)
+      return formatCommittedResponseError(error)
     }
   }
 
   writeJournal(sessionId: string, agentName: string, content: string): EngineResult {
+    const retirementGate = this.contextRetirement.gate(sessionId, 'write-journal')
+    if (retirementGate !== undefined) return retirementGate
     sessionId = this.resolveSessionId(sessionId)
     this.requireSession(sessionId)
     const workflow = this.rehydrateFromEvents(sessionId)
@@ -139,6 +170,8 @@ export class WorkflowEngine<
   }
 
   transition(sessionId: string, target: TStateName): EngineResult {
+    const retirementGate = this.contextRetirement.gate(sessionId, 'transition')
+    if (retirementGate !== undefined) return retirementGate
     sessionId = this.resolveSessionId(sessionId)
     this.requireSession(sessionId)
     const workflow = this.rehydrateFromEvents(sessionId)
@@ -151,14 +184,7 @@ export class WorkflowEngine<
 
     const currentDef = registry[currentStateName]
     if (!currentDef.canTransitionTo.includes(target)) {
-      const legalTargets = currentDef.canTransitionTo
-      const reason = `Illegal transition ${currentStateName} -> ${target}. Legal targets from ${currentStateName}: [${legalTargets.join(', ') || 'none'}].`
-      const currentProcedure = readProcedure(this.engineDeps, workflow.getState().currentStateMachineState)
-      const currentPrefix = getExpectedPrefix(currentStateName, registry)
-      return {
-        type: 'blocked',
-        output: formatIllegalTransitionError(reason, currentProcedure, currentPrefix) 
-      }
+      return this.illegalTransitionResult(currentDef, workflow.getState(), currentStateName, target, registry)
     }
 
     const guardResult = this.checkTransitionGuard(currentDef, state, currentStateName, target, registry)
@@ -183,7 +209,7 @@ export class WorkflowEngine<
         }
       workflow.appendEvent(transitionEvent)
     } catch (error: unknown) {
-      return this.uncommittedOperationError(error)
+      return formatUncommittedOperationError(error)
     }
     this.persistEvents(sessionId, workflow)
 
@@ -201,7 +227,7 @@ export class WorkflowEngine<
         output: formatTransitionSuccess(title, procedure, newPrefix)
       }
     } catch (error: unknown) {
-      return this.committedResponseError(error)
+      return formatCommittedResponseError(error)
     }
   }
 
@@ -211,6 +237,8 @@ export class WorkflowEngine<
     command: string,
     bashForbidden: BashForbiddenConfig,
   ): EngineResult {
+    const retirementGate = this.contextRetirement.gate(sessionId, toolName)
+    if (retirementGate !== undefined) return retirementGate
     sessionId = this.resolveSessionId(sessionId)
     this.requireSession(sessionId)
     const workflow = this.rehydrateFromEvents(sessionId)
@@ -223,6 +251,8 @@ export class WorkflowEngine<
     filePath: string,
     isWriteAllowed: (filePath: string, state: TState) => boolean,
   ): EngineResult {
+    const retirementGate = this.contextRetirement.gate(sessionId, toolName)
+    if (retirementGate !== undefined) return retirementGate
     sessionId = this.resolveSessionId(sessionId)
     this.requireSession(sessionId)
     const workflow = this.rehydrateFromEvents(sessionId)
@@ -240,6 +270,7 @@ export class WorkflowEngine<
     return serializeWorkflowState(this.getWorkflowState(sessionId))
   }
 
+
   getWorkflowState(sessionId: string): TState {
     sessionId = this.resolveSessionId(sessionId)
     this.requireSession(sessionId)
@@ -256,7 +287,32 @@ export class WorkflowEngine<
   }
 
   hasSessionStarted(sessionId: string): boolean {
-    return this.engineDeps.store.hasSessionStarted(this.resolveSessionId(sessionId))
+    return this.hasSession(sessionId)
+  }
+
+  retireContext(sessionId: string, reason: string, successorSessionId?: string): EngineResult {
+    return this.contextRetirement.retire(sessionId, reason, successorSessionId)
+  }
+
+  getContextRetirement(sessionId: string): ContextRetiredEvent | undefined {
+    return this.contextRetirement.get(sessionId)
+  }
+
+  private illegalTransitionResult(
+    currentDef: WorkflowRegistryType<TWorkflow, TState, TDeps, TStateName, TOperation, TTransitionContext>[TStateName],
+    state: TState,
+    currentStateName: TStateName,
+    target: TStateName,
+    registry: WorkflowRegistryType<TWorkflow, TState, TDeps, TStateName, TOperation, TTransitionContext>,
+  ): EngineResult {
+    const legalTargets = currentDef.canTransitionTo
+    const reason = `Illegal transition ${currentStateName} -> ${target}. Legal targets from ${currentStateName}: [${legalTargets.join(', ') || 'none'}].`
+    const currentProcedure = readProcedure(this.engineDeps, state.currentStateMachineState)
+    const currentPrefix = getExpectedPrefix(currentStateName, registry)
+    return {
+      type: 'blocked',
+      output: formatIllegalTransitionError(reason, currentProcedure, currentPrefix),
+    }
   }
 
   private requireSession(sessionId: string): void {
@@ -285,27 +341,7 @@ export class WorkflowEngine<
   }
 
   private wrapEvents(events: readonly BaseEvent[], startState: TState): readonly StoredEvent[] {
-    const { stored } = events.reduce<{
-      state: TState;
-      stored: readonly StoredEvent[];
-    }>(
-      (accumulator, event) => ({
-        state: this.factory.fold(accumulator.state, event),
-        stored: [...accumulator.stored, {
-          envelope: {
-            type: event.type,
-            at: event.at,
-            state: accumulator.state.currentStateMachineState,
-          },
-          payload: toPayload(event),
-        }],
-      }),
-      {
-        state: startState,
-        stored: [],
-      },
-    )
-    return stored
+    return wrapEventsWithFold(events, startState, (state: TState, event: BaseEvent) => this.factory.fold(state, event))
   }
 
   private applyIdentityGate(sessionId: string, workflow: TWorkflow, op: string): EngineResult | undefined {
@@ -320,35 +356,13 @@ export class WorkflowEngine<
   }
 
   private verifyIdentity(sessionId: string, workflow: TWorkflow): string | undefined {
-    const transcriptPath = workflow.getTranscriptPath()
-    const state = workflow.getState().currentStateMachineState
-    const registry = this.factory.getRegistry()
-    const pattern = buildPrefixPattern(registry)
-    const messages = this.engineDeps.transcriptReader.readMessages(transcriptPath)
-    const identityCheckResult = checkIdentity(messages, pattern)
-
-    this.persistPlatformEvent(sessionId, workflow.getState(), {
-      type: 'identity-verified',
-      at: this.engineDeps.now(),
-      status: identityCheckResult.status,
-      transcriptPath,
+    return verifyAgentIdentity({
+      engineDeps: this.engineDeps,
+      registry: this.factory.getRegistry(),
+      getTranscriptPath: () => workflow.getTranscriptPath(),
+      getState: () => workflow.getState(),
+      persistPlatformEvent: (event) => this.persistPlatformEvent(sessionId, workflow.getState(), event),
     })
-
-    if (identityCheckResult.status === 'lost') {
-      const currentProcedure = readProcedure(this.engineDeps, state)
-      return [
-        'Your last message is missing the required state prefix.',
-        '',
-        `- send a new message starting with: ${getExpectedPrefix(state, registry)}`,
-        '- then continue with the current procedure',
-        '',
-        'Current procedure:',
-        '',
-        currentProcedure,
-      ].join('\n')
-    }
-
-    return undefined
   }
 
   private platformOperationContext(sessionId: string, workflow: TWorkflow) {
@@ -373,31 +387,11 @@ export class WorkflowEngine<
     }])
   }
 
-  private uncommittedOperationError(error: unknown): EngineResult {
-    return {
-      type: 'error',
-      output: `Workflow operation failed before persistence: ${this.errorMessage(error)}`,
-      persistence: 'not-attempted',
-    }
-  }
-
-  private committedResponseError(error: unknown): EngineResult {
-    return {
-      type: 'error',
-      output: `Workflow operation committed, but its response could not be completed: ${this.errorMessage(error)}`,
-      persistence: 'committed',
-    }
-  }
-
-  private errorMessage(error: unknown): string {
-    return error instanceof Error ? error.message : String(error)
-  }
-
   private runOperationCallback(callback: () => PreconditionResult): PreconditionResult | EngineResult {
     try {
       return callback()
     } catch (error: unknown) {
-      return this.uncommittedOperationError(error)
+      return formatUncommittedOperationError(error)
     }
   }
 
@@ -408,7 +402,7 @@ export class WorkflowEngine<
       targetDef.afterEntry?.()
       return undefined
     } catch (error: unknown) {
-      return this.committedResponseError(error)
+      return formatCommittedResponseError(error)
     }
   }
 

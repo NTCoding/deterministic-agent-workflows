@@ -26,7 +26,7 @@
       "executor": "nx:run-commands",
       "dependsOn": ["build", "^build"],
       "options": {
-        "command": "pnpm --dir packages/deterministic-agent-workflows-opencode exec node smoke-test.mjs"
+        "command": "pnpm --dir packages/deterministic-agent-workflows-opencode exec vitest run src && pnpm --dir packages/deterministic-agent-workflows-opencode exec node smoke-test.mjs"
       }
     }
   }

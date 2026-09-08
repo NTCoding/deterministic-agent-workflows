@@ -98,13 +98,19 @@ importers:
     dependencies:
       '@agentclientprotocol/sdk':
         specifier: 1.4.0
-        version: 1.4.0(zod@4.1.8)
+        version: 1.4.0(zod@3.25.76)
       '@nt-ai-lab/deterministic-agent-workflow-cli':
         specifier: workspace:*
         version: link:../deterministic-agent-workflows-cli
       '@nt-ai-lab/deterministic-agent-workflow-engine':
         specifier: workspace:*
         version: link:../deterministic-agent-workflows-engine
+      '@nt-ai-lab/deterministic-agent-workflow-event-store':
+        specifier: workspace:*
+        version: link:../deterministic-agent-workflows-event-store
+      zod:
+        specifier: ^3.25.76
+        version: 3.25.76
     devDependencies:
       vitest:
         specifier: ^2.1.9
@@ -202,6 +208,10 @@ importers:
       zod:
         specifier: ^3.25.76
         version: 3.25.76
+    devDependencies:
+      vitest:
+        specifier: ^2.1.9
+        version: 2.1.9(@types/node@22.19.17)
 
   packages/deterministic-agent-workflows-pi:
     dependencies:
@@ -4230,9 +4240,9 @@ packages:
 
 snapshots:
 
-  '@agentclientprotocol/sdk@1.4.0(zod@4.1.8)':
+  '@agentclientprotocol/sdk@1.4.0(zod@3.25.76)':
     dependencies:
-      zod: 4.1.8
+      zod: 3.25.76
 
   '@ampproject/remapping@2.3.0':
     dependencies:

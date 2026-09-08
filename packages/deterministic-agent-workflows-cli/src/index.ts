@@ -42,6 +42,13 @@ export type {
   ReviewCoordinatorDeps,
   ReviewCoordinatorResult,
 } from './platform/domain/review-coordinator'
+export { createWorkflowContextBoundary } from './platform/domain/workflow-context-boundary'
+export type {
+  FreshContextLaunch,
+  FreshContextLauncher,
+  WorkflowContextBoundaryDeps,
+  WorkflowContextBoundaryResult,
+} from './platform/domain/workflow-context-boundary'
 export { getRepositoryName } from './platform/infra/external-clients/git/repository-name'
 export {
   EXIT_ALLOW,

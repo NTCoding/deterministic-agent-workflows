@@ -224,6 +224,14 @@ Status legend: `TODO`, `IN_PROGRESS`, `BLOCKED`, `DONE`
 - [x] **DONE** Split the PlatformContext store conflation found during public API inspection: rename `store` to `workflowEventStore` and add a separate `reviewStore: ReviewJobStore` so consumers can construct a `ReviewCoordinator` from `buildWorkflowDeps` without casts. Widen `ProcessDeps.buildStore` to return both store contracts, update every adapter construction site, restructure the README so ACP review automation sits below the core setup sections, and rewrite its intro in plain language.
 - [ ] **IN_PROGRESS** Verify the combined diff locally and on PR 44, then inspect the complete public API before consumer integration.
 
+### 17) Remaining platform capabilities for living-architecture #526
+
+The consumer integration cannot complete without three deliverables. This is the complete list of everything needed from the platform for #526.
+
+- [x] **DONE** Deliverable 1 — Release the merged afterEntry ordering fix. The change is merged on main (`fix(engine): invoke afterEntry only after persisting the transitioned event`); the release fires through the normal `nx release` pipeline when the next batch merges. Engine tests prove afterEntry runs after persist and the committed-operation error path.
+- [x] **DONE** Deliverable 2 — Constrained reviewer feedback interface (requirements 5, 6, 7): a feedback server reached through the platform by reviewer ACP processes, exposing exactly five bounded operations (read snapshot/threads, submit review, reply to thread, record completion, resolve thread under policy) with fixed repository/PR/session/reviewer/head, path and diff-line validation, stale-head rejection, payload bounds, per-reviewer GitHub ID records, retry reconciliation, server-side agent prefixes, queryable thread ownership, and fail-closed failures.
+- [x] **DONE** Deliverable 3 — Fresh-context boundary after REVIEWING (requirement 11): deterministic retirement of the main implementation context once REVIEWING is durably entered, refusal of its subsequent write/publish attempts, a fresh main-agent context initialised from consumer state instructions (Pi via the installed `AgentSessionRuntime.newSession()`), a single writable-remediation owner, and a workflow-owned ACP runtime fallback for providers that cannot transfer ownership safely.
+
 ---
 
 ## Acceptance criteria for “done”

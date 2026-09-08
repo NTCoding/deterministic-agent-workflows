@@ -37,6 +37,7 @@ const app = agent({ name: 'fake-review-agent' })
     params, client
   }) => {
     log('prompt-started')
+    log(`prompt-text:${JSON.stringify(params.prompt)}`)
     if (mode === 'slow' || mode === 'ignore-cancel') {
       await new Promise((resolve) => {
         cancelPrompt = mode === 'slow' ? resolve : undefined

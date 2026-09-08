@@ -65,6 +65,31 @@ export function formatOperationGateError(op: string, reason: string, expectedPre
 }
 
 /** @riviere-role cli-output-formatter */
+export function formatRetiredContextError(op: string, retiredAt: string): string {
+  return formatBlock(
+    `Cannot ${op}`,
+    [
+      'This agent context was retired after the review took ownership of the work.',
+      `Retired at: ${retiredAt}`,
+      'A fresh main agent now owns the workflow. This context can no longer write, publish, or transition.',
+      'Stop working and let the fresh agent continue.',
+    ].join('\n'),
+  )
+}
+
+/** @riviere-role cli-output-formatter */
+export function formatContextRetiredSuccess(op: string, retiredAt: string): string {
+  return formatBlock(
+    `Context retired (${op})`,
+    [
+      `This agent context was retired at ${retiredAt}.`,
+      'Its future write, publish, and transition attempts are refused.',
+      'A fresh main agent owns the workflow from here.',
+    ].join('\n'),
+  )
+}
+
+/** @riviere-role cli-output-formatter */
 export function formatOperationSuccess(op: string, body: string, expectedPrefix: string): string {
   return formatBlock(op, `${body}\n\nNext message MUST begin with: ${expectedPrefix}`)
 }

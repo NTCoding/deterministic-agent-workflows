@@ -336,26 +336,26 @@ export class ReviewCoordinator {
   private completeReview(input: ReviewBundleRequest, eventState: string, review: CompletedReview): void {
     if (!this.executions.has(input.bundleId) || this.cancellations.has(input.bundleId) ||
       terminalResult(this.store.getReviewBundle(input.bundleId)) !== undefined) return
-    const {
-      definition, run, payload
-    } = review
+    const storedAgent = this.store.listReviewAgents(input.bundleId)
+      .find((agent) => agent.reviewType === review.definition.reviewType)
+    if (storedAgent?.status === 'completed') return
     this.store.completeReviewAgent(
       input.bundleId,
-      definition.reviewType,
+      review.definition.reviewType,
       {
         bundleId: input.bundleId,
-        providerSessionId: run.providerSessionId,
-        providerRunId: run.providerRunId,
+        providerSessionId: review.run.providerSessionId,
+        providerRunId: review.run.providerRunId,
         baseRevision: input.baseRevision,
         headRevision: input.headRevision,
         exactFilesDigest: exactFilesDigest(input.changedFiles),
         exactFiles: input.changedFiles,
-        reviewerDefinitionVersion: definition.version,
+        reviewerDefinitionVersion: review.definition.version,
       },
       this.now(),
       recordReviewInputSchema.parse({
-        ...payload,
-        reviewType: definition.reviewType,
+        ...review.payload,
+        reviewType: review.definition.reviewType,
         pullRequestNumber: input.pullRequestNumber,
         sourceState: eventState,
       }),

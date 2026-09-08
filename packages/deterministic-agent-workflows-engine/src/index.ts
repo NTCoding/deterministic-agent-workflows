@@ -99,6 +99,7 @@ export type {
   StoppingCheckedEvent,
   IdentityVerifiedEvent,
   ContextRequestedEvent,
+  ContextRetiredEvent,
   ReviewRecordedEvent,
   ReviewBundleRequestedEvent,
   ReviewBundleStartedEvent,

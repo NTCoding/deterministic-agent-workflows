@@ -1,6 +1,7 @@
 import {
   mkdtempSync, rmSync
 } from 'node:fs'
+import { createHash } from 'node:crypto'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
@@ -145,6 +146,61 @@ describe('ReviewCoordinator', () => {
       completedStatus: 'completed',
       cancellations: 3,
     })
+    store.db.close()
+  })
+
+  it('does not repeat the completion write when the reviewer recorded through the feedback server', async () => {
+    const store = createTestStore()
+    const resolutions = new Map<string, (payload: ReviewPayload) => void>()
+    const client: ReviewAgentClient = {
+      start: async (input) => ({
+        providerSessionId: `provider-${input.reviewType}`,
+        providerRunId: `run-${input.reviewType}`,
+        completion: new Promise<ReviewPayload>((resolve) => {
+          resolutions.set(input.reviewType, resolve)
+        }),
+        cancel: vi.fn(async () => undefined),
+      }),
+      load: vi.fn(),
+      cancel: vi.fn(),
+    }
+    const coordinator = new ReviewCoordinator({
+      store,
+      client,
+      now: () => '2026-01-01T00:00:00.000Z'
+    })
+    const execution = coordinator.run(request(), 'REVIEWING')
+    await vi.waitFor(() => expect(resolutions.size).toBe(4))
+    store.completeReviewAgent(
+      'bundle-1',
+      'one',
+      {
+        bundleId: 'bundle-1',
+        providerSessionId: 'provider-one',
+        providerRunId: 'run-one',
+        baseRevision: 'base-sha',
+        headRevision: 'head-sha',
+        exactFilesDigest: createHash('sha256').update(JSON.stringify(['src/a.ts', 'src/b.ts'])).digest('hex'),
+        exactFiles: ['src/a.ts', 'src/b.ts'],
+        reviewerDefinitionVersion: 'v1',
+      },
+      '2026-01-01T00:00:01.000Z',
+      {
+        verdict: 'PASS',
+        summary: 'Recorded by the constrained feedback server.',
+        findings: [],
+        reviewType: 'one',
+        pullRequestNumber: 42,
+        sourceState: 'REVIEWING',
+      },
+      'REVIEWING',
+    )
+    resolutions.get('one')?.(pass())
+    resolutions.get('two')?.(pass())
+    resolutions.get('three')?.(pass())
+    resolutions.get('four')?.(pass())
+    await expect(execution).resolves.toMatchObject({ type: 'completed' })
+    expect(store.listSessionReviews('session-1').filter((review) => review.reviewType === 'one')).toHaveLength(1)
     store.db.close()
   })
 

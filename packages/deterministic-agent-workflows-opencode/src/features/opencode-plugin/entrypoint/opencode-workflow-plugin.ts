@@ -180,6 +180,7 @@ export function createOpenCodeWorkflowPlugin<
         workflowDeps,
       }) => {
         const engine = new WorkflowEngine(config.workflowDefinition, engineDeps, workflowDeps)
+        if (engine.getContextRetirement(sessionID)?.hostSessionId === sessionID) return true
         return engine.checkStopping(sessionID, 'stop').type === 'success'
       }),
       sendIdleRecoveryPrompt: async (sessionID) => {

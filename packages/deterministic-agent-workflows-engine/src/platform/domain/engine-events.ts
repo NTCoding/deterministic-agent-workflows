@@ -98,6 +98,14 @@ const contextRequestedSchema = z.object({
   agentName: nonEmptyStringSchema,
 })
 
+export const contextRetiredSchema = z.object({
+  type: z.literal('context-retired'),
+  at: nonEmptyStringSchema,
+  hostSessionId: nonEmptyStringSchema,
+  reason: nonEmptyStringSchema,
+  successorSessionId: nonEmptyStringSchema.optional(),
+})
+
 export const reviewRecordedEventSchema = z.object({
   type: z.literal('review-recorded'),
   at: nonEmptyStringSchema,
@@ -204,6 +212,7 @@ export const engineEventSchema = z.discriminatedUnion('type', [
   stoppingCheckedSchema,
   identityVerifiedSchema,
   contextRequestedSchema,
+  contextRetiredSchema,
   reviewRecordedEventSchema,
   reviewBundleRequestedEventSchema,
   reviewBundleStartedEventSchema,
@@ -228,6 +237,7 @@ const platformOwnedEventTypesExcludedFromWorkflowState = new Set<string>([
   'stopping-checked',
   'identity-verified',
   'context-requested',
+  'context-retired',
   'review-bundle-requested',
   'review-bundle-started',
   'review-agent-requested',
@@ -271,6 +281,8 @@ export type StoppingCheckedEvent = z.infer<typeof stoppingCheckedSchema>
 export type IdentityVerifiedEvent = z.infer<typeof identityVerifiedSchema>
 /** @riviere-role value-object */
 export type ContextRequestedEvent = z.infer<typeof contextRequestedSchema>
+/** @riviere-role value-object */
+export type ContextRetiredEvent = z.infer<typeof contextRetiredSchema>
 /** @riviere-role value-object */
 export type ReviewRecordedEvent = z.infer<typeof reviewRecordedEventSchema>
 /** @riviere-role value-object */

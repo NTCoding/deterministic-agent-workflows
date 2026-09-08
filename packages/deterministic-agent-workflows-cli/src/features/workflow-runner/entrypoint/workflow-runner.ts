@@ -319,10 +319,17 @@ function handleHook<
     case 'PreToolUse': return handlePreToolUseHook(engine, resolvedHandler, questionToolName, stdin)
     case 'SubagentStart': return handleSubagentStartHook(engine, stdin)
     case 'TeammateIdle': return handleTeammateIdleHook(engine, stdin)
-    case 'Stop': return engineResultToRunnerResult(engine.checkStopping(common.session_id, 'stop'), true, stopPreventionMessage)
+    case 'Stop':
+      if (engine.getContextRetirement(common.session_id)?.hostSessionId === common.session_id) {
+        return {
+          output: '',
+          exitCode: EXIT_ALLOW
+        }
+      }
+      return engineResultToRunnerResult(engine.checkStopping(common.session_id, 'stop'), true, stopPreventionMessage)
     default: return {
       output: '',
-      exitCode: EXIT_ALLOW 
+      exitCode: EXIT_ALLOW
     }
   }
 }

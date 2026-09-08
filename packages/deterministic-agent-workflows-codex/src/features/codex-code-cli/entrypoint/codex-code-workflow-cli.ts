@@ -339,6 +339,10 @@ function preventUnsupportedStop<
     output: '',
     exitCode: 0
   }
+  if (engine.getContextRetirement(sessionId)?.hostSessionId === sessionId) return {
+    output: '',
+    exitCode: 0
+  }
   const result = engine.checkStopping(sessionId, 'stop')
   if (result.type === 'blocked') return {
     output: formatStopDenyDecision(result.output, stopPreventionMessage),

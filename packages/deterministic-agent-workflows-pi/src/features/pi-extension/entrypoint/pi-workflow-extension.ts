@@ -27,10 +27,7 @@ import type {
   PiWorkflowExtensionConfig,
 } from '../../../platform/domain/pi-workflow-extension-types'
 import { parsePiCommandArguments } from '../../../platform/domain/pi-command-arguments'
-import {
-  hasPiWorkflowMarker,
-  PI_WORKFLOW_MARKER_CUSTOM_TYPE,
-} from '../../../platform/infra/external-clients/pi/pi-session-file'
+import { hasPiWorkflowMarker } from '../../../platform/infra/external-clients/pi/pi-session-file'
 import {
   getLatestPiAssistantSettlement,
   type PiAssistantSettlement,
@@ -45,6 +42,7 @@ import {
   translationNote,
 } from './pi-workflow-extension-platform'
 import { createPiWorkflowSessionOwnership } from './pi-workflow-session-ownership'
+import { createPiSessionInitializer } from './pi-workflow-initialization'
 import { registerPiWorkflowAutomation } from './pi-workflow-automation'
 const PI_QUESTION_TOOL = 'question'; const DEFAULT_COMMAND_NAME = 'workflow'; const DEFAULT_TOOL_NAME = 'workflow'
 const INITIALIZATION_PENDING_REASON = 'Pi workflow initialization has not completed safely. Tool execution is blocked.'; const INACTIVE_WORKFLOW_REASON = 'Pi workflow is inactive. Run the workflow init command before using workflow operations.'
@@ -102,7 +100,7 @@ export function createPiWorkflowExtension<
       appendToFile: () => undefined,
       now,
       transcriptReader: new PiTranscriptReader(() => ctx.sessionManager.getBranch()),
-      sessionContext: {getMainSessionId: () => ownership.delegatedParent(sessionId, store) ?? sessionId,},
+      sessionContext: {getMainSessionId: () => ownership.resolveWorkflowSessionId(sessionId, store),},
     }
   }
 
@@ -168,57 +166,6 @@ export function createPiWorkflowExtension<
     return initializationBySession.get(session.sessionId)?.type === 'inactive'
   }
 
-  function initializeSession(event: SessionStartEvent, ctx: ExtensionContext, pi: ExtensionAPI, sessionId: string): string | undefined {
-    try {
-      const sessionFile = requireSessionFile(ctx)
-      const header = ctx.sessionManager.getHeader()
-      if (header?.id !== sessionId) return 'Pi session header does not match the active session UUID.'
-      const activeBranchHasWorkflowMarker = hasPiWorkflowMarker(ctx.sessionManager.getBranch())
-      const sessionHasWorkflowMarker = hasPiWorkflowMarker(ctx.sessionManager.getEntries())
-      const inheritedWorkflowState = ownership.usesInheritedWorkflow(sessionId)
-      const delegatedParent = ownership.delegatedParent(sessionId)
-      const result = useEngine(ctx, (engine) => {
-        const sqliteHasWorkflowState = engine.hasSessionStarted(sessionId)
-        if (!sqliteHasWorkflowState) {
-          const parentFailure = ownership.parentSafetyFailure(event, ctx)
-          if (parentFailure !== undefined) return {
-            type: 'error' as const,
-            output: parentFailure,
-          }
-        }
-        if (delegatedParent !== undefined && !sqliteHasWorkflowState) return {
-          type: 'error' as const,
-          output: `Pi parent session ${delegatedParent} has no persisted workflow.`,
-        }
-        if (!inheritedWorkflowState && sessionHasWorkflowMarker && !activeBranchHasWorkflowMarker) return {
-          type: 'error' as const,
-          output: `The active Pi branch does not contain this session's ${PI_WORKFLOW_MARKER_CUSTOM_TYPE} marker.`,
-        }
-        if (!inheritedWorkflowState && activeBranchHasWorkflowMarker !== sqliteHasWorkflowState) return {
-          type: 'error' as const,
-          output: `Pi transcript and SQLite workflow state disagree for session ${sessionId}.`,
-        }
-        const repository = getRepositoryName(ctx.cwd)
-        if (repository === undefined) return {
-          type: 'error' as const,
-          output: 'repository must be a non-empty string.',
-        }
-        return engine.startSession(sessionId, sessionFile, repository)
-      })
-      if (result.type !== 'success') return result.output
-      if (result.output !== '') {
-        pi.sendMessage({
-          customType: 'deterministic-agent-workflow',
-          content: result.output,
-          display: true,
-        }, { triggerTurn: false })
-      }
-      return undefined
-    } catch (error: unknown) {
-      return String(error)
-    }
-  }
-
   function runRoute(ctx: ExtensionContext, args: readonly string[], pi: ExtensionAPI) {
     if (isInactive(ctx) && args[0] === 'init') {
       const session = readSessionId(ctx)
@@ -264,6 +211,19 @@ export function createPiWorkflowExtension<
       }
     }
   }
+
+  function isContextRetiredFor(ctx: ExtensionContext, sessionId: string): boolean {
+    try {
+      return useEngine(ctx, (engine) => engine.getContextRetirement(sessionId))?.hostSessionId === sessionId
+    } catch {
+      return false
+    }
+  }
+
+  const initializeSession = createPiSessionInitializer({
+    ownership,
+    useEngine,
+  })
 
   return (pi: ExtensionAPI): void => {
     pi.on('session_start', (event, ctx) => {
@@ -334,22 +294,26 @@ export function createPiWorkflowExtension<
       return { action: 'handled' }
     })
 
-    pi.on('agent_settled', (_event, ctx) => {
-      if (isInactive(ctx) || readinessFailure(ctx) !== undefined || automation.ownsState(ctx)) return
-      const session = readSessionId(ctx)
-      if (!session.ok) return
+    const maybeRepromptAfterSettlement = (ctx: ExtensionContext, sessionId: string): void => {
       const settlement: PiAssistantSettlement | undefined = getLatestPiAssistantSettlement(ctx.sessionManager.getBranch())
       if (settlement?.stopReason !== 'stop') return
-      if (recoveredAssistantBySession.get(session.sessionId) === settlement.id) return
+      if (recoveredAssistantBySession.get(sessionId) === settlement.id) return
       try {
-        const result = useEngine(ctx, (engine) => engine.checkStopping(session.sessionId, 'stop'))
+        const result = useEngine(ctx, (engine) => engine.checkStopping(sessionId, 'stop'))
         if (result.type === 'blocked' && ctx.isIdle() && !ctx.hasPendingMessages()) {
-          recoveredAssistantBySession.set(session.sessionId, settlement.id)
+          recoveredAssistantBySession.set(sessionId, settlement.id)
           pi.sendUserMessage(formatStopPreventionMessage(result.output, config.stopPreventionMessage))
         }
       } catch (error: unknown) {
-        markSafetyUnavailable(ctx, session.sessionId, `Stopping safety could not be established: ${String(error)}`)
+        markSafetyUnavailable(ctx, sessionId, `Stopping safety could not be established: ${String(error)}`)
       }
+    }
+
+    pi.on('agent_settled', (_event, ctx) => {
+      if (isInactive(ctx) || readinessFailure(ctx) !== undefined || automation.ownsState(ctx)) return
+      const session = readSessionId(ctx)
+      if (!session.ok || isContextRetiredFor(ctx, session.sessionId)) return
+      maybeRepromptAfterSettlement(ctx, session.sessionId)
     })
 
     const blockSessionBranching = (ctx: ExtensionContext): { readonly cancel: true } | undefined => {
@@ -407,9 +371,24 @@ export function createPiWorkflowExtension<
     const automation = registerPiWorkflowAutomation(pi, {
       databasePath,
       ...(config.automation === undefined ? {} : { automation: config.automation }),
-      isReady: (ctx) => readinessFailure(ctx) === undefined && !ownership.usesInheritedWorkflow(ctx.sessionManager.getSessionId()),
+      isReady: (ctx) => readinessFailure(ctx) === undefined &&
+        ownership.delegatedParent(ctx.sessionManager.getSessionId()) === undefined,
       getState: (ctx) => useEngine(ctx, (engine) => engine.getWorkflowState(ctx.sessionManager.getSessionId())),
       runOperation: (ctx, args) => runRoute(ctx, args, pi),
+      retireContext: (ctx, reason) => {
+        const session = readSessionId(ctx)
+        if (!session.ok) return {
+          type: 'error',
+          output: session.reason,
+        }
+        return useEngine(ctx, (engine) => engine.retireContext(session.sessionId, reason))
+      },
+      isContextRetired: (ctx) => {
+        const session = readSessionId(ctx)
+        return session.ok && isContextRetiredFor(ctx, session.sessionId)
+      },
+      recordContextSuccessor: (successorSessionId, retiredSessionId, recordedAt) =>
+        ownership.recordContextSuccessor(successorSessionId, retiredSessionId, recordedAt),
       fail: (ctx, reason) => markSafetyUnavailable(ctx, ctx.sessionManager.getSessionId(), reason),
     })
   }

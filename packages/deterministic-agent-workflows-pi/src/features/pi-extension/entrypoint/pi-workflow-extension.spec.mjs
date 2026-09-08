@@ -25,6 +25,7 @@ import {
   vi,
 } from 'vitest'
 import { createPiWorkflowExtension } from './pi-workflow-extension.ts'
+import { createPiWorkflowSessionOwnership } from './pi-workflow-session-ownership.ts'
 
 const inheritedParentSession = process.env.PI_SUBAGENT_PARENT_SESSION
 delete process.env.PI_SUBAGENT_PARENT_SESSION
@@ -248,6 +249,16 @@ function createHarness(manager, config, options = {}) {
     compact: () => undefined,
     getSystemPrompt: () => '',
   })
+  if (options.newSession !== undefined) {
+    runner.bindCommandContext({
+      waitForIdle: async () => undefined,
+      newSession: options.newSession,
+      fork: async () => ({ cancelled: false }),
+      navigateTree: async () => ({ cancelled: false }),
+      switchSession: async () => ({ cancelled: false }),
+      reload: async () => undefined,
+    })
+  }
   return {
     runner,
     sentMessages,
@@ -256,6 +267,7 @@ function createHarness(manager, config, options = {}) {
     state,
     workflowTool: extension.tools.get(config.toolName ?? 'workflow').definition,
     workflowCommand: extension.commands.get(config.commandName ?? 'workflow'),
+    freshContextCommand: extension.commands.get('workflow-fresh-context'),
   }
 }
 
@@ -1338,6 +1350,103 @@ describe('workflow-owned Pi automation', () => {
       message: expect.stringContaining('required review service unavailable'),
     })
     expect(harness.sentUserMessages).toStrictEqual([])
+  })
+
+  it('retires the implementation context and starts the fresh main-agent context through newSession', async () => {
+    const root = createTestRoot()
+    const config = createConfig(root)
+    const freshContextMessages = []
+    config.automation = {
+      ownsState: (state) => state.currentStateMachineState === 'DEVELOPING',
+      onIdle: async (context) => {
+        context.startFreshContext('Fresh state instructions for ADDRESSING_FEEDBACK.')
+      },
+    }
+    const manager = SessionManager.create(repositoryRoot, join(root, 'sessions'))
+    const harness = createHarness(manager, config, {
+      newSession: async (newSessionOptions) => {
+        await newSessionOptions.withSession({
+          sessionManager: { getSessionId: () => 'fresh-context-session' },
+          sendUserMessage: async (content) => {
+            freshContextMessages.push(content)
+          },
+        })
+        return { cancelled: false }
+      },
+    })
+    await harness.runner.emit({
+      type: 'session_start',
+      reason: 'startup'
+    })
+    await activate(harness)
+    harness.sentUserMessages.length = 0
+    await harness.workflowCommand.handler('transition DEVELOPING', harness.runner.createCommandContext())
+    await vi.waitFor(() => expect(harness.sentUserMessages).toHaveLength(1))
+    await harness.freshContextCommand.handler('', harness.runner.createCommandContext())
+
+    const ownership = createPiWorkflowSessionOwnership(config.databasePath)
+    const store = createStore(config.databasePath)
+    try {
+      const retirementEvents = store
+        .readEvents(manager.getSessionId())
+        .filter((event) => event.envelope.type === 'context-retired')
+      expect({
+        dispatched: harness.sentUserMessages[0],
+        freshMessages: freshContextMessages,
+        predecessor: ownership.contextPredecessor('fresh-context-session'),
+      }).toStrictEqual({
+        dispatched: '/workflow-fresh-context',
+        freshMessages: ['Fresh state instructions for ADDRESSING_FEEDBACK.'],
+        predecessor: manager.getSessionId(),
+      })
+      expect({
+        retirements: retirementEvents.length,
+        hostSessionId: retirementEvents[0]?.payload.hostSessionId,
+      }).toStrictEqual({
+        retirements: 1,
+        hostSessionId: manager.getSessionId(),
+      })
+    } finally {
+      store.db.close()
+    }
+  })
+
+  it('refuses workflow operations and republishing from the retired context', async () => {
+    const root = createTestRoot()
+    const config = createConfig(root)
+    config.automation = {
+      ownsState: (state) => state.currentStateMachineState === 'DEVELOPING',
+      onIdle: async (context) => {
+        context.startFreshContext('Fresh state instructions.')
+      },
+    }
+    const manager = SessionManager.create(repositoryRoot, join(root, 'sessions'))
+    const harness = createHarness(manager, config, { newSession: async () => ({ cancelled: false }) })
+    await harness.runner.emit({
+      type: 'session_start',
+      reason: 'startup'
+    })
+    await activate(harness)
+    harness.sentUserMessages.length = 0
+    await harness.workflowCommand.handler('transition DEVELOPING', harness.runner.createCommandContext())
+    await vi.waitFor(() => expect(harness.sentUserMessages).toHaveLength(1))
+    await harness.freshContextCommand.handler('', harness.runner.createCommandContext())
+
+    const toolResult = await harness.workflowTool.execute(
+      'retired-context',
+      {
+        operation: 'record-note',
+        args: ['late write']
+      },
+      undefined,
+      undefined,
+      harness.runner.createContext(),
+    )
+    appendAssistant(manager, 'stop')
+    await harness.runner.emit({ type: 'agent_settled' })
+    expect(toolResult.isError).toBe(true)
+    expect(toolResult.content[0].text).toContain('retired')
+    expect(harness.sentUserMessages).toHaveLength(1)
   })
 })
 

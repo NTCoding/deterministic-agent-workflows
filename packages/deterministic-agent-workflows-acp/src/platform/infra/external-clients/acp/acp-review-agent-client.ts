@@ -64,7 +64,8 @@ function appendAgentText(
   )
 }
 
-function buildProcessEnvironment(
+/** @riviere-role external-client-service */
+export function buildProcessEnvironment(
   configured: Readonly<Record<string, string>> | undefined,
 ): NodeJS.ProcessEnv {
   const environment: NodeJS.ProcessEnv = {}

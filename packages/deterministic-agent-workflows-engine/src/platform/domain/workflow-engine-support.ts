@@ -1,4 +1,7 @@
 import type { BaseEvent } from './base-event'
+import type { StoredEvent } from './stored-event'
+import { toPayload } from './stored-event'
+import type { BaseWorkflowState } from './workflow-state'
 import type { WorkflowEngineDeps } from './workflow-engine-types'
 import type { WorkflowRegistry } from './workflow-registry'
 import { requireNonEmptyString } from './non-empty-string'
@@ -73,4 +76,33 @@ export function enrichSessionStartedEvents<TStateName extends string>(
     currentState,
     states: [...states],
   }, ...enriched]
+}
+
+/** @riviere-role domain-service */
+export function wrapEventsWithFold<TState extends BaseWorkflowState<string>>(
+  events: readonly BaseEvent[],
+  startState: TState,
+  fold: (state: TState, event: BaseEvent) => TState,
+): readonly StoredEvent[] {
+  const { stored } = events.reduce<{
+    state: TState
+    stored: readonly StoredEvent[]
+  }>(
+    (accumulator, event) => ({
+      state: fold(accumulator.state, event),
+      stored: [...accumulator.stored, {
+        envelope: {
+          type: event.type,
+          at: event.at,
+          state: accumulator.state.currentStateMachineState,
+        },
+        payload: toPayload(event),
+      }],
+    }),
+    {
+      state: startState,
+      stored: [],
+    },
+  )
+  return stored
 }

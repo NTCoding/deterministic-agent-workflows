@@ -51,7 +51,15 @@ vi.mock('@nt-ai-lab/deterministic-agent-workflow-cli', () => ({
 vi.mock('@nt-ai-lab/deterministic-agent-workflow-event-store', () => ({
   createStore: () => ({
     hasSessionStarted: () => false,
-    db: { close: () => undefined },
+    db: {
+      close: () => undefined,
+      exec: () => undefined,
+      prepare: () => ({
+        get: () => undefined,
+        all: () => [],
+        run: () => undefined,
+      }),
+    },
   }),
 }))
 

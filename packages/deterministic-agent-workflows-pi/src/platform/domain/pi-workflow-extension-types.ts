@@ -47,6 +47,7 @@ export interface PiWorkflowIdleContext<TState> {
   runOperation(operation: string, ...args: readonly string[]): string
   runReviews(request: Omit<ReviewBundleRequest, 'sessionId' | 'workingDirectory'>, client: ReviewAgentClient): Promise<ReviewCoordinatorResult>
   resumeWithFreshContext(stateInstructions: string): void
+  startFreshContext(stateInstructions: string): void
 }
 
 /** @riviere-role value-object */

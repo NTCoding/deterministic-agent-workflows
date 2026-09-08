@@ -422,6 +422,69 @@ Cancellation waits for the ACP prompt to settle during the cooperative grace per
 
 Advanced SDK applications that already own an `AgentSession` can still use `refreshPiContextWindow(session, stateInstructions)`. That lower-level helper applies a persisted compaction directly. Normal extension consumers use the factory automation API above. `resolvePiMainSessionId` continues to resolve child delegation from `PI_SUBAGENT_PARENT_SESSION`.
 
+## Constrained reviewer feedback server
+
+Reviewer agents should not hold GitHub credentials, an unrestricted API, a generic URL, or `gh`. The platform ships a constrained feedback server that reviewer processes reach as an MCP server. It exposes exactly five tools:
+
+| Tool | Purpose |
+| --- | --- |
+| `read-review-context` | Read the recorded pull request snapshot and open review threads. |
+| `submit-review` | Submit a normal PR review with inline comments. |
+| `reply-to-thread` | Reply to an existing open review thread. |
+| `record-completion` | Record reviewer completion and satisfaction as a durable review. |
+| `resolve-thread` | Resolve a thread, but only when workflow policy permits it. |
+
+The server fixes the repository, pull request number, workflow session, reviewer identity, and expected head revision. None of these come from the model. It validates comment paths and lines against the current diff, rejects stale heads, bounds body and comment counts, records the GitHub review, comment, and thread IDs per reviewer, reconciles retries so no duplicate reviews or comments are written, and applies the reviewer prefix (for example `[architecture-review]`) server-side to every agent-authored GitHub message. Authentication, permission, malformed-response, network, and indeterminate failures all fail closed and are recorded. Thread-ownership records are queryable by reviewer, so a human reply in a thread routes to the owning reviewer.
+
+Build one descriptor per reviewer and pass the descriptors through the ACP client:
+
+```ts
+import { createReviewerFeedbackMcpServer } from '@nt-ai-lab/deterministic-agent-workflow-acp'
+
+const constrainedFeedbackServers = reviewers.map((reviewer) =>
+  createReviewerFeedbackMcpServer({
+    spec: {
+      repository: 'owner/repository',
+      pullRequestNumber: 42,
+      bundleId: request.bundleId,
+      workflowSessionId: context.sessionId,
+      reviewType: reviewer.reviewType,
+      sourceState: 'REVIEWING',
+      expectedHeadRevision: request.headRevision,
+      threadResolution: 'owned-threads',
+      bounds: {},
+      databasePath: '/absolute/path/to/workflow-events.db',
+    },
+    githubToken: process.env.GH_TOKEN ?? '',
+  }))
+```
+
+The GitHub token travels only in the feedback server process environment; the reviewer process never receives it. The generated server specification is written to an owner-only file and never contains the token. The server stores its records in the same workflow event database, so thread ownership and completion satisfaction are queryable alongside reviews.
+
+## Fresh main-agent context after review
+
+When a review takes ownership of the work, the platform can retire the implementation context durably and start a fresh main-agent context from your state instructions. After retirement, the old context's write, publish, and transition attempts are refused with the platform's blocked response, while it may still stop quietly. Only one agent owns writable remediation at a time.
+
+The boundary is provider-owned and works the same way everywhere:
+
+```ts
+import { createWorkflowContextBoundary } from '@nt-ai-lab/deterministic-agent-workflow-cli'
+
+const boundary = createWorkflowContextBoundary({
+  engine,
+  sessionId: context.sessionId,
+  launcher: myProviderLauncher,
+  retirementReason: 'Reviewing now owns the work.',
+})
+await boundary.enterReviewing({ stateInstructions: buildStateInstructions(context.getState()) })
+```
+
+Adapters supply the launcher:
+
+- Pi starts a real fresh session through the installed `AgentSessionRuntime.newSession()` boundary. The fresh session continues the same workflow, and its first message is your state instructions. Context transformation and compaction are never presented as a fresh session; use `resumeWithFreshContext` for a same-session model refresh and `startFreshContext` for a true context handover.
+- OpenCode creates a new session through `createOpenCodeFreshContextLauncher({ client })` and prompts it with the state instructions.
+- Providers that cannot transfer ownership safely launch the fresh main agent through the workflow-owned ACP runtime (`createAcpFreshAgentRuntime`).
+
 ## Event store
 
 The adapter creates the SQLite event store automatically.

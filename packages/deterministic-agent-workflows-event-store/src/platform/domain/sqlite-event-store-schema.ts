@@ -12,6 +12,12 @@ import {
   createReviewsTableSql,
   createReviewsTypeVerdictIndexSql,
 } from './sqlite-review-storage'
+import {
+  createReviewerFeedbackCompletionsTableSql,
+  createReviewerFeedbackFailuresTableSql,
+  createReviewerFeedbackTablesSql,
+  createReviewerFeedbackThreadsTableSql,
+} from './sqlite-reviewer-feedback-store'
 
 const tableInfoRowSchema = z.array(z.object({ name: z.string() }))
 
@@ -50,6 +56,10 @@ export function initializeEventStoreSchema(db: SqliteDatabase): void {
   db.exec(createReviewBundlesTableSql)
   db.exec(createActiveReviewBundleIndexSql)
   db.exec(createReviewAgentsTableSql)
+  db.exec(createReviewerFeedbackTablesSql)
+  db.exec(createReviewerFeedbackThreadsTableSql)
+  db.exec(createReviewerFeedbackCompletionsTableSql)
+  db.exec(createReviewerFeedbackFailuresTableSql)
   ensureColumn(db, 'events', 'state', 'TEXT')
   ensureColumn(db, 'review_agents', 'review_id', 'INTEGER')
   ensureColumn(db, 'review_agents', 'provider_run_id', 'TEXT')
