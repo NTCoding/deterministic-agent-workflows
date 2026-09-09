@@ -40,14 +40,20 @@ type SequencedSessionStartedEvent = BaseEvent & {
   readonly transcriptPath: string
 }
 
+type SequencedRecordedEvent = BaseEvent & { readonly type: 'pull-request-recorded' | 'reviewer-status-recorded' }
+
 type SequencedHooks = {
   readonly onEntry?: (state: SequencedState) => SequencedState
   readonly afterEntry?: () => void
+  readonly afterEntryEvents?: readonly SequencedRecordedEvent[]
 }
 
 function isTransitionedEvent(event: BaseEvent): event is SequencedTransitionedEvent { return event.type === 'transitioned' }
 
 function isSessionStartedEvent(event: BaseEvent): event is SequencedSessionStartedEvent { return event.type === 'session-started' }
+function isRecordedEvent(event: BaseEvent): event is SequencedRecordedEvent {
+  return event.type === 'pull-request-recorded' || event.type === 'reviewer-status-recorded'
+}
 
 class SequencedWorkflow {
   constructor(
@@ -60,10 +66,11 @@ class SequencedWorkflow {
   }
 
   appendEvent(event: BaseEvent): void {
-    if (!isTransitionedEvent(event)) {
+    if (!isTransitionedEvent(event) && !isRecordedEvent(event)) {
       throw new WorkflowStateError(`Unexpected event in appendEvent: ${event.type}`)
     }
     this.pendingEvents = [...this.pendingEvents, event]
+    if (isRecordedEvent(event)) return
     this.state = {
       ...this.state,
       currentStateMachineState: event.to,
@@ -106,6 +113,7 @@ class SequencedWorkflow {
 }
 
 function createSequencedWorkflowDefinition(hooks: SequencedHooks = {}): WorkflowDefinition<SequencedWorkflow, SequencedState, Record<string, never>, 'PLANNING' | 'DEVELOPING', 'write'> {
+  const workflowRef: { current?: SequencedWorkflow } = {}
   return {
     fold(state, event) {
       if (isTransitionedEvent(event)) {
@@ -120,10 +128,13 @@ function createSequencedWorkflowDefinition(hooks: SequencedHooks = {}): Workflow
           transcriptPath: event.transcriptPath,
         }
       }
+      if (isRecordedEvent(event)) return state
       throw new WorkflowStateError(`Unexpected event in fold: ${event.type}`)
     },
     buildWorkflow(state) {
-      return new SequencedWorkflow(state)
+      const workflow = new SequencedWorkflow(state)
+      workflowRef.current = workflow
+      return workflow
     },
     stateSchema: z.enum(['PLANNING', 'DEVELOPING']),
     initialState() {
@@ -146,7 +157,10 @@ function createSequencedWorkflowDefinition(hooks: SequencedHooks = {}): Workflow
           canTransitionTo: [],
           allowedWorkflowOperations: [],
           onEntry: hooks.onEntry,
-          afterEntry: hooks.afterEntry,
+          afterEntry: () => {
+            hooks.afterEntry?.()
+            for (const event of hooks.afterEntryEvents ?? []) workflowRef.current?.appendEvent(event)
+          },
         },
       } satisfies WorkflowRegistry<SequencedState, 'PLANNING' | 'DEVELOPING', 'write'>
     },
@@ -226,6 +240,16 @@ class RecordingWorkflowEventStore extends InMemoryWorkflowEventStore {
   appendEvents(sessionId: string, events: readonly StoredEvent[]): void {
     super.appendEvents(sessionId, events)
     this.persistedEventTypes.push(...events.map((event) => event.envelope.type))
+  }
+}
+
+class FailingAfterTransitionStore extends RecordingWorkflowEventStore {
+  private appendCount = 0
+
+  appendEvents(sessionId: string, events: readonly StoredEvent[]): void {
+    this.appendCount += 1
+    if (this.appendCount === 4) throw new WorkflowStateError('afterEntry persistence failed')
+    super.appendEvents(sessionId, events)
   }
 }
 
@@ -311,6 +335,74 @@ describe('WorkflowEngine transition persistence ordering', () => {
       'identity-verified',
       'transitioned',
     ])
+  })
+
+  it('persists one event recorded by afterEntry', () => {
+    const {
+      engine, store
+    } = createEngine(
+      createSequencedWorkflowDefinition({
+        afterEntryEvents: [{
+          type: 'pull-request-recorded',
+          at: '2026-01-01T00:00:01Z',
+        }],
+      }),
+    )
+    engine.startSession('session-1', '/transcripts/session-1.jsonl', 'test/repo')
+
+    expect(engine.transition('session-1', 'DEVELOPING').type).toBe('success')
+    expect(store.readEvents('session-1').map((event) => event.envelope.type)).toStrictEqual([
+      'session-started',
+      'identity-verified',
+      'transitioned',
+      'pull-request-recorded',
+    ])
+  })
+
+  it('persists multiple events recorded by afterEntry in order', () => {
+    const {
+      engine, store
+    } = createEngine(
+      createSequencedWorkflowDefinition({
+        afterEntryEvents: [
+          {
+            type: 'pull-request-recorded',
+            at: '2026-01-01T00:00:01Z',
+          },
+          {
+            type: 'reviewer-status-recorded',
+            at: '2026-01-01T00:00:02Z',
+          },
+        ],
+      }),
+    )
+    engine.startSession('session-1', '/transcripts/session-1.jsonl', 'test/repo')
+
+    expect(engine.transition('session-1', 'DEVELOPING').type).toBe('success')
+    expect(store.readEvents('session-1').map((event) => event.envelope.type).slice(-3)).toStrictEqual([
+      'transitioned',
+      'pull-request-recorded',
+      'reviewer-status-recorded',
+    ])
+  })
+
+  it('reports committed persistence failure for afterEntry events', () => {
+    const persistedEventTypes: string[] = []
+    const store = new FailingAfterTransitionStore(persistedEventTypes)
+    const { engine } = createEngine(createSequencedWorkflowDefinition({
+      afterEntryEvents: [{
+        type: 'pull-request-recorded',
+        at: '2026-01-01T00:00:01Z',
+      }],
+    }), store)
+    engine.startSession('session-1', '/transcripts/session-1.jsonl', 'test/repo')
+
+    expect(engine.transition('session-1', 'DEVELOPING')).toStrictEqual({
+      type: 'error',
+      output: 'Workflow operation committed, but its response could not be completed: afterEntry persistence failed',
+      persistence: 'committed',
+    })
+    expect(store.readEvents('session-1').map((event) => event.envelope.type)).toContain('transitioned')
   })
 
   it('keeps onEntry failures uncommitted before the transitioned event persists', () => {

@@ -97,7 +97,6 @@ export class WorkflowEngine<
       output: formatInitSuccess(procedureContent, expectedPrefix) 
     }
   }
-
   transaction(
     sessionId: string,
     op: string,
@@ -130,14 +129,12 @@ export class WorkflowEngine<
       return this.committedResponseError(error)
     }
   }
-
   writeJournal(sessionId: string, agentName: string, content: string): EngineResult {
     sessionId = this.resolveSessionId(sessionId)
     this.requireSession(sessionId)
     const workflow = this.rehydrateFromEvents(sessionId)
     return writeJournalWithPlatformEvents(this.platformOperationContext(sessionId, workflow), agentName, content)
   }
-
   transition(sessionId: string, target: TStateName): EngineResult {
     sessionId = this.resolveSessionId(sessionId)
     this.requireSession(sessionId)
@@ -186,10 +183,15 @@ export class WorkflowEngine<
       return this.uncommittedOperationError(error)
     }
     this.persistEvents(sessionId, workflow)
+    const persistedPendingEventCount = workflow.getPendingEvents().length
 
-    const afterEntryFailure = this.runAfterEntry(targetDef)
+    const afterEntryFailure = this.runAfterEntry(
+      sessionId,
+      workflow,
+      persistedPendingEventCount,
+      targetDef,
+    )
     if (afterEntryFailure !== undefined) return afterEntryFailure
-
     try {
       const newState = workflow.getState()
       const title = this.factory.getTransitionTitle?.(newState.currentStateMachineState, newState)
@@ -204,7 +206,6 @@ export class WorkflowEngine<
       return this.committedResponseError(error)
     }
   }
-
   checkBash(
     sessionId: string,
     toolName: string,
@@ -216,7 +217,6 @@ export class WorkflowEngine<
     const workflow = this.rehydrateFromEvents(sessionId)
     return checkBashWithPlatformEvents(this.platformOperationContext(sessionId, workflow), toolName, command, bashForbidden)
   }
-
   checkWrite(
     sessionId: string,
     toolName: string,
@@ -228,43 +228,35 @@ export class WorkflowEngine<
     const workflow = this.rehydrateFromEvents(sessionId)
     return checkWriteWithPlatformEvents(this.platformOperationContext(sessionId, workflow), toolName, filePath, isWriteAllowed)
   }
-
   checkStopping(sessionId: string, action: StoppingAction, tool?: string): EngineResult {
     sessionId = this.resolveSessionId(sessionId)
     this.requireSession(sessionId)
     const workflow = this.rehydrateFromEvents(sessionId)
     return checkStopAllowed(this.platformOperationContext(sessionId, workflow), action, tool)
   }
-
   getState(sessionId: string): EngineResult {
     return serializeWorkflowState(this.getWorkflowState(sessionId))
   }
-
   getWorkflowState(sessionId: string): TState {
     sessionId = this.resolveSessionId(sessionId)
     this.requireSession(sessionId)
     return this.rehydrateFromEvents(sessionId).getState()
   }
-
   persistSessionId(sessionId: string): void {
     sessionId = this.resolveSessionId(sessionId)
     this.engineDeps.appendToFile(this.engineDeps.getEnvFilePath(), `export CLAUDE_SESSION_ID='${sessionId}'\n`)
   }
-
   hasSession(sessionId: string): boolean {
     return this.engineDeps.store.hasSessionStarted(this.resolveSessionId(sessionId))
   }
-
   hasSessionStarted(sessionId: string): boolean {
     return this.engineDeps.store.hasSessionStarted(this.resolveSessionId(sessionId))
   }
-
   private requireSession(sessionId: string): void {
     if (!this.engineDeps.store.hasSessionStarted(sessionId)) {
       throw new WorkflowStateError(`No session found for '${sessionId}'. Run init first.`)
     }
   }
-
   private resolveSessionId(executingSessionId: string): string {
     return this.engineDeps.store.hasSessionStarted(executingSessionId)
       ? executingSessionId
@@ -277,13 +269,12 @@ export class WorkflowEngine<
     return this.factory.buildWorkflow(state, this.workflowDeps)
   }
 
-  private persistEvents(sessionId: string, workflow: TWorkflow): void {
-    const pending = workflow.getPendingEvents()
+  private persistEvents(sessionId: string, workflow: TWorkflow, pendingFrom = 0): void {
+    const pending = workflow.getPendingEvents().slice(pendingFrom)
     if (pending.length === 0) return
-    const preAppendState = this.rehydrateFromEvents(sessionId).getState()
+    const preAppendState = reduceWorkflowStateFromStoredEvents(this.factory, this.engineDeps.store.readEvents(sessionId))
     this.engineDeps.store.appendEvents(sessionId, this.wrapEvents(pending, preAppendState))
   }
-
   private wrapEvents(events: readonly BaseEvent[], startState: TState): readonly StoredEvent[] {
     const { stored } = events.reduce<{
       state: TState;
@@ -401,15 +392,16 @@ export class WorkflowEngine<
     }
   }
 
-  private runAfterEntry(
-    targetDef: ReturnType<WorkflowDefinition<TWorkflow, TState, TDeps, TStateName, TOperation, TTransitionContext>['getRegistry']>[TStateName],
-  ): EngineResult | undefined {
+  private runAfterEntry(sessionId: string, workflow: TWorkflow, pendingFrom: number, targetDef: ReturnType<WorkflowDefinition<TWorkflow, TState, TDeps, TStateName, TOperation, TTransitionContext>['getRegistry']>[TStateName]): EngineResult | undefined {
+    const failure = (() => {
+      try {
+        targetDef.afterEntry?.(); return undefined
+      } catch (error: unknown) { return this.committedResponseError(error) }
+    })()
     try {
-      targetDef.afterEntry?.()
-      return undefined
-    } catch (error: unknown) {
-      return this.committedResponseError(error)
-    }
+      this.persistEvents(sessionId, workflow, pendingFrom)
+    } catch (error: unknown) { return this.committedResponseError(error) }
+    return failure
   }
 
   private checkTransitionGuard(
