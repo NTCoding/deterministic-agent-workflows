@@ -1,6 +1,6 @@
 {
   "name": "@nt-ai-lab/deterministic-agent-workflow-pi",
-  "version": "0.7.2",
+  "version": "0.7.3",
   "private": false,
   "type": "module",
   "engines": {
