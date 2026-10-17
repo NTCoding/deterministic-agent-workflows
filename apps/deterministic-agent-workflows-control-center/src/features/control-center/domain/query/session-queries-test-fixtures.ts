@@ -124,6 +124,7 @@ export function insertReview(
 
 export function seedSessionEvents(db: SqliteDatabase, sessionId: string): void {
   insertEvent(db, sessionId, 'session-started', '2026-01-01T00:00:00Z', {
+    transcriptPath: '/transcripts/test-transcript.jsonl',
     repository: 'test/repo',
     currentState: 'SPAWN',
     states: WORKFLOW_STATES,

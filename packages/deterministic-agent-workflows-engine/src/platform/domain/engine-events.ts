@@ -1,98 +1,99 @@
 import { z } from 'zod'
+import { nonEmptyStringSchema } from './non-empty-string'
 
 const sessionStartedSchema = z.object({
   type: z.literal('session-started'),
-  at: z.string(),
-  transcriptPath: z.string().optional(),
-  repository: z.string().optional(),
-  currentState: z.string().optional(),
-  states: z.array(z.string()).optional(),
+  at: nonEmptyStringSchema,
+  transcriptPath: nonEmptyStringSchema,
+  repository: nonEmptyStringSchema,
+  currentState: nonEmptyStringSchema,
+  states: z.array(nonEmptyStringSchema),
 })
 
 const transitionedSchema = z.object({
   type: z.literal('transitioned'),
-  at: z.string(),
-  from: z.string(),
-  to: z.string(),
-  preBlockedState: z.string().optional(),
+  at: nonEmptyStringSchema,
+  from: nonEmptyStringSchema,
+  to: nonEmptyStringSchema,
+  preBlockedState: nonEmptyStringSchema.optional(),
   iteration: z.number().optional(),
-  developingHeadCommit: z.string().optional(),
+  developingHeadCommit: nonEmptyStringSchema.optional(),
   developerDone: z.boolean().optional(),
 })
 
 const agentRegisteredSchema = z.object({
   type: z.literal('agent-registered'),
-  at: z.string(),
-  agentType: z.string(),
-  agentId: z.string(),
+  at: nonEmptyStringSchema,
+  agentType: nonEmptyStringSchema,
+  agentId: nonEmptyStringSchema,
 })
 
 const agentShutDownSchema = z.object({
   type: z.literal('agent-shut-down'),
-  at: z.string(),
-  agentName: z.string(),
+  at: nonEmptyStringSchema,
+  agentName: nonEmptyStringSchema,
 })
 
 const journalEntrySchema = z.object({
   type: z.literal('journal-entry'),
-  at: z.string(),
-  agentName: z.string(),
-  content: z.string(),
+  at: nonEmptyStringSchema,
+  agentName: nonEmptyStringSchema,
+  content: nonEmptyStringSchema,
 })
 
 const writeCheckedSchema = z.object({
   type: z.literal('write-checked'),
-  at: z.string(),
-  tool: z.string(),
-  filePath: z.string(),
+  at: nonEmptyStringSchema,
+  tool: nonEmptyStringSchema,
+  filePath: nonEmptyStringSchema,
   allowed: z.boolean(),
-  reason: z.string().optional(),
+  reason: nonEmptyStringSchema.optional(),
 })
 
 const bashCheckedSchema = z.object({
   type: z.literal('bash-checked'),
-  at: z.string(),
-  tool: z.string(),
-  command: z.string(),
+  at: nonEmptyStringSchema,
+  tool: nonEmptyStringSchema,
+  command: nonEmptyStringSchema,
   allowed: z.boolean(),
-  reason: z.string().optional(),
+  reason: nonEmptyStringSchema.optional(),
 })
 
 const pluginReadCheckedSchema = z.object({
   type: z.literal('plugin-read-checked'),
-  at: z.string(),
-  tool: z.string(),
-  path: z.string(),
+  at: nonEmptyStringSchema,
+  tool: nonEmptyStringSchema,
+  path: nonEmptyStringSchema,
   allowed: z.boolean(),
-  reason: z.string().optional(),
+  reason: nonEmptyStringSchema.optional(),
 })
 
 const idleCheckedSchema = z.object({
   type: z.literal('idle-checked'),
-  at: z.string(),
-  agentName: z.string(),
+  at: nonEmptyStringSchema,
+  agentName: nonEmptyStringSchema,
   allowed: z.boolean(),
-  reason: z.string().optional(),
+  reason: nonEmptyStringSchema.optional(),
 })
 
 const identityVerifiedSchema = z.object({
   type: z.literal('identity-verified'),
-  at: z.string(),
-  status: z.string(),
-  transcriptPath: z.string(),
+  at: nonEmptyStringSchema,
+  status: nonEmptyStringSchema,
+  transcriptPath: nonEmptyStringSchema,
 })
 
 const contextRequestedSchema = z.object({
   type: z.literal('context-requested'),
-  at: z.string(),
-  agentName: z.string(),
+  at: nonEmptyStringSchema,
+  agentName: nonEmptyStringSchema,
 })
 
 export const reviewRecordedEventSchema = z.object({
   type: z.literal('review-recorded'),
-  at: z.string(),
+  at: nonEmptyStringSchema,
   reviewId: z.number().int().positive(),
-  reviewType: z.string(),
+  reviewType: nonEmptyStringSchema,
   verdict: z.enum(['PASS', 'FAIL']),
 })
 

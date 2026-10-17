@@ -247,7 +247,7 @@ const engineDeps: WorkflowEngineDeps = {
 it('returns the reminder with the procedure path when the last message lacks the prefix', () => {
   const emptyWorkflowDeps: WorkflowDeps = {}
   const engine = new WorkflowEngine(workflowDefinition, engineDeps, emptyWorkflowDeps)
-  engine.startSession('session-1', '/transcripts/session-1.jsonl')
+  engine.startSession('session-1', '/transcripts/session-1.jsonl', 'test/repo')
 
   const result = engine.checkMessage('session-1')
 
@@ -283,7 +283,7 @@ it('persists the identity-verified event when the message check runs', () => {
   }
   const emptyWorkflowDeps: WorkflowDeps = {}
   const engine = new WorkflowEngine(workflowDefinition, localEngineDeps, emptyWorkflowDeps)
-  engine.startSession('session-identity', '/transcripts/session-identity.jsonl')
+  engine.startSession('session-identity', '/transcripts/session-identity.jsonl', 'test/repo')
 
   const result = engine.checkMessage('session-identity')
 

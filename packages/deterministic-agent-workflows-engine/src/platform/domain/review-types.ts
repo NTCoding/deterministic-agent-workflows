@@ -1,6 +1,7 @@
 import { z } from 'zod'
+import { nonEmptyStringSchema } from './non-empty-string'
 
-export const reviewTypeSchema = z.string().min(1)
+export const reviewTypeSchema = nonEmptyStringSchema
 
 export const reviewVerdictSchema = z.enum(['PASS', 'FAIL'])
 
@@ -9,15 +10,15 @@ export const reviewFindingSeveritySchema = z.enum(['minor', 'major', 'critical']
 export const reviewFindingStatusSchema = z.enum(['blocking', 'non-blocking', 'accepted-risk'])
 
 export const reviewFindingSchema = z.object({
-  title: z.string().min(1).optional(),
+  title: nonEmptyStringSchema.optional(),
   severity: reviewFindingSeveritySchema.optional(),
   status: reviewFindingStatusSchema.optional(),
-  rule: z.string().min(1).optional(),
-  file: z.string().min(1).optional(),
+  rule: nonEmptyStringSchema.optional(),
+  file: nonEmptyStringSchema.optional(),
   startLine: z.number().int().positive().optional(),
   endLine: z.number().int().positive().optional(),
-  details: z.string().min(1).optional(),
-  recommendation: z.string().min(1).optional(),
+  details: nonEmptyStringSchema.optional(),
+  recommendation: nonEmptyStringSchema.optional(),
 }).strict().superRefine((finding, context) => {
   if (finding.title === undefined && finding.details === undefined && finding.rule === undefined) {
     context.addIssue({
@@ -44,28 +45,28 @@ export const reviewFindingSchema = z.object({
 
 export const reviewPayloadSchema = z.object({
   verdict: reviewVerdictSchema,
-  summary: z.string().min(1).optional(),
-  branch: z.string().min(1).optional(),
+  summary: nonEmptyStringSchema.optional(),
+  branch: nonEmptyStringSchema.optional(),
   pullRequestNumber: z.number().int().positive().optional(),
   findings: z.array(reviewFindingSchema),
 }).strict()
 
 export const recordReviewInputSchema = reviewPayloadSchema.extend({
   reviewType: reviewTypeSchema,
-  sourceState: z.string().min(1).optional(),
+  sourceState: nonEmptyStringSchema.optional(),
 }).strict()
 
 export const storedReviewSchema = recordReviewInputSchema.extend({
   id: z.number().int().positive(),
-  sessionId: z.string().min(1),
-  createdAt: z.string().min(1),
+  sessionId: nonEmptyStringSchema,
+  createdAt: nonEmptyStringSchema,
 }).strict()
 
-export const listedReviewSchema = storedReviewSchema.extend({ repository: z.string().min(1).optional() }).strict()
+export const listedReviewSchema = storedReviewSchema.extend({ repository: nonEmptyStringSchema.optional() }).strict()
 
 export const reviewFiltersSchema = z.object({
-  repository: z.string().min(1).optional(),
-  branch: z.string().min(1).optional(),
+  repository: nonEmptyStringSchema.optional(),
+  branch: nonEmptyStringSchema.optional(),
   pullRequestNumber: z.number().int().positive().optional(),
   reviewType: reviewTypeSchema.optional(),
   verdict: reviewVerdictSchema.optional(),

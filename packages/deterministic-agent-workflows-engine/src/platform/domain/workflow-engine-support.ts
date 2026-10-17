@@ -1,6 +1,7 @@
 import type { BaseEvent } from './base-event'
 import type { WorkflowEngineDeps } from './workflow-engine-types'
 import type { WorkflowRegistry } from './workflow-registry'
+import { requireNonEmptyString } from './non-empty-string'
 
 /** @riviere-role domain-service */
 export function buildPrefixPattern<TStateName extends string, TState>(
@@ -40,10 +41,12 @@ export function enrichSessionStartedEvents<TStateName extends string>(
   engineDeps: WorkflowEngineDeps,
   events: readonly BaseEvent[],
   transcriptPath: string,
-  repository: string | undefined,
+  repository: string,
   currentState: TStateName,
   states: readonly string[],
 ): readonly BaseEvent[] {
+  const validRepository = requireNonEmptyString(repository, 'repository')
+  const validTranscriptPath = requireNonEmptyString(transcriptPath, 'transcriptPath')
   const enriched = events.map((event) => {
     if (event.type !== 'session-started') {
       return event
@@ -51,8 +54,8 @@ export function enrichSessionStartedEvents<TStateName extends string>(
 
     return {
       ...event,
-      transcriptPath,
-      ...(repository === undefined ? {} : { repository }),
+      transcriptPath: validTranscriptPath,
+      repository: validRepository,
       currentState,
       states: [...states],
     }
@@ -65,8 +68,8 @@ export function enrichSessionStartedEvents<TStateName extends string>(
   return [{
     type: 'session-started',
     at: engineDeps.now(),
-    transcriptPath,
-    ...(repository === undefined ? {} : { repository }),
+    transcriptPath: validTranscriptPath,
+    repository: validRepository,
     currentState,
     states: [...states],
   }, ...enriched]

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { z } from 'zod'
@@ -10,6 +10,8 @@ import { createCodexWorkflowCli } from './dist/index.js'
 
 const root = mkdtempSync(join(tmpdir(), 'daw-codex-smoke-'))
 const databasePath = join(root, 'workflow-events.db')
+const transcriptPath = join(root, 'transcript.jsonl')
+writeFileSync(transcriptPath, '')
 const resolvedSessionIds = []
 let currentMessageText = 'conversation text without the expected prefix'
 
@@ -31,11 +33,12 @@ class Workflow {
     this.state = fold(this.state, event)
   }
 
-  startSession(transcriptPath) {
+  startSession(transcriptPath, repository) {
     this.appendEvent({
       type: 'session-started',
       at: '2026-08-12T00:00:00Z',
       transcriptPath,
+      repository,
       currentState: this.state.currentStateMachineState,
       states: [this.state.currentStateMachineState],
     })
@@ -114,14 +117,16 @@ function invoke({ args = [], hook }) {
 }
 
 try {
-  const start = invoke({ hook: { session_id: 'one', transcript_path: null, cwd: root, hook_event_name: 'SessionStart' } })
+  const start = invoke({ hook: { session_id: 'one', transcript_path: transcriptPath, cwd: process.cwd(), hook_event_name: 'SessionStart' } })
   assert.equal(start.exitCode, 0)
   assert.match(start.stdout, /Workflow session: one/)
   assert.match(start.stdout, /transition one <STATE>/)
 
   const stopDuringPlanning = invoke({ hook: { session_id: 'one', transcript_path: null, cwd: root, hook_event_name: 'Stop' } })
-  assert.match(stopDuringPlanning.stdout, /"continue":false/)
-  assert.match(stopDuringPlanning.stdout, /does not allow stopping/)
+  assert.deepEqual(JSON.parse(stopDuringPlanning.stdout), {
+    decision: 'block',
+    reason: 'Workflow state PLANNING does not allow stopping.',
+  })
 
   const blockedWrite = invoke({ hook: {
     session_id: 'one', transcript_path: null, cwd: root, hook_event_name: 'PreToolUse', tool_name: 'apply_patch',
@@ -163,16 +168,17 @@ try {
   assert.equal(subagent.exitCode, 0)
 
   const stopWithoutPrefix = invoke({ hook: { session_id: 'one', transcript_path: null, cwd: root, hook_event_name: 'Stop' } })
-  assert.match(stopWithoutPrefix.stdout, /"continue":false/)
-  assert.match(stopWithoutPrefix.stdout, /missing the required state prefix/)
-  assert.match(stopWithoutPrefix.stdout, /full instructions: .*states[/\\]developing\.md/)
+  const stopWithoutPrefixDecision = JSON.parse(stopWithoutPrefix.stdout)
+  assert.equal(stopWithoutPrefixDecision.decision, 'block')
+  assert.match(stopWithoutPrefixDecision.reason, /missing the required state prefix/)
+  assert.match(stopWithoutPrefixDecision.reason, /full instructions: .*states[/\\]developing\.md/)
 
   currentMessageText = '🛠️ DEVELOPING work complete for this turn'
   const stopWithPrefix = invoke({ hook: { session_id: 'one', transcript_path: null, cwd: root, hook_event_name: 'Stop' } })
   assert.equal(stopWithPrefix.stdout, '')
   assert.equal(stopWithPrefix.exitCode, 0)
 
-  invoke({ hook: { session_id: 'two', transcript_path: null, cwd: root, hook_event_name: 'SessionStart' } })
+  invoke({ hook: { session_id: 'two', transcript_path: transcriptPath, cwd: process.cwd(), hook_event_name: 'SessionStart' } })
   const isolated = invoke({ hook: {
     session_id: 'two', transcript_path: null, cwd: root, hook_event_name: 'PreToolUse', tool_name: 'apply_patch',
     tool_input: { command: '*** Begin Patch\n*** Update File: src/other.ts\n*** End Patch' },

@@ -18,12 +18,13 @@ function matchesSearch(session: SessionSummaryDto, query: string): boolean {
   return false
 }
 
-type StatusFilter = 'all' | 'active' | 'completed'
+type StatusFilter = 'all' | 'active' | 'stale' | 'completed'
 
 function filterByStatus(sessions: ReadonlyArray<SessionSummaryDto>, filter: StatusFilter): ReadonlyArray<SessionSummaryDto> {
   if (filter === 'all') return sessions
   if (filter === 'active') return sessions.filter((s) => s.status === 'active')
-  return sessions.filter((s) => s.status !== 'active')
+  if (filter === 'stale') return sessions.filter((s) => s.status === 'stale')
+  return sessions.filter((s) => s.status === 'completed')
 }
 
 function renderControls(activeFilter: StatusFilter): string {
@@ -38,6 +39,10 @@ function renderControls(activeFilter: StatusFilter): string {
     {
       label: 'Active',
       value: 'active' 
+    },
+    {
+      label: 'Stale',
+      value: 'stale'
     },
     {
       label: 'Completed',
@@ -76,7 +81,7 @@ export async function renderDashboard(container: HTMLElement): Promise<void> {
       const searched = filtered.filter((s) => matchesSearch(s, state.currentSearch))
 
       const activeSessions = allSessions.filter((s) => s.status === 'active')
-      const completedSessions = allSessions.filter((s) => s.status !== 'active')
+      const completedSessions = allSessions.filter((s) => s.status === 'completed')
 
       const avgDuration = computeAverageDuration(activeSessions, completedSessions)
 
@@ -122,7 +127,7 @@ export async function renderDashboard(container: HTMLElement): Promise<void> {
       container.querySelectorAll('.filter-btn').forEach((btn) => {
         btn.addEventListener('click', () => {
           const filterValue = btn.getAttribute('data-filter')
-          if (filterValue === 'all' || filterValue === 'active' || filterValue === 'completed') {
+          if (filterValue === 'all' || filterValue === 'active' || filterValue === 'stale' || filterValue === 'completed') {
             state.currentFilter = filterValue
             render()
           }

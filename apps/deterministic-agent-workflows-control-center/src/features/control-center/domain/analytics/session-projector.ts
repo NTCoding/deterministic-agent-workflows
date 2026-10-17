@@ -171,6 +171,14 @@ function applySessionStarted(projection: MutableProjection, event: Extract<Engin
   if (event.states !== undefined && event.states.length > 0) {
     projection.workflowStates = [...event.states]
   }
+  if (projection.statePeriods.length === 0) {
+    projection.statePeriods.push({
+      state: projection.currentState,
+      startedAt: event.at,
+      endedAt: undefined,
+      durationMs: 0,
+    })
+  }
 }
 
 function applyTransitioned(projection: MutableProjection, event: Extract<EngineEvent, { type: 'transitioned' }>): void {
@@ -179,6 +187,12 @@ function applyTransitioned(projection: MutableProjection, event: Extract<EngineE
   if (lastPeriod !== undefined && lastPeriod.endedAt === undefined) {
     lastPeriod.endedAt = event.at
     lastPeriod.durationMs = new Date(event.at).getTime() - new Date(lastPeriod.startedAt).getTime()
+  }
+  if (lastPeriod?.state === event.to) {
+    lastPeriod.endedAt = undefined
+    lastPeriod.durationMs = 0
+    projection.currentState = event.to
+    return
   }
   projection.statePeriods.push({
     state: event.to,

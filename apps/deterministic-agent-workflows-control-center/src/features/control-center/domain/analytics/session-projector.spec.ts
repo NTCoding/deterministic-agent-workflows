@@ -325,6 +325,7 @@ describe('projectSession', () => {
     const projection = projectSession('s1', makeEvents('s1'))
     expect(projection.statePeriods).toHaveLength(3)
     expect(projection.statePeriods[0]?.state).toBe('SPAWN')
+    expect(projection.statePeriods.map((period) => period.durationMs)).toStrictEqual([300000, 300000, 60000])
   })
 
   it('records repository from session-started', () => {
@@ -340,6 +341,8 @@ describe('projectSession', () => {
         type: 'session-started',
         at: '2026-01-01T00:00:00Z',
         payload: {
+          transcriptPath: '/transcripts/test-transcript.jsonl',
+          repository: 'test/repo',
           currentState: 'SPAWN',
           states: WORKFLOW_STATES 
         } 
@@ -375,6 +378,7 @@ describe('projectSession', () => {
         type: 'session-started',
         at: '2026-01-01T00:00:00Z',
         payload: {
+          transcriptPath: '/transcripts/test-transcript.jsonl',
           repository: 'test/repo',
           currentState: 'SPAWN',
           states: WORKFLOW_STATES 

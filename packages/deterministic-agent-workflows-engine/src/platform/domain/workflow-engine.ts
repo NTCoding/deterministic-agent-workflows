@@ -38,6 +38,7 @@ import {
 } from './workflow-state'
 import { reduceWorkflowStateFromStoredEvents } from './workflow-state-reducer'
 import { serializeWorkflowState } from './workflow-state-serialization'
+import { requireNonEmptyString } from './non-empty-string'
 
 /** @riviere-role domain-service */
 export class WorkflowEngine<
@@ -53,8 +54,11 @@ export class WorkflowEngine<
     private readonly workflowDeps: TDeps,
   ) {}
 
-  startSession(sessionId: string, transcriptPath: string, repository?: string): EngineResult {
-    if (this.engineDeps.store.hasSessionStarted(sessionId)) {
+  startSession(sessionId: string, transcriptPath: string, repository: string): EngineResult {
+    const validSessionId = requireNonEmptyString(sessionId, 'sessionId')
+    const validTranscriptPath = requireNonEmptyString(transcriptPath, 'transcriptPath')
+    const validRepository = requireNonEmptyString(repository, 'repository')
+    if (this.engineDeps.store.hasSessionStarted(validSessionId)) {
       return {
         type: 'success',
         output: '' 
@@ -63,21 +67,19 @@ export class WorkflowEngine<
 
     const initialState = this.factory.initialState()
     const workflow = this.factory.buildWorkflow(initialState, this.workflowDeps)
-    const resolvedRepository = repository ?? this.engineDeps.getRepositoryName?.()
-
-    workflow.startSession(transcriptPath, resolvedRepository)
+    workflow.startSession(validTranscriptPath, validRepository)
     const registry = this.factory.getRegistry()
     const stateNames = Object.keys(registry)
     const pendingEvents = enrichSessionStartedEvents(
       this.engineDeps,
       workflow.getPendingEvents(),
-      transcriptPath,
-      resolvedRepository,
+      validTranscriptPath,
+      validRepository,
       initialState.currentStateMachineState,
       stateNames,
     )
 
-    this.engineDeps.store.appendEvents(sessionId, this.wrapEvents(pendingEvents, initialState))
+    this.engineDeps.store.appendEvents(validSessionId, this.wrapEvents(pendingEvents, initialState))
 
     const procedureContent = this.engineDeps.readFile(
       buildProcedurePath(this.engineDeps, initialState.currentStateMachineState),

@@ -220,7 +220,7 @@ function runHook(engineDeps: WorkflowEngineDeps, hookInput: Record<string, unkno
 
 function startSession(engineDeps: WorkflowEngineDeps, sessionId: string): void {
   const engine = new WorkflowEngine(workflowDefinition, engineDeps, {})
-  engine.startSession(sessionId, '/transcripts/stop-hook.jsonl')
+  engine.startSession(sessionId, '/transcripts/stop-hook.jsonl', 'test/repo')
 }
 
 describe('workflow runner Stop hook', () => {

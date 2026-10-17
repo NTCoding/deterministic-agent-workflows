@@ -107,11 +107,17 @@ function parseTranscriptPath(value: unknown): string | null {
   return typeof transcriptPath === 'string' ? transcriptPath : null
 }
 
-function parseTranscriptPayloadRow(row: unknown): { readonly payload: string } {
-  if (!isRecord(row) || typeof row['payload'] !== 'string') {
+function parseTranscriptPayloadRow(row: unknown): {
+  readonly at: string;
+  readonly payload: string
+} {
+  if (!isRecord(row) || typeof row['at'] !== 'string' || typeof row['payload'] !== 'string') {
     throw new TypeError('Expected transcript payload row.')
   }
-  return {payload: row['payload'],}
+  return {
+    at: row['at'],
+    payload: row['payload'],
+  }
 }
 
 function parseReflectionRow(row: unknown): StoredReflection {
@@ -252,12 +258,13 @@ export function getTotalEventCount(deps: SessionQueryDeps): number {
 /** @riviere-role query-model */
 export function getTranscriptPath(deps: SessionQueryDeps, sessionId: string): string | null {
   const raw = deps.db
-    .prepare("SELECT payload FROM events WHERE session_id = ? AND type = 'session-started' ORDER BY seq ASC LIMIT 1")
+    .prepare("SELECT at, payload FROM events WHERE session_id = ? AND type = 'session-started' ORDER BY seq ASC LIMIT 1")
     .get(sessionId)
   if (raw === undefined || raw === null) return null
   const row = parseTranscriptPayloadRow(raw)
   const payload: unknown = JSON.parse(row.payload)
-  return parseTranscriptPath(payload)
+  const transcriptPath = parseTranscriptPath(payload)
+  return transcriptPath
 }
 
 /** @riviere-role query-model */

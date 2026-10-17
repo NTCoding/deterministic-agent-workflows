@@ -70,6 +70,31 @@ describe('parseJsonlTranscript', () => {
     })
   })
 
+  it('parses Codex response_item messages', () => {
+    const path = writeJsonlFile('codex.jsonl', [{
+      timestamp: '2026-08-15T10:31:07.792Z',
+      type: 'response_item',
+      payload: {
+        type: 'message',
+        id: 'msg-1',
+        role: 'assistant',
+        content: [{
+          type: 'output_text',
+          text: 'Codex response',
+        }],
+      },
+    }])
+    expect(parseJsonlTranscript(path)).toStrictEqual([{
+      type: 'assistant',
+      timestamp: '2026-08-15T10:31:07.792Z',
+      content: [{
+        kind: 'text',
+        text: 'Codex response',
+      }],
+      messageId: 'msg-1',
+    }])
+  })
+
   it('drops empty text blocks', () => {
     const path = writeJsonlFile('empty-text.jsonl', [{
       type: 'assistant',

@@ -38,7 +38,7 @@ export interface RehydratableWorkflow<TState extends BaseWorkflowState> {
   getState(): TState
   appendEvent(event: BaseEvent): void
   getPendingEvents(): readonly BaseEvent[]
-  startSession(transcriptPath: string, repository: string | undefined): void
+  startSession(transcriptPath: string, repository: string): void
   getTranscriptPath(): string
   registerAgent(agentType: string, agentId: string): PreconditionResult
   handleTeammateIdle(agentName: string): PreconditionResult

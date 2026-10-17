@@ -331,15 +331,35 @@ function createEngine(): {
 }
 
 describe('WorkflowEngine platform-owned events', () => {
+  it.each([
+    ['repository', ''],
+    ['repository', '   '],
+    ['transcriptPath', ''],
+    ['transcriptPath', '   '],
+    ['sessionId', ''],
+    ['sessionId', '   '],
+  ])('rejects empty %s before persisting a session', (field, value) => {
+    const {
+      engine,
+      store,
+    } = createEngine()
+    const sessionId = field === 'sessionId' ? value : 'session-1'
+    const transcriptPath = field === 'transcriptPath' ? value : '/transcripts/session-1.jsonl'
+    const repository = field === 'repository' ? value : 'test/repo'
+
+    expect(() => engine.startSession(sessionId, transcriptPath, repository)).toThrow(`${field} must be a non-empty string.`)
+    expect(store.readEvents('session-1')).toStrictEqual([])
+  })
+
   it('persists journal and write-check events without routing them through the consumer workflow', () => {
     const {
       engine,
       store,
     } = createEngine()
-    engine.startSession('session-1', '/transcripts/session-1.jsonl')
+    engine.startSession('session-1', '/transcripts/session-1.jsonl', 'test/repo')
 
     const journalResult = engine.writeJournal('session-1', 'gpt-5.4', 'Captured planning context.')
-    const writeCheckResult = engine.checkWrite('session-1', 'Read', '', () => true)
+    const writeCheckResult = engine.checkWrite('session-1', 'Read', '/src/example.ts', () => true)
     const stateResult = engine.getState('session-1')
 
     expect(journalResult.type).toBe('success')
@@ -362,44 +382,6 @@ describe('WorkflowEngine platform-owned events', () => {
       'session-started',
       'journal-entry',
       'write-checked',
-    ])
-  })
-
-  it('reminds the agent when its last written message lacks the state prefix', () => {
-    const store = new InMemoryWorkflowEventStore()
-    const engineDeps: WorkflowEngineDeps = {
-      store,
-      getPluginRoot: () => '/plugin-root',
-      getEnvFilePath: () => '/plugin-root/.env',
-      readFile: () => '',
-      appendToFile: () => undefined,
-      now: () => '2026-01-01T00:00:00Z',
-      transcriptReader: {
-        readMessages: () => [{
-          id: 'message-1',
-          textContent: 'plain text without the expected prefix',
-        }],
-      },
-    }
-    const engine = new WorkflowEngine(workflowDefinition, engineDeps, {})
-    engine.startSession('session-1', '/transcripts/session-1.jsonl')
-
-    const result = engine.checkMessage('session-1')
-
-    expect(result).toStrictEqual({
-      type: 'blocked',
-      output: [
-        'Your last message is missing the required state prefix',
-        '----------------------------------------------------------------',
-        '- send a new message starting with: 🧭 PLANNING',
-        '- full instructions: /plugin-root/states/planning.md',
-        '',
-        'Next message MUST begin with: 🧭 PLANNING',
-      ].join('\n'),
-    })
-    expect(store.readEvents('session-1').map((event) => event.envelope.type)).toStrictEqual([
-      'session-started',
-      'identity-verified',
     ])
   })
 

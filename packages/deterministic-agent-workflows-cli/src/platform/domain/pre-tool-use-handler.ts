@@ -80,10 +80,8 @@ export function createPreToolUseHandler<
       if (result.type === 'blocked') return result
     }
 
-    const writeCheck = engine.checkWrite(sessionId, toolName, filePath, config.isWriteAllowed)
-    if (writeCheck.type === 'blocked') return writeCheck
-
-    return engine.checkBash(sessionId, toolName, command, config.bashForbidden)
+    if (toolName === 'Bash') return engine.checkBash(sessionId, toolName, command, config.bashForbidden)
+    return engine.checkWrite(sessionId, toolName, filePath, config.isWriteAllowed)
   }
 }
 
