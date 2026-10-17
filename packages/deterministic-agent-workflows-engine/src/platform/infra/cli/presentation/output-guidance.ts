@@ -62,9 +62,17 @@ export function formatIllegalTransitionError(
 /** @riviere-role cli-output-formatter */
 export function formatIdentityReminder(expectedPrefix: string, procedurePath: string): string {
   return formatBlock(
-    'Your last message is missing the required state prefix',
+    identityReminderTitle,
     `- send a new message starting with: ${expectedPrefix}\n- full instructions: ${procedurePath}\n\nNext message MUST begin with: ${expectedPrefix}`,
   )
+}
+
+/** @riviere-role cli-output-formatter */
+export const identityReminderTitle = 'Your last message is missing the required state prefix'
+
+/** @riviere-role cli-output-formatter */
+export function isIdentityReminder(output: string): boolean {
+  return output.startsWith(identityReminderTitle)
 }
 
 /** @riviere-role cli-output-formatter */

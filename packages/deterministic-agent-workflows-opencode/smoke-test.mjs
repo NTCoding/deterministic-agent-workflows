@@ -18,7 +18,7 @@ import { createOpenCodeWorkflowPlugin } from './dist/index.js'
 
 const repoRoot = fileURLToPath(new URL('../..', import.meta.url))
 
-function seedOpencodeTranscript(dbPath, sessionId, assistantText) {
+function seedOpencodeTranscript(dbPath, sessionId, assistantText, suffix = '1', createdAt = Date.now()) {
   const db = openSqliteDatabase(dbPath)
   try {
     db.exec(`
@@ -46,8 +46,7 @@ function seedOpencodeTranscript(dbPath, sessionId, assistantText) {
     const insertPart = db.prepare(
       'INSERT INTO part (id, message_id, session_id, time_created, time_updated, data) VALUES (?, ?, ?, ?, ?, ?)',
     )
-    const createdAt = Date.now()
-    const messageId = 'assistant-message-1'
+    const messageId = `assistant-message-${suffix}`
 
     insertMessage.run(
       messageId,
@@ -57,7 +56,7 @@ function seedOpencodeTranscript(dbPath, sessionId, assistantText) {
       JSON.stringify({ role: 'assistant' }),
     )
     insertPart.run(
-      'assistant-part-1',
+      `assistant-part-${suffix}`,
       messageId,
       sessionId,
       createdAt,
@@ -430,6 +429,27 @@ try {
     operation: 'transition',
     args: ['DEVELOPING'],
   }, ctx)
+  seedOpencodeTranscript(
+    opencodeDatabasePath,
+    'session-1',
+    'conversation text without the expected prefix',
+    '2',
+    Date.now() + 10,
+  )
+  await hooks.event({
+    event: {
+      type: 'session.idle',
+      properties: { sessionID: 'session-1' },
+    },
+  })
+
+  seedOpencodeTranscript(
+    opencodeDatabasePath,
+    'session-1',
+    '🛠️ DEVELOPING work complete for this turn',
+    '3',
+    Date.now() + 20,
+  )
   await hooks.event({
     event: {
       type: 'session.idle',
@@ -506,10 +526,12 @@ try {
     || writeCheckCount !== 2
     || applyPatchWriteCheckCount !== 1
     || identityStatus !== 'verified'
-    || promptedTexts.length !== 1
+    || promptedTexts.length !== 2
     || !promptedTexts[0]?.startsWith('[Automatic Workflow Hook Response]')
     || !promptedTexts[0]?.includes('The user has not seen this')
     || !promptedTexts[0]?.endsWith('Follow the OpenCode recovery procedure.')
+    || !promptedTexts[1]?.includes('missing the required state prefix')
+    || !promptedTexts[1]?.includes('full instructions:')
     || !childStateOutput.includes('"currentStateMachineState": "REVIEWING"')
     || !sessionGetCalls.includes('child-session-1')
     || !reviewOutput.includes('"ok": true')
