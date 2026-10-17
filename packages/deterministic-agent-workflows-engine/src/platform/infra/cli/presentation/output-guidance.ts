@@ -38,25 +38,41 @@ export function formatTransitionSuccess(
 export function formatTransitionError(
   to: string,
   reason: string,
-  currentProcedure: string,
+  procedurePath: string,
   expectedPrefix: string,
 ): string {
   return formatBlock(
     `Cannot transition to ${to}`,
-    `${reason}\n\nYou are still in the current state. Complete the checklist before transitioning.\n\n${currentProcedure}\n\nNext message MUST begin with: ${expectedPrefix}`,
+    `${reason}\n\nYou are still in the current state. Complete the checklist before transitioning.\n\nFull instructions: ${procedurePath}\n\nNext message MUST begin with: ${expectedPrefix}`,
   )
 }
 
 /** @riviere-role cli-output-formatter */
 export function formatIllegalTransitionError(
   reason: string,
-  currentProcedure: string,
+  procedurePath: string,
   expectedPrefix: string,
 ): string {
   return formatBlock(
     'Illegal transition',
-    `${reason}\n\nYou are still in the current state. Complete the checklist before transitioning.\n\n${currentProcedure}\n\nNext message MUST begin with: ${expectedPrefix}`,
+    `${reason}\n\nYou are still in the current state. Complete the checklist before transitioning.\n\nFull instructions: ${procedurePath}\n\nNext message MUST begin with: ${expectedPrefix}`,
   )
+}
+
+/** @riviere-role cli-output-formatter */
+export function formatIdentityReminder(expectedPrefix: string, procedurePath: string): string {
+  return formatBlock(
+    identityReminderTitle,
+    `- send a new message starting with: ${expectedPrefix}\n- full instructions: ${procedurePath}\n\nNext message MUST begin with: ${expectedPrefix}`,
+  )
+}
+
+/** @riviere-role cli-output-formatter */
+export const identityReminderTitle = 'Your last message is missing the required state prefix'
+
+/** @riviere-role cli-output-formatter */
+export function isIdentityReminder(output: string): boolean {
+  return output.startsWith(identityReminderTitle)
 }
 
 /** @riviere-role cli-output-formatter */

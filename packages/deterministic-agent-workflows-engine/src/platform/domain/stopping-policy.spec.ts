@@ -155,11 +155,11 @@ describe('WorkflowEngine stopping policy', () => {
     expect({
       result,
       eventTypes: store.readEvents('session-1').map((event) => event.envelope.type),
-      questionCheck: store.readEvents('session-1')[2].payload,
+      questionCheck: store.readEvents('session-1')[1].payload,
       state: engine.getState('session-1').type,
     }).toMatchObject({
       result: { type: 'blocked' },
-      eventTypes: ['session-started', 'identity-verified', 'stopping-checked'],
+      eventTypes: ['session-started', 'stopping-checked'],
       questionCheck: {
         action: 'question',
         tool: 'question',

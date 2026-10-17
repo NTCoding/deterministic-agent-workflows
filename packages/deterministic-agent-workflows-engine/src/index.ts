@@ -165,3 +165,8 @@ export type {
   ThrowResult,
   WorkflowSpecification,
 } from './platform/domain/testing/workflow-spec'
+
+export {
+  identityReminderTitle,
+  isIdentityReminder,
+} from './platform/infra/cli/presentation/output-guidance'

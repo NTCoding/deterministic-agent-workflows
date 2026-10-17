@@ -17,10 +17,16 @@ type OpenCodePluginInput = Parameters<Plugin>[0]
 type OpenCodePluginOptions = Parameters<Plugin>[1]
 
 /** @riviere-role value-object */
+export type OpenCodeStopCheck = {
+  readonly allowed: boolean
+  readonly identityReminder?: string
+}
+
+/** @riviere-role value-object */
 export type IdleEventHookDeps = {
   readonly hasSessionStarted: (sessionID: string) => Promise<boolean>
-  readonly isIdleAllowed: (sessionID: string) => Promise<boolean>
-  readonly sendIdleRecoveryPrompt: (sessionID: string) => Promise<void>
+  readonly checkStop: (sessionID: string) => Promise<OpenCodeStopCheck>
+  readonly sendIdleRecoveryPrompt: (sessionID: string, customMessage?: string) => Promise<void>
 }
 
 /** @riviere-role value-object */

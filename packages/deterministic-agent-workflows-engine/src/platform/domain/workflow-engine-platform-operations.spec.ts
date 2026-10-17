@@ -6,7 +6,6 @@ import {
 } from 'vitest'
 import { z } from 'zod'
 import type {
-  EngineResult,
   RehydratableWorkflow,
   WorkflowDefinition,
   WorkflowEngineDeps,
@@ -27,10 +26,6 @@ type PlanningState = {readonly currentStateMachineState: 'PLANNING'}
 type PlanningDefinition = WorkflowStateDefinition<PlanningState, 'PLANNING', string>
 
 const NOW = '2026-09-03T12:00:00.000Z'
-const BLOCKED_BY_IDENTITY: EngineResult = {
-  type: 'blocked',
-  output: 'Identity verification failed.',
-}
 
 function createStore(): WorkflowEventStore {
   return {
@@ -61,8 +56,8 @@ function createWorkflow(state: PlanningState): RehydratableWorkflow<PlanningStat
 
 function createContext(
   definitionOverrides: Partial<PlanningDefinition> = {},
-  gateResult?: EngineResult,
   operationBody?: string,
+  transcriptMessages: readonly string[] = [],
 ) {
   const state: PlanningState = { currentStateMachineState: 'PLANNING' }
   const workflow = createWorkflow(state)
@@ -113,51 +108,26 @@ function createContext(
     readFile: () => '',
     appendToFile: () => undefined,
     now: () => NOW,
-    transcriptReader: { readMessages: () => [] },
+    transcriptReader: {
+      readMessages: () => transcriptMessages.map((textContent, index) => ({
+        id: `message-${index + 1}`,
+        textContent,
+      })),
+    },
     sessionContext: { getMainSessionId: () => 'session-1' },
   }
   const events: unknown[] = []
-  const applyIdentityGate = vi.fn<(operation: string) => EngineResult | undefined>(() => gateResult)
   return {
     context: {
       workflow,
       engineDeps,
       factory,
-      applyIdentityGate,
       persistPlatformEvent: (event: unknown) => { events.push(event) },
     },
     events,
-    applyIdentityGate,
     state,
   }
 }
-
-describe('platform operation identity gates', () => {
-  it('blocks every operation before policy checks or event persistence', () => {
-    const fixture = createContext({}, BLOCKED_BY_IDENTITY)
-    const isWriteAllowed = vi.fn(() => true)
-
-    expect([
-      checkStopAllowed(fixture.context, 'stop'),
-      writeJournalWithPlatformEvents(fixture.context, 'agent', 'entry'),
-      checkBashWithPlatformEvents(fixture.context, 'bash', 'pnpm test', { commands: [] }),
-      checkWriteWithPlatformEvents(fixture.context, 'Write', '/src/file.ts', isWriteAllowed),
-    ]).toStrictEqual([
-      BLOCKED_BY_IDENTITY,
-      BLOCKED_BY_IDENTITY,
-      BLOCKED_BY_IDENTITY,
-      BLOCKED_BY_IDENTITY,
-    ])
-    expect(fixture.applyIdentityGate.mock.calls).toStrictEqual([
-      ['stop-check'],
-      ['write-journal'],
-      ['bash-check'],
-      ['write-check'],
-    ])
-    expect(fixture.events).toStrictEqual([])
-    expect(isWriteAllowed).not.toHaveBeenCalled()
-  })
-})
 
 describe('checkStopAllowed', () => {
   it.each([
@@ -182,19 +152,57 @@ describe('checkStopAllowed', () => {
     }])
   })
 
-  it('allows idle stopping without adding a denial reason', () => {
-    const fixture = createContext({ allowIdle: true })
+  it('allows idle stopping and records the identity check when the message carries the prefix', () => {
+    const fixture = createContext({ allowIdle: true }, undefined, ['PLAN PLANNING work finished'])
 
     expect(checkStopAllowed(fixture.context, 'stop')).toStrictEqual({
       type: 'success',
       output: ''
     })
-    expect(fixture.events).toStrictEqual([{
-      type: 'stopping-checked',
-      at: NOW,
-      action: 'stop',
-      allowed: true,
-    }])
+    expect(fixture.events).toStrictEqual([
+      {
+        type: 'stopping-checked',
+        at: NOW,
+        action: 'stop',
+        allowed: true,
+      },
+      {
+        type: 'identity-verified',
+        at: NOW,
+        status: 'verified',
+        transcriptPath: '',
+      },
+    ])
+  })
+
+  it('blocks the stop with the reminder when the last message lacks the prefix', () => {
+    const fixture = createContext({ allowIdle: true }, undefined, ['plain text without the prefix'])
+
+    expect(checkStopAllowed(fixture.context, 'stop')).toStrictEqual({
+      type: 'blocked',
+      output: [
+        'Your last message is missing the required state prefix',
+        '----------------------------------------------------------------',
+        '- send a new message starting with: PLAN PLANNING',
+        '- full instructions: /plugin-root/states/planning.md',
+        '',
+        'Next message MUST begin with: PLAN PLANNING',
+      ].join('\n'),
+    })
+    expect(fixture.events).toStrictEqual([
+      {
+        type: 'stopping-checked',
+        at: NOW,
+        action: 'stop',
+        allowed: true,
+      },
+      {
+        type: 'identity-verified',
+        at: NOW,
+        status: 'lost',
+        transcriptPath: '',
+      },
+    ])
   })
 })
 
@@ -215,7 +223,7 @@ describe('writeJournalWithPlatformEvents', () => {
   })
 
   it('uses workflow-specific journal guidance when provided', () => {
-    const fixture = createContext({}, undefined, 'Capture the decision')
+    const fixture = createContext({}, 'Capture the decision')
 
     expect(writeJournalWithPlatformEvents(fixture.context, 'builder', 'Selected SQLite.')).toMatchObject({
       type: 'success',

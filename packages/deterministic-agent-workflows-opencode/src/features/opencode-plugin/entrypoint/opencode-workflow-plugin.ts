@@ -20,7 +20,10 @@ import type {
   RehydratableWorkflow,
   WorkflowEngineDeps,
 } from '@nt-ai-lab/deterministic-agent-workflow-engine'
-import { WorkflowEngine } from '@nt-ai-lab/deterministic-agent-workflow-engine'
+import {
+  isIdentityReminder,
+  WorkflowEngine,
+} from '@nt-ai-lab/deterministic-agent-workflow-engine'
 import type { PlatformContext } from '@nt-ai-lab/deterministic-agent-workflow-cli'
 import {
   createPreToolUseHandler,
@@ -94,9 +97,9 @@ export function createSessionIdleEventHook(deps: IdleEventHookDeps): OpenCodeEve
     }
     return deps.hasSessionStarted(event.properties.sessionID).then((hasSessionStarted) => {
       if (!hasSessionStarted) return undefined
-      return deps.isIdleAllowed(event.properties.sessionID).then((isIdleAllowed) => {
-        if (isIdleAllowed) return undefined
-        return deps.sendIdleRecoveryPrompt(event.properties.sessionID)
+      return deps.checkStop(event.properties.sessionID).then((stop) => {
+        if (stop.allowed) return undefined
+        return deps.sendIdleRecoveryPrompt(event.properties.sessionID, stop.identityReminder)
       })
     })
   }
@@ -175,15 +178,20 @@ export function createOpenCodeWorkflowPlugin<
         const engine = new WorkflowEngine(config.workflowDefinition, engineDeps, workflowDeps)
         return engine.hasSessionStarted(sessionID)
       }),
-      isIdleAllowed: (sessionID) => buildEngineContext(sessionID, input).then(({
+      checkStop: (sessionID) => buildEngineContext(sessionID, input).then(({
         engineDeps,
         workflowDeps,
       }) => {
         const engine = new WorkflowEngine(config.workflowDefinition, engineDeps, workflowDeps)
-        return engine.checkStopping(sessionID, 'stop').type === 'success'
+        const result = engine.checkStopping(sessionID, 'stop')
+        if (result.type === 'success') return { allowed: true }
+        return {
+          allowed: false,
+          identityReminder: isIdentityReminder(result.output) ? result.output : undefined,
+        }
       }),
-      sendIdleRecoveryPrompt: async (sessionID) => {
-        await promptIdleRecovery(input.client, sessionID, config.stopPreventionMessage)
+      sendIdleRecoveryPrompt: async (sessionID, customMessage) => {
+        await promptIdleRecovery(input.client, sessionID, customMessage ?? config.stopPreventionMessage)
       },
     })
 
