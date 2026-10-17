@@ -360,10 +360,46 @@ describe('WorkflowEngine platform-owned events', () => {
     })
     expect(store.readEvents('session-1').map((event) => event.envelope.type)).toStrictEqual([
       'session-started',
-      'identity-verified',
       'journal-entry',
-      'identity-verified',
       'write-checked',
+    ])
+  })
+
+  it('reminds the agent when its last written message lacks the state prefix', () => {
+    const store = new InMemoryWorkflowEventStore()
+    const engineDeps: WorkflowEngineDeps = {
+      store,
+      getPluginRoot: () => '/plugin-root',
+      getEnvFilePath: () => '/plugin-root/.env',
+      readFile: () => '',
+      appendToFile: () => undefined,
+      now: () => '2026-01-01T00:00:00Z',
+      transcriptReader: {
+        readMessages: () => [{
+          id: 'message-1',
+          textContent: 'plain text without the expected prefix',
+        }],
+      },
+    }
+    const engine = new WorkflowEngine(workflowDefinition, engineDeps, {})
+    engine.startSession('session-1', '/transcripts/session-1.jsonl')
+
+    const result = engine.checkMessage('session-1')
+
+    expect(result).toStrictEqual({
+      type: 'blocked',
+      output: [
+        'Your last message is missing the required state prefix',
+        '----------------------------------------------------------------',
+        '- send a new message starting with: 🧭 PLANNING',
+        '- full instructions: /plugin-root/states/planning.md',
+        '',
+        'Next message MUST begin with: 🧭 PLANNING',
+      ].join('\n'),
+    })
+    expect(store.readEvents('session-1').map((event) => event.envelope.type)).toStrictEqual([
+      'session-started',
+      'identity-verified',
     ])
   })
 

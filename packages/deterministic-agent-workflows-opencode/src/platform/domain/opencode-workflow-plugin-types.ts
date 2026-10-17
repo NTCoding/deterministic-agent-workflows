@@ -20,7 +20,8 @@ type OpenCodePluginOptions = Parameters<Plugin>[1]
 export type IdleEventHookDeps = {
   readonly hasSessionStarted: (sessionID: string) => boolean
   readonly isIdleAllowed: (sessionID: string) => boolean
-  readonly sendIdleRecoveryPrompt: (sessionID: string) => Promise<void>
+  readonly checkIdentityReminder: (sessionID: string) => string | undefined
+  readonly sendIdleRecoveryPrompt: (sessionID: string, text: string) => Promise<void>
 }
 
 /** @riviere-role value-object */

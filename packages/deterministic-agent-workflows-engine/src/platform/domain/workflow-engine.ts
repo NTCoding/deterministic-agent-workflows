@@ -1,11 +1,10 @@
-import { checkIdentity } from './identity-verification'
 import {
   checkBashWithPlatformEvents,
+  checkMessageWithPlatformEvents,
   checkWriteWithPlatformEvents,
   writeJournalWithPlatformEvents,
 } from './workflow-engine-platform-operations'
 import {
-  buildPrefixPattern,
   buildProcedurePath,
   enrichSessionStartedEvents,
   getExpectedPrefix,
@@ -98,8 +97,6 @@ export class WorkflowEngine<
     this.requireSession(sessionId)
     const workflow = this.rehydrateFromEvents(sessionId)
     const registry = this.factory.getRegistry()
-    const gate = this.applyIdentityGate(sessionId, workflow, op)
-    if (gate !== undefined) return gate
 
     const result = fn(workflow)
     this.persistEvents(sessionId, workflow)
@@ -124,6 +121,12 @@ export class WorkflowEngine<
     return writeJournalWithPlatformEvents(this.platformOperationContext(sessionId, workflow), agentName, content)
   }
 
+  checkMessage(sessionId: string): EngineResult {
+    this.requireSession(sessionId)
+    const workflow = this.rehydrateFromEvents(sessionId)
+    return checkMessageWithPlatformEvents(this.platformOperationContext(sessionId, workflow))
+  }
+
   transition(sessionId: string, target: TStateName): EngineResult {
     this.requireSession(sessionId)
     const workflow = this.rehydrateFromEvents(sessionId)
@@ -131,18 +134,15 @@ export class WorkflowEngine<
     const currentStateName = state.currentStateMachineState
     const registry = this.factory.getRegistry()
 
-    const gate = this.applyIdentityGate(sessionId, workflow, 'transition')
-    if (gate !== undefined) return gate
-
     const currentDef = registry[currentStateName]
     if (!currentDef.canTransitionTo.includes(target)) {
       const legalTargets = currentDef.canTransitionTo
       const reason = `Illegal transition ${currentStateName} -> ${target}. Legal targets from ${currentStateName}: [${legalTargets.join(', ') || 'none'}].`
-      const currentProcedure = readProcedure(this.engineDeps, workflow.getState().currentStateMachineState)
+      const procedurePath = buildProcedurePath(this.engineDeps, currentStateName)
       const currentPrefix = getExpectedPrefix(currentStateName, registry)
       return {
         type: 'blocked',
-        output: formatIllegalTransitionError(reason, currentProcedure, currentPrefix) 
+        output: formatIllegalTransitionError(reason, procedurePath, currentPrefix) 
       }
     }
 
@@ -150,11 +150,11 @@ export class WorkflowEngine<
       const context = this.factory.buildTransitionContext(state, currentStateName, target, this.workflowDeps)
       const guardResult = currentDef.transitionGuard(context)
       if (!guardResult.pass) {
-        const currentProcedure = readProcedure(this.engineDeps, workflow.getState().currentStateMachineState)
+        const procedurePath = buildProcedurePath(this.engineDeps, currentStateName)
         const currentPrefix = getExpectedPrefix(currentStateName, registry)
         return {
           type: 'blocked',
-          output: formatTransitionError(target, guardResult.reason, currentProcedure, currentPrefix),
+          output: formatTransitionError(target, guardResult.reason, procedurePath, currentPrefix),
         }
       }
     }
@@ -270,55 +270,11 @@ export class WorkflowEngine<
     return stored
   }
 
-  private applyIdentityGate(sessionId: string, workflow: TWorkflow, op: string): EngineResult | undefined {
-    const identityResult = this.verifyIdentity(sessionId, workflow)
-    if (identityResult === undefined) return undefined
-    this.persistEvents(sessionId, workflow)
-    const currentPrefix = getExpectedPrefix(workflow.getState().currentStateMachineState, this.factory.getRegistry())
-    return {
-      type: 'blocked',
-      output: formatOperationGateError(op, identityResult, currentPrefix),
-    }
-  }
-
-  private verifyIdentity(sessionId: string, workflow: TWorkflow): string | undefined {
-    const transcriptPath = workflow.getTranscriptPath()
-    const state = workflow.getState().currentStateMachineState
-    const registry = this.factory.getRegistry()
-    const pattern = buildPrefixPattern(registry)
-    const messages = this.engineDeps.transcriptReader.readMessages(transcriptPath)
-    const identityCheckResult = checkIdentity(messages, pattern)
-
-    this.persistPlatformEvent(sessionId, workflow.getState(), {
-      type: 'identity-verified',
-      at: this.engineDeps.now(),
-      status: identityCheckResult.status,
-      transcriptPath,
-    })
-
-    if (identityCheckResult.status === 'lost') {
-      const currentProcedure = readProcedure(this.engineDeps, state)
-      return [
-        'Your last message is missing the required state prefix.',
-        '',
-        `- send a new message starting with: ${getExpectedPrefix(state, registry)}`,
-        '- then continue with the current procedure',
-        '',
-        'Current procedure:',
-        '',
-        currentProcedure,
-      ].join('\n')
-    }
-
-    return undefined
-  }
-
   private platformOperationContext(sessionId: string, workflow: TWorkflow) {
     return {
       workflow,
       engineDeps: this.engineDeps,
       factory: this.factory,
-      applyIdentityGate: (op: string) => this.applyIdentityGate(sessionId, workflow, op),
       persistPlatformEvent: (event: unknown) => this.persistPlatformEvent(sessionId, workflow.getState(), event),
     }
   }

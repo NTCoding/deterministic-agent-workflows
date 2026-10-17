@@ -10,7 +10,9 @@ import {
 } from '../../../shell/exit-codes'
 import type { ArgParser } from '../../../platform/domain/argument-parser-types'
 import {
-  formatContextInjection, formatDenyDecision 
+  formatContextInjection,
+  formatDenyDecision,
+  formatStopBlock,
 } from '../../../platform/infra/cli/presentation/hook-output'
 import {
   hookCommonInputSchema,
@@ -309,10 +311,29 @@ function handleHook<
     case 'PreToolUse': return handlePreToolUseHook(engine, resolvedHandler, stdin)
     case 'SubagentStart': return handleSubagentStartHook(engine, stdin)
     case 'TeammateIdle': return handleTeammateIdleHook(engine, stdin)
+    case 'Stop': return handleStopHook(engine, common.session_id)
     default: return {
       output: '',
       exitCode: EXIT_ALLOW 
     }
+  }
+}
+
+function handleStopHook<
+  TWorkflow extends RehydratableWorkflow<TState>,
+  TState extends BaseWorkflowState<TStateName>,
+  TDeps,
+  TStateName extends string,
+  TOperation extends string,
+>(engine: WorkflowEngine<TWorkflow, TState, TDeps, TStateName, TOperation>, sessionId: string): RunnerResult {
+  const result = engine.checkMessage(sessionId)
+  if (result.type === 'blocked') return {
+    output: formatStopBlock(result.output),
+    exitCode: EXIT_ALLOW 
+  }
+  return {
+    output: '',
+    exitCode: EXIT_ALLOW 
   }
 }
 

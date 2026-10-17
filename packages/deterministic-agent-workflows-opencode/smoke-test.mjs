@@ -12,7 +12,7 @@ import { createOpenCodeWorkflowPlugin } from './dist/index.js'
 
 const repoRoot = fileURLToPath(new URL('../..', import.meta.url))
 
-function seedOpencodeTranscript(dbPath, sessionId, assistantText) {
+function seedOpencodeTranscript(dbPath, sessionId, assistantText, suffix = '1', createdAt = Date.now()) {
   const db = openSqliteDatabase(dbPath)
   try {
     db.exec(`
@@ -41,7 +41,7 @@ function seedOpencodeTranscript(dbPath, sessionId, assistantText) {
       'INSERT INTO part (id, message_id, session_id, time_created, time_updated, data) VALUES (?, ?, ?, ?, ?, ?)',
     )
     const createdAt = Date.now()
-    const messageId = 'assistant-message-1'
+    const messageId = `assistant-message-${suffix}`
 
     insertMessage.run(
       messageId,
@@ -51,7 +51,7 @@ function seedOpencodeTranscript(dbPath, sessionId, assistantText) {
       JSON.stringify({ role: 'assistant' }),
     )
     insertPart.run(
-      'assistant-part-1',
+      `assistant-part-${suffix}`,
       messageId,
       sessionId,
       createdAt,
@@ -296,8 +296,30 @@ try {
 
   await hooks.tool.workflow.execute({
     operation: 'transition',
-    args: ['DEVELOPING'] 
+    args: ['DEVELOPING']
   }, ctx)
+
+  seedOpencodeTranscript(
+    opencodeDatabasePath,
+    'session-1',
+    'conversation text without the expected prefix',
+    '2',
+    Date.now() + 10,
+  )
+  await hooks.event({
+    event: {
+      type: 'session.idle',
+      properties: { sessionID: 'session-1' },
+    },
+  })
+
+  seedOpencodeTranscript(
+    opencodeDatabasePath,
+    'session-1',
+    '🛠️ DEVELOPING work complete for this turn',
+    '3',
+    Date.now() + 20,
+  )
   await hooks.event({
     event: {
       type: 'session.idle',
@@ -356,7 +378,8 @@ try {
     || !blocked
     || !allowed
     || identityStatus !== 'verified'
-    || promptedTexts.length !== 1
+    || promptedTexts.length !== 2
+    || !promptedTexts[1].includes('missing the required state prefix')
     || !reviewOutput.includes('"ok": true')
     || missingPayloadError !== 'record-review requires <review-type> and <review-json> arguments'
     || !invalidJsonError?.includes('Invalid review JSON')

@@ -244,24 +244,18 @@ const engineDeps: WorkflowEngineDeps = {
   transcriptReader,
 }
 
-it('reinserts the current procedure when identity verification fails', () => {
+it('returns the reminder with the procedure path when the last message lacks the prefix', () => {
   const emptyWorkflowDeps: WorkflowDeps = {}
   const engine = new WorkflowEngine(workflowDefinition, engineDeps, emptyWorkflowDeps)
   engine.startSession('session-1', '/transcripts/session-1.jsonl')
 
-  const result = engine.checkWrite('session-1', 'Write', '/workspace/note.md', () => true)
+  const result = engine.checkMessage('session-1')
 
   const expectedOutput = [
-    'Cannot write-check',
+    'Your last message is missing the required state prefix',
     SEPARATOR,
-    'Your last message is missing the required state prefix.',
-    '',
     '- send a new message starting with: 🧭 PLANNING',
-    '- then continue with the current procedure',
-    '',
-    'Current procedure:',
-    '',
-    procedureContent,
+    '- full instructions: /plugin-root/states/planning.md',
     '',
     'Next message MUST begin with: 🧭 PLANNING',
   ].join('\n')
@@ -272,4 +266,33 @@ it('reinserts the current procedure when identity verification fails', () => {
   }
 
   expect(result).toEqual(expectedResult)
+})
+
+it('persists the identity-verified event when the message check runs', () => {
+  const store = new MemoryStore()
+  const prefixedReader: WorkflowEngineDeps['transcriptReader'] = {
+    readMessages: () => [{
+      id: 'message-1',
+      textContent: '🧭 PLANNING working on the task',
+    }],
+  }
+  const localEngineDeps: WorkflowEngineDeps = {
+    ...engineDeps,
+    store,
+    transcriptReader: prefixedReader,
+  }
+  const emptyWorkflowDeps: WorkflowDeps = {}
+  const engine = new WorkflowEngine(workflowDefinition, localEngineDeps, emptyWorkflowDeps)
+  engine.startSession('session-identity', '/transcripts/session-identity.jsonl')
+
+  const result = engine.checkMessage('session-identity')
+
+  expect(result).toEqual({
+    type: 'success',
+    output: '' 
+  })
+  expect(store.readEvents('session-identity').map((event) => event.envelope.type)).toEqual([
+    'session-started',
+    'identity-verified',
+  ])
 })

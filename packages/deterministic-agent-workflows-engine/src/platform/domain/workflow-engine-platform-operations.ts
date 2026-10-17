@@ -1,9 +1,15 @@
 import { checkBashCommand } from './bash-enforcement'
+import { checkIdentity } from './identity-verification'
 import {
+  formatIdentityReminder,
   formatOperationGateError,
   formatOperationSuccess,
 } from '../infra/cli/presentation/output-guidance'
-import { getExpectedPrefix } from './workflow-engine-support'
+import {
+  buildPrefixPattern,
+  buildProcedurePath,
+  getExpectedPrefix,
+} from './workflow-engine-support'
 import type { BaseWorkflowState } from './workflow-state'
 import type { BashForbiddenConfig } from './workflow-registry'
 import type {
@@ -23,7 +29,6 @@ type PlatformOperationContext<
   readonly workflow: TWorkflow
   readonly engineDeps: WorkflowEngineDeps
   readonly factory: WorkflowDefinition<TWorkflow, TState, TDeps, TStateName, TOperation>
-  readonly applyIdentityGate: (op: string) => EngineResult | undefined
   readonly persistPlatformEvent: (event: unknown) => void
 }
 
@@ -39,9 +44,6 @@ export function writeJournalWithPlatformEvents<
   agentName: string,
   content: string,
 ): EngineResult {
-  const gate = context.applyIdentityGate('write-journal')
-  if (gate !== undefined) return gate
-
   context.persistPlatformEvent({
     type: 'journal-entry',
     at: context.engineDeps.now(),
@@ -76,8 +78,6 @@ export function checkBashWithPlatformEvents<
   const state = context.workflow.getState()
   const currentStateName = state.currentStateMachineState
   const currentPrefix = getExpectedPrefix(currentStateName, context.factory.getRegistry())
-  const gate = context.applyIdentityGate('bash-check')
-  if (gate !== undefined) return gate
   if (toolName !== 'Bash') {
     context.persistPlatformEvent({
       type: 'bash-checked',
@@ -139,8 +139,6 @@ export function checkWriteWithPlatformEvents<
   const state = context.workflow.getState()
   const currentStateName = state.currentStateMachineState
   const currentPrefix = getExpectedPrefix(currentStateName, context.factory.getRegistry())
-  const gate = context.applyIdentityGate('write-check')
-  if (gate !== undefined) return gate
 
   const writeTools = new Set(['Write', 'Edit', 'NotebookEdit'])
   if (!writeTools.has(toolName)) {
@@ -209,6 +207,46 @@ export function checkWriteWithPlatformEvents<
     filePath,
     allowed: true,
   })
+  return {
+    type: 'success',
+    output: '',
+  }
+}
+
+/** @riviere-role domain-service */
+export function checkMessageWithPlatformEvents<
+  TWorkflow extends RehydratableWorkflow<TState>,
+  TState extends BaseWorkflowState<TStateName>,
+  TDeps,
+  TStateName extends string,
+  TOperation extends string,
+>(
+  context: PlatformOperationContext<TWorkflow, TState, TDeps, TStateName, TOperation>,
+): EngineResult {
+  const state = context.workflow.getState()
+  const currentStateName = state.currentStateMachineState
+  const transcriptPath = context.workflow.getTranscriptPath()
+  const pattern = buildPrefixPattern(context.factory.getRegistry())
+  const messages = context.engineDeps.transcriptReader.readMessages(transcriptPath)
+  const identityCheckResult = checkIdentity(messages, pattern)
+
+  context.persistPlatformEvent({
+    type: 'identity-verified',
+    at: context.engineDeps.now(),
+    status: identityCheckResult.status,
+    transcriptPath,
+  })
+
+  if (identityCheckResult.status === 'lost') {
+    return {
+      type: 'blocked',
+      output: formatIdentityReminder(
+        getExpectedPrefix(currentStateName, context.factory.getRegistry()),
+        buildProcedurePath(context.engineDeps, currentStateName),
+      ),
+    }
+  }
+
   return {
     type: 'success',
     output: '',

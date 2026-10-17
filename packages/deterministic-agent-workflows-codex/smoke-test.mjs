@@ -11,6 +11,7 @@ import { createCodexWorkflowCli } from './dist/index.js'
 const root = mkdtempSync(join(tmpdir(), 'daw-codex-smoke-'))
 const databasePath = join(root, 'workflow-events.db')
 const resolvedSessionIds = []
+let currentMessageText = 'conversation text without the expected prefix'
 
 class Workflow {
   constructor(state) {
@@ -62,7 +63,7 @@ const definition = {
       emoji: '📝', agentInstructions: '', canTransitionTo: ['DEVELOPING'], allowedWorkflowOperations: [], forbidden: { write: true },
     },
     DEVELOPING: {
-      emoji: '🛠️', agentInstructions: '', canTransitionTo: [], allowedWorkflowOperations: ['record-note'], forbidden: { write: false },
+      emoji: '🛠️', agentInstructions: '', canTransitionTo: [], allowedWorkflowOperations: ['record-note'], forbidden: { write: false }, allowIdle: true,
     },
   }),
   buildTransitionContext: (state, from, to) => ({
@@ -105,6 +106,9 @@ function invoke({ args = [], hook }) {
       resolvedSessionIds.push(platform.getSessionId())
       return {}
     },
+    transcriptReader: {
+      readMessages: () => [{ id: 'message-1', textContent: currentMessageText }],
+    },
   })
   return { stdout, stderr, exitCode }
 }
@@ -114,6 +118,10 @@ try {
   assert.equal(start.exitCode, 0)
   assert.match(start.stdout, /Workflow session: one/)
   assert.match(start.stdout, /transition one <STATE>/)
+
+  const stopDuringPlanning = invoke({ hook: { session_id: 'one', transcript_path: null, cwd: root, hook_event_name: 'Stop' } })
+  assert.match(stopDuringPlanning.stdout, /"continue":false/)
+  assert.match(stopDuringPlanning.stdout, /does not allow stopping/)
 
   const blockedWrite = invoke({ hook: {
     session_id: 'one', transcript_path: null, cwd: root, hook_event_name: 'PreToolUse', tool_name: 'apply_patch',
@@ -154,8 +162,15 @@ try {
   } })
   assert.equal(subagent.exitCode, 0)
 
-  const stop = invoke({ hook: { session_id: 'one', transcript_path: null, cwd: root, hook_event_name: 'Stop' } })
-  assert.match(stop.stdout, /"continue":false/)
+  const stopWithoutPrefix = invoke({ hook: { session_id: 'one', transcript_path: null, cwd: root, hook_event_name: 'Stop' } })
+  assert.match(stopWithoutPrefix.stdout, /"continue":false/)
+  assert.match(stopWithoutPrefix.stdout, /missing the required state prefix/)
+  assert.match(stopWithoutPrefix.stdout, /full instructions: .*states[/\\]developing\.md/)
+
+  currentMessageText = '🛠️ DEVELOPING work complete for this turn'
+  const stopWithPrefix = invoke({ hook: { session_id: 'one', transcript_path: null, cwd: root, hook_event_name: 'Stop' } })
+  assert.equal(stopWithPrefix.stdout, '')
+  assert.equal(stopWithPrefix.exitCode, 0)
 
   invoke({ hook: { session_id: 'two', transcript_path: null, cwd: root, hook_event_name: 'SessionStart' } })
   const isolated = invoke({ hook: {

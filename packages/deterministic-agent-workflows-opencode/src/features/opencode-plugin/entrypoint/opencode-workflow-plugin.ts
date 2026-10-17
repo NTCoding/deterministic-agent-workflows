@@ -97,13 +97,13 @@ function isIdleAllowedForSession<
   return workflowDefinition.getRegistry()[currentState.currentStateMachineState].allowIdle === true
 }
 
-async function promptIdleRecovery(client: SessionPromptClient, sessionID: string): Promise<void> {
+async function promptIdleRecovery(client: SessionPromptClient, sessionID: string, text: string): Promise<void> {
   await client.session.promptAsync({
     path: { id: sessionID },
     body: {
       parts: [{
         type: 'text',
-        text: IDLE_RECOVERY_MESSAGE,
+        text,
       }],
     },
   })
@@ -119,9 +119,13 @@ export function createSessionIdleEventHook(deps: IdleEventHookDeps): OpenCodeEve
       return
     }
     if (deps.isIdleAllowed(event.properties.sessionID)) {
+      const identityReminder = deps.checkIdentityReminder(event.properties.sessionID)
+      if (identityReminder !== undefined) {
+        await deps.sendIdleRecoveryPrompt(event.properties.sessionID, identityReminder)
+      }
       return
     }
-    await deps.sendIdleRecoveryPrompt(event.properties.sessionID)
+    await deps.sendIdleRecoveryPrompt(event.properties.sessionID, IDLE_RECOVERY_MESSAGE)
   }
 }
 
@@ -199,9 +203,17 @@ export function createOpenCodeWorkflowPlugin<
         void workflowDeps
         return isIdleAllowedForSession(config.workflowDefinition, engineDeps, sessionID)
       },
-      sendIdleRecoveryPrompt: async (sessionID) => {
+      checkIdentityReminder: (sessionID) => {
+        const {
+          engineDeps, workflowDeps 
+        } = buildEngineContext(sessionID)
+        const engine = new WorkflowEngine(config.workflowDefinition, engineDeps, workflowDeps)
+        const result = engine.checkMessage(sessionID)
+        return result.type === 'blocked' ? result.output : undefined
+      },
+      sendIdleRecoveryPrompt: async (sessionID, text) => {
         if (input !== undefined && isSessionPromptClient(input.client)) {
-          await promptIdleRecovery(input.client, sessionID)
+          await promptIdleRecovery(input.client, sessionID, text)
         }
       },
     })

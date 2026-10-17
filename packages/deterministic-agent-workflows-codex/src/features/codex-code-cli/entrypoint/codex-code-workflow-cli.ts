@@ -122,7 +122,7 @@ function handleHookInvocation<
     case 'SessionStart': return startSession(config, engine, parsed.session_id, parsed.transcript_path, parsed.cwd)
     case 'PreToolUse': return checkToolUse(config, engine, raw)
     case 'SubagentStart': return registerSubagent(engine, raw)
-    case 'Stop': return preventUnsupportedStop(config, engineDeps, parsed.session_id)
+    case 'Stop': return preventUnsupportedStop(config, engineDeps, engine, parsed.session_id)
   }
 }
 
@@ -248,16 +248,26 @@ function preventUnsupportedStop<
   TDeps,
   TStateName extends string,
   TOperation extends string,
->(config: CodexWorkflowCliConfig<TWorkflow, TState, TDeps, TStateName, TOperation>, engineDeps: WorkflowEngineDeps, sessionId: string): RunnerResult {
-  const stored = engineDeps.store.readEvents(sessionId)
+>(config: CodexWorkflowCliConfig<TWorkflow, TState, TDeps, TStateName, TOperation>, engineDeps: WorkflowEngineDeps, engine: WorkflowEngine<TWorkflow, TState, TDeps, TStateName, TOperation>, sessionId: string): RunnerResult {
   if (!engineDeps.store.hasSessionStarted(sessionId)) return {
     output: '',
     exitCode: 0
   }
+  const stored = engineDeps.store.readEvents(sessionId)
   const state = reduceWorkflowStateFromStoredEvents(config.workflowDefinition, stored)
-  if (config.workflowDefinition.getRegistry()[state.currentStateMachineState].allowIdle === true) return {
-    output: '',
-    exitCode: 0
+  if (config.workflowDefinition.getRegistry()[state.currentStateMachineState].allowIdle === true) {
+    const identity = engine.checkMessage(sessionId)
+    if (identity.type === 'blocked') return {
+      output: JSON.stringify({
+        continue: false,
+        stopReason: identity.output
+      }),
+      exitCode: 0,
+    }
+    return {
+      output: '',
+      exitCode: 0
+    }
   }
   return {
     output: JSON.stringify({
