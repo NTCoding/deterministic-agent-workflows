@@ -411,9 +411,7 @@ describe('WorkflowEngine platform-owned events', () => {
     })
     expect(store.readEvents('session-1').map((event) => event.envelope.type)).toStrictEqual([
       'session-started',
-      'identity-verified',
       'journal-entry',
-      'identity-verified',
       'write-checked',
     ])
   })

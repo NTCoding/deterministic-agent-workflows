@@ -248,7 +248,7 @@ class FailingAfterTransitionStore extends RecordingWorkflowEventStore {
 
   appendEvents(sessionId: string, events: readonly StoredEvent[]): void {
     this.appendCount += 1
-    if (this.appendCount === 4) throw new WorkflowStateError('afterEntry persistence failed')
+    if (this.appendCount === 3) throw new WorkflowStateError('afterEntry persistence failed')
     super.appendEvents(sessionId, events)
   }
 }
@@ -294,7 +294,6 @@ describe('WorkflowEngine transition persistence ordering', () => {
     expect(result.type).toBe('success')
     expect(persistedEventTypes).toStrictEqual([
       'session-started',
-      'identity-verified',
       'transitioned',
       'afterEntry-invoked',
     ])
@@ -332,7 +331,6 @@ describe('WorkflowEngine transition persistence ordering', () => {
     })
     expect(store.readEvents('session-1').map((event) => event.envelope.type)).toStrictEqual([
       'session-started',
-      'identity-verified',
       'transitioned',
     ])
   })
@@ -353,7 +351,6 @@ describe('WorkflowEngine transition persistence ordering', () => {
     expect(engine.transition('session-1', 'DEVELOPING').type).toBe('success')
     expect(store.readEvents('session-1').map((event) => event.envelope.type)).toStrictEqual([
       'session-started',
-      'identity-verified',
       'transitioned',
       'pull-request-recorded',
     ])
@@ -426,7 +423,6 @@ describe('WorkflowEngine transition persistence ordering', () => {
     })
     expect(store.readEvents('session-1').map((event) => event.envelope.type)).toStrictEqual([
       'session-started',
-      'identity-verified',
     ])
   })
 })
